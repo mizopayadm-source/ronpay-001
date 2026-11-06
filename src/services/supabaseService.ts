@@ -13,7 +13,8 @@ import {
   getDeletedMemberIds,
   findAllBrowserCachedTransactions,
   unpurgeTransactionIds,
-  getDeletedTransactionIds
+  getDeletedTransactionIds,
+  saveStoredAuditorGrants
 } from '../utils/storage';
 import { broadcastStateChange } from './crossTabSync';
 
@@ -781,6 +782,16 @@ export async function fetchSupabaseCampaigns(): Promise<Campaign[]> {
 
   return (data || []).map((row: any) => {
     const meta = row.metadata || {};
+    const auditorGrants = Array.isArray(meta.auditorGrants)
+      ? meta.auditorGrants
+      : Array.isArray(row.auditorGrants)
+      ? row.auditorGrants
+      : undefined;
+    if (auditorGrants && auditorGrants.length > 0) {
+      try {
+        saveStoredAuditorGrants(auditorGrants, true);
+      } catch {}
+    }
     return {
       ...meta,
       ...row,
@@ -816,6 +827,14 @@ export async function fetchSupabaseCampaigns(): Promise<Campaign[]> {
       valid_until: meta.valid_until ?? row.valid_until ?? meta.expiry_date ?? row.expiry_date ?? meta.validityDate ?? row.validityDate,
       gpsCoords: meta.gpsCoords ?? row.gpsCoords,
       kumtluangFeeBearer: meta.kumtluangFeeBearer ?? row.kumtluangFeeBearer,
+      authorizedOfficers: meta.authorizedOfficers ?? row.authorizedOfficers,
+      auditorGrants,
+      auditChecklist: meta.auditChecklist ?? row.auditChecklist,
+      lastAuditedAt: meta.lastAuditedAt ?? row.lastAuditedAt,
+      lastAuditedBy: meta.lastAuditedBy ?? row.lastAuditedBy,
+      lastAuditPeriod: meta.lastAuditPeriod ?? row.lastAuditPeriod,
+      lastAuditNotes: meta.lastAuditNotes ?? row.lastAuditNotes,
+      auditReconciliation: meta.auditReconciliation ?? row.auditReconciliation,
       isHidden: Boolean(meta.isHidden ?? row.is_hidden ?? row.isHidden ?? false),
       hiddenAt: meta.hiddenAt ?? row.hidden_at ?? row.hiddenAt,
       hiddenBy: meta.hiddenBy ?? row.hidden_by ?? row.hiddenBy,
@@ -877,6 +896,13 @@ export async function upsertSupabaseCampaign(camp: Campaign): Promise<boolean> {
       urgencyLevel: camp.urgencyLevel,
       officerPasscode: camp.officerPasscode,
       authorizedOfficers: camp.authorizedOfficers,
+      auditorGrants: camp.auditorGrants,
+      auditChecklist: camp.auditChecklist,
+      lastAuditedAt: camp.lastAuditedAt,
+      lastAuditedBy: camp.lastAuditedBy,
+      lastAuditPeriod: camp.lastAuditPeriod,
+      lastAuditNotes: camp.lastAuditNotes,
+      auditReconciliation: camp.auditReconciliation,
       expenseHeads: camp.expenseHeads,
       isHidden: Boolean(camp.isHidden),
       hiddenAt: camp.hiddenAt || null,

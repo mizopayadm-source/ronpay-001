@@ -164,6 +164,15 @@ export interface Campaign {
   lastAuditedAt?: string;
   lastAuditedBy?: string;
   lastAuditPeriod?: string;
+  lastAuditNotes?: string;
+  auditorGrants?: AuditorAccessGrant[];
+  auditReconciliation?: {
+    bankBalance?: number;
+    cashInHand?: number;
+    notes?: string;
+    updatedAt?: string;
+    updatedBy?: string;
+  };
 }
 
 export interface ExpenseRecord {

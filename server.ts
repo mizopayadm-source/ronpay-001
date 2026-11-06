@@ -4268,6 +4268,7 @@ interface DatabaseSchema {
   deletedStaffIds?: string[];
   expenses?: any[];
   deletedExpenseIds?: string[];
+  deletedAuditorGrantIds?: string[];
   auditorGrants?: any[];
   modificationRequests?: any[];
   hardPurgeTimestamp?: number;
@@ -4306,6 +4307,7 @@ function getDefaultDatabase(): DatabaseSchema {
     deletedStaffIds: [],
     expenses: [],
     deletedExpenseIds: [],
+    deletedAuditorGrantIds: [],
     auditorGrants: [],
     modificationRequests: [],
     hardPurgeTimestamp: 0,
@@ -4815,6 +4817,7 @@ function getDatabase(): DatabaseSchema {
         deletedStaffIds: Array.isArray(parsed?.deletedStaffIds) ? parsed.deletedStaffIds : [],
         expenses: Array.isArray(parsed?.expenses) ? parsed.expenses : [],
         deletedExpenseIds: Array.isArray(parsed?.deletedExpenseIds) ? parsed.deletedExpenseIds : [],
+        deletedAuditorGrantIds: Array.isArray(parsed?.deletedAuditorGrantIds) ? parsed.deletedAuditorGrantIds : [],
         auditorGrants: Array.isArray(parsed?.auditorGrants) ? parsed.auditorGrants : [],
         modificationRequests: Array.isArray(parsed?.modificationRequests) ? parsed.modificationRequests : [],
         hardPurgeTimestamp: 0,
@@ -5147,13 +5150,32 @@ async function syncFromSupabase(db: DatabaseSchema, force: boolean = false): Pro
               valid_until: meta.valid_until ?? meta.validityDate ?? meta.expiry_date ?? r.valid_until ?? r.validityDate ?? r.expiry_date,
               gpsCoords: meta.gpsCoords ?? r.gpsCoords,
               kumtluangFeeBearer: meta.kumtluangFeeBearer ?? r.kumtluangFeeBearer,
+              auditorGrants: Array.isArray(meta.auditorGrants) ? meta.auditorGrants : (Array.isArray(r.auditorGrants) ? r.auditorGrants : []),
               isHidden: Boolean(meta.isHidden ?? r.is_hidden ?? r.isHidden ?? false),
               hiddenAt: meta.hiddenAt ?? r.hidden_at ?? r.hiddenAt,
               hiddenBy: meta.hiddenBy ?? r.hidden_by ?? r.hiddenBy,
               hideReason: meta.hideReason ?? r.hide_reason ?? r.hideReason,
-              metadata: meta
+              metadata: {
+                ...meta,
+                auditorGrants: Array.isArray(meta.auditorGrants) ? meta.auditorGrants : (Array.isArray(r.auditorGrants) ? r.auditorGrants : [])
+              }
             };
           });
+
+          // Extract embedded auditorGrants across campaigns and merge into db.auditorGrants
+          const extractedGrants: any[] = [];
+          for (const c of db.campaigns) {
+            if (Array.isArray(c.auditorGrants) && c.auditorGrants.length > 0) {
+              for (const g of c.auditorGrants) {
+                if (g && g.id) extractedGrants.push(g);
+              }
+            }
+          }
+          if (extractedGrants.length > 0) {
+            const delGrantsSet = new Set((db.deletedAuditorGrantIds || []).map((id: string) => String(id).toLowerCase().trim()));
+            const validExtracted = extractedGrants.filter(g => !delGrantsSet.has(String(g.id).toLowerCase().trim()));
+            db.auditorGrants = mergeCollections(db.auditorGrants || [], validExtracted, 'id', delGrantsSet);
+          }
         }
       }
     } catch {}
@@ -5351,8 +5373,26 @@ app.post('/api/data/sync', (req: Request, res: Response) => {
     if (Array.isArray(body.auditLogs) && body.auditLogs.length > 0) {
       db.auditLogs = mergeCollections(db.auditLogs, body.auditLogs, 'id');
     }
+    if (Array.isArray(body.deletedAuditorGrantIds) && body.deletedAuditorGrantIds.length > 0) {
+      db.deletedAuditorGrantIds = Array.from(new Set([
+        ...(db.deletedAuditorGrantIds || []),
+        ...body.deletedAuditorGrantIds.map((id: any) => String(id).toLowerCase().trim())
+      ]));
+      const delGrantSet = new Set(db.deletedAuditorGrantIds);
+      db.auditorGrants = (db.auditorGrants || []).filter((g: any) => !delGrantSet.has(String(g.id).toLowerCase().trim()));
+      db.campaigns = (db.campaigns || []).map((c: any) => {
+        if (Array.isArray(c.auditorGrants)) {
+          c.auditorGrants = c.auditorGrants.filter((g: any) => !delGrantSet.has(String(g.id).toLowerCase().trim()));
+        }
+        if (c.metadata && Array.isArray(c.metadata.auditorGrants)) {
+          c.metadata.auditorGrants = c.metadata.auditorGrants.filter((g: any) => !delGrantSet.has(String(g.id).toLowerCase().trim()));
+        }
+        return c;
+      });
+    }
     if (Array.isArray(body.auditorGrants) && body.auditorGrants.length > 0) {
-      db.auditorGrants = mergeCollections(db.auditorGrants || [], body.auditorGrants, 'id');
+      const delGrantsSet = new Set((db.deletedAuditorGrantIds || []).map((id: string) => String(id).toLowerCase().trim()));
+      db.auditorGrants = mergeCollections(db.auditorGrants || [], body.auditorGrants, 'id', delGrantsSet);
     }
     if (Array.isArray(body.modificationRequests) && body.modificationRequests.length > 0) {
       db.modificationRequests = mergeCollections(db.modificationRequests || [], body.modificationRequests, 'id');
@@ -5375,6 +5415,26 @@ app.get('/api/auditor-grants', (req: Request, res: Response) => {
   try {
     const db = getDatabase();
     let list = Array.isArray(db.auditorGrants) ? db.auditorGrants : [];
+    const delSet = new Set((db.deletedAuditorGrantIds || []).map((id: string) => String(id).toLowerCase().trim()));
+    list = list.filter((g: any) => !delSet.has(String(g.id).toLowerCase().trim()));
+
+    // Also scan db.campaigns for any embedded auditorGrants
+    const fromCamps: any[] = [];
+    for (const c of (db.campaigns || [])) {
+      const cg = c.auditorGrants || c.metadata?.auditorGrants;
+      if (Array.isArray(cg)) {
+        for (const g of cg) {
+          if (g && g.id && !delSet.has(String(g.id).toLowerCase().trim())) {
+            fromCamps.push(g);
+          }
+        }
+      }
+    }
+    if (fromCamps.length > 0) {
+      list = mergeCollections(list, fromCamps, 'id', delSet);
+      db.auditorGrants = list;
+    }
+
     const { campaignId, phone } = req.query;
     if (campaignId && typeof campaignId === 'string') {
       const cleanId = campaignId.toLowerCase().trim();
@@ -5386,26 +5446,82 @@ app.get('/api/auditor-grants', (req: Request, res: Response) => {
         list = list.filter((g: any) => String(g.auditorPhone || g.auditor_phone || '').replace(/\D/g, '').slice(-10) === cleanPhone);
       }
     }
-    res.json({ success: true, grants: list, auditorGrants: list });
+    res.json({
+      success: true,
+      grants: list,
+      auditorGrants: list,
+      deletedAuditorGrantIds: db.deletedAuditorGrantIds || []
+    });
   } catch (err: any) {
     res.status(500).json({ success: false, message: err.message });
   }
 });
 
-app.post('/api/auditor-grants', (req: Request, res: Response) => {
+app.post('/api/auditor-grants', async (req: Request, res: Response) => {
   try {
     const grant = req.body;
     if (!grant || !grant.id) {
       return res.status(400).json({ success: false, message: 'Invalid auditor grant payload' });
     }
+    const cleanId = String(grant.id).toLowerCase().trim();
     const db = getDatabase();
+
+    // If grant was previously deleted, un-delete it
+    if (Array.isArray(db.deletedAuditorGrantIds) && db.deletedAuditorGrantIds.includes(cleanId)) {
+      db.deletedAuditorGrantIds = db.deletedAuditorGrantIds.filter((id: string) => id.toLowerCase().trim() !== cleanId);
+    }
+
     const stamped = {
       ...grant,
       updatedAt: new Date().toISOString(),
       updated_at: new Date().toISOString()
     };
     db.auditorGrants = mergeCollections(db.auditorGrants || [], [stamped], 'id');
+
+    // Also embed inside the target campaign in db.campaigns
+    const targetCampId = String(stamped.campaignId || stamped.campaign_id || '').toLowerCase().trim();
+    let affectedCamp: any = null;
+    if (targetCampId) {
+      db.campaigns = (db.campaigns || []).map((c: any) => {
+        if (String(c.id).toLowerCase().trim() === targetCampId) {
+          const prevGrants = Array.isArray(c.auditorGrants) ? c.auditorGrants : [];
+          c.auditorGrants = mergeCollections(prevGrants, [stamped], 'id');
+          c.metadata = { ...(c.metadata || {}), auditorGrants: c.auditorGrants };
+          affectedCamp = c;
+        }
+        return c;
+      });
+    }
+
     saveDatabase(db);
+
+    // Sync to Supabase campaign metadata in background if available
+    const sbConfig = (db as any).supabaseConfig || {};
+    const sbUrl = sbConfig.url || process.env.VITE_SUPABASE_URL || 'https://aqrplcmpealgruduwnhw.supabase.co';
+    const sbKey = sbConfig.anonKey || process.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable__zS5fiKvBI5u6HYgour64g_g_tJj5WL';
+    if (affectedCamp && sbUrl && sbKey) {
+      try {
+        await fetch(`${sbUrl}/rest/v1/campaigns?id=eq.${encodeURIComponent(affectedCamp.id)}`, {
+          method: 'PATCH',
+          headers: {
+            'apikey': sbKey,
+            'Authorization': `Bearer ${sbKey}`,
+            'Content-Type': 'application/json',
+            'Prefer': 'return=minimal'
+          },
+          body: JSON.stringify({
+            metadata: {
+              ...(affectedCamp.metadata || {}),
+              auditorGrants: affectedCamp.auditorGrants
+            }
+          }),
+          signal: AbortSignal.timeout(8000)
+        });
+      } catch (e) {
+        console.warn('[Supabase] Failed to push auditor grant to campaign metadata:', e);
+      }
+    }
+
     broadcastServerEvent('auditor_grants_updated', { grantId: stamped.id, campaignId: stamped.campaignId });
     res.json({ success: true, grant: stamped, grants: db.auditorGrants, auditorGrants: db.auditorGrants });
   } catch (err: any) {
@@ -5413,21 +5529,149 @@ app.post('/api/auditor-grants', (req: Request, res: Response) => {
   }
 });
 
-app.post('/api/auditor-grants/:id/revoke', (req: Request, res: Response) => {
+app.post('/api/auditor-grants/:id/revoke', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const { revokedBy = 'Creator' } = req.body || {};
     const db = getDatabase();
     const nowIso = new Date().toISOString();
+    let targetCampId = '';
+
     db.auditorGrants = (db.auditorGrants || []).map((g: any) => {
       if (String(g.id).trim() === String(id).trim()) {
+        targetCampId = String(g.campaignId || g.campaign_id || '').toLowerCase().trim();
         return { ...g, status: 'revoked', revokedBy, updatedAt: nowIso, updated_at: nowIso };
       }
       return g;
     });
+
+    let affectedCamp: any = null;
+    if (targetCampId) {
+      db.campaigns = (db.campaigns || []).map((c: any) => {
+        if (String(c.id).toLowerCase().trim() === targetCampId) {
+          c.auditorGrants = (c.auditorGrants || []).map((g: any) =>
+            String(g.id).trim() === String(id).trim() ? { ...g, status: 'revoked', revokedBy, updatedAt: nowIso } : g
+          );
+          c.metadata = { ...(c.metadata || {}), auditorGrants: c.auditorGrants };
+          affectedCamp = c;
+        }
+        return c;
+      });
+    }
+
     saveDatabase(db);
+
+    const sbConfigRevoke = (db as any).supabaseConfig || {};
+    const sbUrlRevoke = sbConfigRevoke.url || process.env.VITE_SUPABASE_URL || 'https://aqrplcmpealgruduwnhw.supabase.co';
+    const sbKeyRevoke = sbConfigRevoke.anonKey || process.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable__zS5fiKvBI5u6HYgour64g_g_tJj5WL';
+    if (affectedCamp && sbUrlRevoke && sbKeyRevoke) {
+      try {
+        await fetch(`${sbUrlRevoke}/rest/v1/campaigns?id=eq.${encodeURIComponent(affectedCamp.id)}`, {
+          method: 'PATCH',
+          headers: {
+            'apikey': sbKeyRevoke,
+            'Authorization': `Bearer ${sbKeyRevoke}`,
+            'Content-Type': 'application/json',
+            'Prefer': 'return=minimal'
+          },
+          body: JSON.stringify({
+            metadata: {
+              ...(affectedCamp.metadata || {}),
+              auditorGrants: affectedCamp.auditorGrants
+            }
+          }),
+          signal: AbortSignal.timeout(8000)
+        });
+      } catch (e) {
+        console.warn('[Supabase] Failed to push revoked grant to campaign metadata:', e);
+      }
+    }
+
     broadcastServerEvent('auditor_grants_updated', { grantId: id, status: 'revoked' });
     res.json({ success: true, grants: db.auditorGrants, auditorGrants: db.auditorGrants });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// Permanent Deletion ("Paih Hlen") of Auditor Grant across Database & Cloud
+app.delete('/api/auditor-grants/:id', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ success: false, message: 'Missing grant ID' });
+    }
+    const cleanId = String(id).trim().toLowerCase();
+    const db = getDatabase();
+
+    // 1. Record in deleted IDs list so it never revives from old cache
+    db.deletedAuditorGrantIds = Array.from(new Set([
+      ...(db.deletedAuditorGrantIds || []),
+      cleanId
+    ]));
+
+    // 2. Remove from db.auditorGrants
+    db.auditorGrants = (db.auditorGrants || []).filter(
+      (g: any) => String(g.id).trim().toLowerCase() !== cleanId
+    );
+
+    // 3. Remove from all campaigns in memory
+    let affectedCamp: any = null;
+    db.campaigns = (db.campaigns || []).map((c: any) => {
+      let changed = false;
+      if (Array.isArray(c.auditorGrants)) {
+        const filtered = c.auditorGrants.filter((g: any) => String(g.id).trim().toLowerCase() !== cleanId);
+        if (filtered.length !== c.auditorGrants.length) {
+          c.auditorGrants = filtered;
+          changed = true;
+          affectedCamp = c;
+        }
+      }
+      if (c.metadata && Array.isArray(c.metadata.auditorGrants)) {
+        c.metadata.auditorGrants = c.metadata.auditorGrants.filter(
+          (g: any) => String(g.id).trim().toLowerCase() !== cleanId
+        );
+      }
+      return c;
+    });
+
+    saveDatabase(db);
+
+    // 4. Update Supabase campaign metadata if connected
+    const sbConfigDel = (db as any).supabaseConfig || {};
+    const sbUrlDel = sbConfigDel.url || process.env.VITE_SUPABASE_URL || 'https://aqrplcmpealgruduwnhw.supabase.co';
+    const sbKeyDel = sbConfigDel.anonKey || process.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable__zS5fiKvBI5u6HYgour64g_g_tJj5WL';
+    if (affectedCamp && sbUrlDel && sbKeyDel) {
+      try {
+        await fetch(`${sbUrlDel}/rest/v1/campaigns?id=eq.${encodeURIComponent(affectedCamp.id)}`, {
+          method: 'PATCH',
+          headers: {
+            'apikey': sbKeyDel,
+            'Authorization': `Bearer ${sbKeyDel}`,
+            'Content-Type': 'application/json',
+            'Prefer': 'return=minimal'
+          },
+          body: JSON.stringify({
+            metadata: {
+              ...(affectedCamp.metadata || {}),
+              auditorGrants: affectedCamp.auditorGrants || []
+            }
+          }),
+          signal: AbortSignal.timeout(8000)
+        });
+      } catch (e) {
+        console.warn('[Supabase] Failed to update campaign metadata after grant delete:', e);
+      }
+    }
+
+    broadcastServerEvent('auditor_grants_updated', { grantId: id, deleted: true });
+    res.json({
+      success: true,
+      message: 'Auditor grant permanently deleted',
+      deletedId: id,
+      grants: db.auditorGrants,
+      auditorGrants: db.auditorGrants
+    });
   } catch (err: any) {
     res.status(500).json({ success: false, message: err.message });
   }

@@ -32,7 +32,9 @@ import {
   markRecordAuditVerification,
   unlockSingleRecord,
   saveStoredAuditorGrants,
-  formatRemainingAuditTimeMizo
+  formatRemainingAuditTimeMizo,
+  getMembers,
+  syncAuditorGrantsAcrossCloud
 } from '../utils/storage';
 import { formatDateDDMMYYYY } from '../utils/date';
 import { printHtmlSafely } from '../utils/export';
@@ -64,24 +66,19 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
   onClose,
   onRecordsUpdated
 }) => {
-  const [activeTab, setActiveTab] = useState<'overview' | 'transactions' | 'expenses' | 'lock_action' | 'certificate'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'reconcile' | 'transactions' | 'expenses' | 'lock_action' | 'certificate'>('overview');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [filterLockStatus, setFilterLockStatus] = useState<'all' | 'locked' | 'unlocked' | 'verified' | 'flagged' | 'unchecked'>('all');
 
   // Local refresh tick
   const [tick, setTick] = useState<number>(0);
 
-  // Sync latest auditor grants from backend when portal opens
+  // Sync latest auditor grants from both Server & Supabase when portal opens
   useEffect(() => {
     if (!isOpen) return;
-    fetch('/api/auditor-grants')
-      .then(res => res.ok ? res.json() : null)
-      .then(data => {
-        const list = data?.auditorGrants || data?.grants;
-        if (Array.isArray(list)) {
-          saveStoredAuditorGrants(list, true);
-          setTick(t => t + 1);
-        }
+    syncAuditorGrantsAcrossCloud()
+      .then(() => {
+        setTick(t => t + 1);
       })
       .catch(() => {});
   }, [isOpen]);
@@ -134,14 +131,34 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
   const [flaggingRecordType, setFlaggingRecordType] = useState<'transaction' | 'expense'>('transaction');
   const [flagQueryText, setFlagQueryText] = useState<string>('');
 
-  // Keep auditor details and checklist synced when campaign or profile changes
+  // Keep auditor details, checklist, and physical cross-check inputs synced when campaign or profile changes
   const [checklist, setChecklist] = useState<Record<string, boolean>>(DEFAULT_CHECKLIST);
+  const [bankPassbookInput, setBankPassbookInput] = useState<string>('');
+  const [cashInHandInput, setCashInHandInput] = useState<string>('');
+  const [reconcileNotesInput, setReconcileNotesInput] = useState<string>('');
 
   useEffect(() => {
     if (campaign) {
       setChecklist(campaign.auditChecklist || DEFAULT_CHECKLIST);
       if (campaign.lastAuditPeriod) {
         setAuditPeriod(campaign.lastAuditPeriod);
+      }
+      if (campaign.auditReconciliation) {
+        setBankPassbookInput(
+          campaign.auditReconciliation.bankBalance !== undefined
+            ? String(campaign.auditReconciliation.bankBalance)
+            : ''
+        );
+        setCashInHandInput(
+          campaign.auditReconciliation.cashInHand !== undefined
+            ? String(campaign.auditReconciliation.cashInHand)
+            : ''
+        );
+        setReconcileNotesInput(campaign.auditReconciliation.notes || '');
+      } else {
+        setBankPassbookInput('');
+        setCashInHandInput('');
+        setReconcileNotesInput('');
       }
     }
   }, [campaign?.id]);
@@ -315,6 +332,174 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
       totalUnchecked: uncheckedTxList.length + uncheckedExpList.length
     };
   }, [allTransactions, allExpenses]);
+
+  // Cross-Check & Reconciliation Analytics (Bank/UPI vs Cash, Member Roll, Section-wise, Collector-wise, Anomaly Scanner)
+  const crossCheckData = useMemo(() => {
+    const validStatuses = new Set(['completed', 'confirmed', 'success', 'verified', 'paid', 'approved']);
+    const validTx = allTransactions.filter(t => {
+      const st = String(t.status || '').toLowerCase().trim();
+      return !st || validStatuses.has(st) || (st !== 'failed' && st !== 'rejected' && st !== 'cancelled');
+    });
+
+    const isCashMode = (m?: string) => {
+      const s = String(m || '').toLowerCase().trim();
+      return s.includes('cash') || s.includes('manual') || s.includes('offline') || s.includes('counter');
+    };
+
+    const cashInflowList = validTx.filter(t => isCashMode(t.paymentMethod));
+    const onlineInflowList = validTx.filter(t => !isCashMode(t.paymentMethod));
+
+    const cashInflowAmount = cashInflowList.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+    const onlineInflowAmount = onlineInflowList.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+
+    const cashOutflowList = allExpenses.filter(e => isCashMode(e.paymentMode || (e as any).paymentMethod || 'cash'));
+    const onlineOutflowList = allExpenses.filter(e => !isCashMode(e.paymentMode || (e as any).paymentMethod || 'cash'));
+
+    const cashOutflowAmount = cashOutflowList.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+    const onlineOutflowAmount = onlineOutflowList.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+
+    const openingBalance = Number(campaign?.openingBalance || 0);
+    const expectedClosingBalance = openingBalance + stats.totalInflow - stats.totalOutflow;
+    const expectedBankBalance = openingBalance + onlineInflowAmount - onlineOutflowAmount;
+    const expectedCashInHand = cashInflowAmount - cashOutflowAmount;
+
+    // Member Roll vs Ledger Cross-Check
+    const campaignMembers = campaign ? getMembers(campaign.id) : [];
+    const memberTxList = validTx.filter(t => Boolean(t.memberId || t.donorType === 'member'));
+    const publicTxList = validTx.filter(t => !t.memberId && t.donorType !== 'member');
+    const memberGivingAmount = memberTxList.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+    const publicGivingAmount = publicTxList.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+
+    // Section / Bial Breakdown
+    const sectionMap = new Map<string, { section: string; count: number; amount: number; verifiedCount: number }>();
+    validTx.forEach(t => {
+      const sec = (t.donorVeng || (t as any).donorSection || 'General / Unassigned').trim();
+      const curr = sectionMap.get(sec) || { section: sec, count: 0, amount: 0, verifiedCount: 0 };
+      curr.count += 1;
+      curr.amount += Number(t.amount) || 0;
+      if (t.audit_mark === 'verified') curr.verifiedCount += 1;
+      sectionMap.set(sec, curr);
+    });
+    const sectionBreakdown = Array.from(sectionMap.values()).sort((a, b) => b.amount - a.amount);
+
+    // Collector / Approver Breakdown
+    const collectorMap = new Map<string, { collector: string; mode: string; count: number; amount: number }>();
+    validTx.forEach(t => {
+      const handler =
+        t.approved_by ||
+        (t as any).approvedBy ||
+        t.verifiedBy ||
+        (isCashMode(t.paymentMethod) ? 'Manual / Cash Counter' : 'RonPay UPI Gateway');
+      const mode = isCashMode(t.paymentMethod) ? 'CASH' : 'UPI / ONLINE';
+      const key = `${handler}__${mode}`;
+      const curr = collectorMap.get(key) || { collector: String(handler), mode, count: 0, amount: 0 };
+      curr.count += 1;
+      curr.amount += Number(t.amount) || 0;
+      collectorMap.set(key, curr);
+    });
+    const collectorBreakdown = Array.from(collectorMap.values()).sort((a, b) => b.amount - a.amount);
+
+    // Automated Anomaly & Duplicate Scanner
+    const anomalies: Array<{
+      id: string;
+      type: 'transaction' | 'expense';
+      severity: 'high' | 'medium';
+      title: string;
+      detail: string;
+      amount: number;
+    }> = [];
+
+    // 1. Duplicate transaction suspects (same donor name + same amount + same date)
+    const seenSig = new Map<string, string>();
+    validTx.forEach(t => {
+      const datePart = String(t.timestamp || '').slice(0, 10);
+      const namePart = String(t.donorName || '').toLowerCase().trim();
+      const amt = Number(t.amount) || 0;
+      if (namePart && namePart !== 'anonymous' && amt > 0) {
+        const sig = `${datePart}__${namePart}__${amt}`;
+        if (seenSig.has(sig)) {
+          anomalies.push({
+            id: t.id,
+            type: 'transaction',
+            severity: 'high',
+            title: `Duplicate Suspect: ${t.donorName} (₹${amt.toLocaleString('en-IN')})`,
+            detail: `Ni khat (${formatDateDDMMYYYY(t.timestamp)}) chhungin hming leh zat inang chiah vawi 2+ lut (${seenSig.get(sig)} & ${t.id})`,
+            amount: amt
+          });
+        } else {
+          seenSig.set(sig, t.id);
+        }
+      }
+
+      // 2. Online/UPI payment missing UTR / Reference ID
+      if (!isCashMode(t.paymentMethod) && !t.utr && !(t as any).utrRef && !t.referenceNo && !t.id.startsWith('tx-')) {
+        anomalies.push({
+          id: t.id,
+          type: 'transaction',
+          severity: 'medium',
+          title: `UTR / Bank Ref Awm Lo: ${t.donorName}`,
+          detail: `UPI/Online payment ni siin UTR/Reference number a awm lo (${t.id})`,
+          amount: amt
+        });
+      }
+    });
+
+    // 3. Expenses missing Voucher No or Payee
+    allExpenses.forEach(e => {
+      if (!e.voucherNo || !(e.paidTo || (e as any).payeeName)) {
+        anomalies.push({
+          id: e.id,
+          type: 'expense',
+          severity: 'medium',
+          title: `Voucher / Payee Kim Lo: ${e.head || 'Expense'}`,
+          detail: `${!e.voucherNo ? 'Voucher No. awm lo' : ''} ${!(e.paidTo || (e as any).payeeName) ? '• Payee hming awm lo' : ''}`.trim(),
+          amount: Number(e.amount) || 0
+        });
+      }
+    });
+
+    return {
+      openingBalance,
+      expectedClosingBalance,
+      expectedBankBalance,
+      expectedCashInHand,
+      onlineInflowCount: onlineInflowList.length,
+      onlineInflowAmount,
+      cashInflowCount: cashInflowList.length,
+      cashInflowAmount,
+      onlineOutflowCount: onlineOutflowList.length,
+      onlineOutflowAmount,
+      cashOutflowCount: cashOutflowList.length,
+      cashOutflowAmount,
+      totalMembersCount: campaignMembers.length,
+      memberTxCount: memberTxList.length,
+      memberGivingAmount,
+      publicTxCount: publicTxList.length,
+      publicGivingAmount,
+      sectionBreakdown,
+      collectorBreakdown,
+      anomalies
+    };
+  }, [allTransactions, allExpenses, campaign, stats.totalInflow, stats.totalOutflow]);
+
+  const handleSaveReconciliation = () => {
+    if (!campaign || !canAudit) return;
+    const bankVal = bankPassbookInput.trim() !== '' ? Number(bankPassbookInput) : undefined;
+    const cashVal = cashInHandInput.trim() !== '' ? Number(cashInHandInput) : undefined;
+    saveCampaign({
+      ...campaign,
+      auditReconciliation: {
+        bankBalance: bankVal,
+        cashInHand: cashVal,
+        notes: reconcileNotesInput.trim(),
+        updatedAt: new Date().toISOString(),
+        updatedBy: auditorName || creatorProfile?.name || 'Auditor'
+      }
+    });
+    setLockToast('✅ Cross-Check & Bank/Cash Reconciliation dinhmun hi Bawm-ah chhinchhiah fel a ni e!');
+    if (onRecordsUpdated) onRecordsUpdated();
+    setTimeout(() => setLockToast(null), 3500);
+  };
 
   // Download Audited Ledger CSV
   const handleExportAuditedLedgerCSV = () => {
@@ -628,6 +813,18 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
           >
             <Banknote className="w-4 h-4" />
             <span>Accounts Overview</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('reconcile')}
+            className={`py-3 px-3.5 text-xs font-bold border-b-2 transition whitespace-nowrap flex items-center gap-1.5 ${
+              activeTab === 'reconcile'
+                ? 'border-emerald-600 text-emerald-800 bg-white'
+                : 'border-transparent text-emerald-700 hover:text-emerald-900 bg-emerald-50/50'
+            }`}
+          >
+            <ShieldCheck className="w-4 h-4 text-emerald-600" />
+            <span>🔍 Cross-Check &amp; Enfiahna</span>
           </button>
           <button
             type="button"
@@ -969,13 +1166,321 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
               </div>
 
               {/* Auditor Guidance Notice */}
-              <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 text-xs text-blue-900 flex items-start gap-3">
-                <Info className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
-                <div className="space-y-1">
-                  <div className="font-bold text-blue-950">Auditor Tan Hriattur:</div>
-                  <p className="leading-relaxed text-blue-800">
-                    Inflow leh Outflow tab-ah lutin record tin hi <strong>"✓ Dik"</strong> tih emaw, enfiah ngai a awm chuan <strong>"⚠️ Query"</strong> hmangin i chhinchhiah thei a. I check fel vek hnuah <strong>"Sign & Lock Period"</strong> tab-ah record zawng zawng i lock thei a ni.
-                  </p>
+              <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 text-xs text-blue-900 flex items-start justify-between gap-3 flex-wrap">
+                <div className="flex items-start gap-3 flex-1 min-w-[240px]">
+                  <Info className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
+                  <div className="space-y-1">
+                    <div className="font-bold text-blue-950">Auditor Tan Sum Dik Leh Dik Loh Cross-Check Dan:</div>
+                    <p className="leading-relaxed text-blue-800">
+                      <strong>"🔍 Cross-Check &amp; Enfiahna"</strong> tab-ah lutin Bank Passbook, Treasurer Pawisa Fai (Cash-in-Hand), Member Roll, Bial/Section pekna, leh Collector Receipt Book te nena a inmil leh mil loh enfiah theih a ni.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('reconcile')}
+                  className="py-2 px-3.5 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs rounded-xl shadow-2xs transition shrink-0 cursor-pointer"
+                >
+                  🔍 Cross-Check Hub Hawng Rawh →
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* TAB: CROSS-CHECK & RECONCILIATION HUB */}
+          {activeTab === 'reconcile' && (
+            <div className="space-y-6">
+              {/* 1. Physical Bank Passbook & Cash-in-Hand Cross-Check Calculator */}
+              <div className="bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 text-white rounded-2xl p-4 sm:p-5 space-y-4 shadow-md">
+                <div className="flex items-start justify-between gap-3 flex-wrap">
+                  <div>
+                    <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
+                      Step 1 • Physical Balance Verification
+                    </span>
+                    <h4 className="font-black text-sm sm:text-base mt-1.5">
+                      1. Bank Passbook &amp; Pawisa Fai (Cash-in-Hand) Cross-Check Calculator
+                    </h4>
+                    <p className="text-xs text-indigo-200/90 mt-0.5">
+                      System-a sum awm tur zat leh Treasurer kuta Bank Statement + Cash awm tak tak zat chhut milna
+                    </p>
+                  </div>
+                  <div className="text-right bg-white/10 border border-white/15 rounded-xl px-3.5 py-2">
+                    <span className="text-[10px] text-indigo-200 uppercase font-bold block">System Closing Balance (Awm Tur)</span>
+                    <span className="text-lg sm:text-xl font-black text-emerald-300">
+                      ₹{crossCheckData.expectedClosingBalance.toLocaleString('en-IN')}
+                    </span>
+                  </div>
+                </div>
+
+                {/* System Expected Split: Online/Bank vs Cash */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                  <div className="bg-white/10 border border-white/15 rounded-xl p-3 space-y-1">
+                    <span className="text-[10px] font-bold text-indigo-200 uppercase block">
+                      A. Bank / Online UPI Balance Tur
+                    </span>
+                    <div className="text-base font-black text-white">
+                      ₹{crossCheckData.expectedBankBalance.toLocaleString('en-IN')}
+                    </div>
+                    <div className="text-[10.5px] text-indigo-200/80 space-y-0.5 pt-1 border-t border-white/10">
+                      <div>Opening: ₹{crossCheckData.openingBalance.toLocaleString('en-IN')}</div>
+                      <div>+ UPI/Online Lut ({crossCheckData.onlineInflowCount}): ₹{crossCheckData.onlineInflowAmount.toLocaleString('en-IN')}</div>
+                      <div>- Bank/UPI Senso ({crossCheckData.onlineOutflowCount}): ₹{crossCheckData.onlineOutflowAmount.toLocaleString('en-IN')}</div>
+                    </div>
+                  </div>
+
+                  <div className="bg-white/10 border border-white/15 rounded-xl p-3 space-y-1">
+                    <span className="text-[10px] font-bold text-amber-200 uppercase block">
+                      B. Pawisa Fai (Cash-in-Hand) Tur
+                    </span>
+                    <div className="text-base font-black text-amber-300">
+                      ₹{crossCheckData.expectedCashInHand.toLocaleString('en-IN')}
+                    </div>
+                    <div className="text-[10.5px] text-indigo-200/80 space-y-0.5 pt-1 border-t border-white/10">
+                      <div>+ Cash Receipt Lut ({crossCheckData.cashInflowCount}): ₹{crossCheckData.cashInflowAmount.toLocaleString('en-IN')}</div>
+                      <div>- Cash Voucher Senso ({crossCheckData.cashOutflowCount}): ₹{crossCheckData.cashOutflowAmount.toLocaleString('en-IN')}</div>
+                    </div>
+                  </div>
+
+                  <div className="bg-white/10 border border-white/15 rounded-xl p-3 space-y-1">
+                    <span className="text-[10px] font-bold text-emerald-200 uppercase block">
+                      C. Verified vs Total Records
+                    </span>
+                    <div className="text-base font-black text-emerald-300">
+                      {stats.totalAuditVerified} / {stats.totalRecords} Checked
+                    </div>
+                    <div className="text-[10.5px] text-indigo-200/80 space-y-0.5 pt-1 border-t border-white/10">
+                      <div>✓ Verified Lut: ₹{stats.verifiedInflowAmount.toLocaleString('en-IN')}</div>
+                      <div>✓ Verified Senso: ₹{stats.verifiedOutflowAmount.toLocaleString('en-IN')}</div>
+                      <div>⚠️ Flagged Queries: {stats.totalAuditFlagged} items</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Auditor Physical Count Input */}
+                <div className="bg-white text-slate-900 rounded-xl p-3.5 space-y-3">
+                  <div className="text-xs font-black text-slate-800 flex items-center justify-between flex-wrap gap-2">
+                    <span>✍️ Auditor-in Bank Passbook leh Pawisa Fai a chhiar zat chhut luhna:</span>
+                    {campaign.auditReconciliation?.updatedAt && (
+                      <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                        Last Saved: {formatDateDDMMYYYY(campaign.auditReconciliation.updatedAt)} ({campaign.auditReconciliation.updatedBy})
+                      </span>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                        1. Bank Passbook / Statement Balance Awm Zat (₹)
+                      </label>
+                      <input
+                        type="number"
+                        disabled={!canAudit}
+                        value={bankPassbookInput}
+                        onChange={e => setBankPassbookInput(e.target.value)}
+                        placeholder={`Expected: ${crossCheckData.expectedBankBalance}`}
+                        className="w-full text-xs p-2.5 rounded-xl border border-slate-300 font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                        2. Treasurer Kuta Pawisa Fai (Cash-in-Hand) Awm Zat (₹)
+                      </label>
+                      <input
+                        type="number"
+                        disabled={!canAudit}
+                        value={cashInHandInput}
+                        onChange={e => setCashInHandInput(e.target.value)}
+                        placeholder={`Expected: ${crossCheckData.expectedCashInHand}`}
+                        className="w-full text-xs p-2.5 rounded-xl border border-slate-300 font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Live Discrepancy Result */}
+                  {(bankPassbookInput.trim() !== '' || cashInHandInput.trim() !== '') && (() => {
+                    const actualBank = Number(bankPassbookInput) || 0;
+                    const actualCash = Number(cashInHandInput) || 0;
+                    const actualTotal = actualBank + actualCash;
+                    const diff = actualTotal - crossCheckData.expectedClosingBalance;
+                    const isExactMatch = Math.abs(diff) < 1;
+                    return (
+                      <div className={`p-3 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs ${
+                        isExactMatch
+                          ? 'bg-emerald-50 border-emerald-300 text-emerald-950'
+                          : 'bg-rose-50 border-rose-300 text-rose-950'
+                      }`}>
+                        <div className="space-y-0.5">
+                          <div className="font-black text-sm flex items-center gap-1.5">
+                            {isExactMatch ? (
+                              <>
+                                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                                <span>✅ A INMIL THLAP! (System Balance leh Pawisa Awm Zat ₹0 Difference)</span>
+                              </>
+                            ) : (
+                              <>
+                                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                                <span>
+                                  ⚠️ A INMIL LO! Difference: ₹{Math.abs(diff).toLocaleString('en-IN')} ({diff > 0 ? 'Pawisa awm a tam zawk / Excess' : 'Pawisa awm a tlem zawk / Shortage'})
+                                </span>
+                              </>
+                            )}
+                          </div>
+                          <p className="text-[11px] opacity-90">
+                            System Closing Balance: <strong>₹{crossCheckData.expectedClosingBalance.toLocaleString('en-IN')}</strong> • Actual Chhiar Zat (Bank ₹{actualBank.toLocaleString('en-IN')} + Cash ₹{actualCash.toLocaleString('en-IN')}): <strong>₹{actualTotal.toLocaleString('en-IN')}</strong>
+                          </p>
+                        </div>
+                        {canAudit && (
+                          <button
+                            type="button"
+                            onClick={handleSaveReconciliation}
+                            className="py-2 px-3.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl shrink-0 cursor-pointer"
+                          >
+                            💾 Save Cross-Check
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })()}
+                </div>
+              </div>
+
+              {/* 2. Automated Anomaly & Duplicate Scanner */}
+              <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 space-y-3 shadow-2xs">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div>
+                    <h4 className="font-black text-slate-900 text-xs sm:text-sm flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4 text-amber-600" />
+                      <span>2. Auto-Audit Scanner (Duplicate, UTR &amp; Voucher Enfiahna)</span>
+                    </h4>
+                    <p className="text-[11px] text-slate-500">
+                      System-in entry rinhlelhawm (ni khata hming leh zat inang lut nawn, UTR awm lo, Voucher No. kim lo) a scan chhuah te
+                    </p>
+                  </div>
+                  <span className={`text-xs font-black px-2.5 py-1 rounded-full border ${
+                    crossCheckData.anomalies.length === 0
+                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                      : 'bg-amber-50 text-amber-800 border-amber-300'
+                  }`}>
+                    {crossCheckData.anomalies.length === 0 ? '✅ Anomaly 0 (Fihlim)' : `⚠️ ${crossCheckData.anomalies.length} Items Enfiah Ngai`}
+                  </span>
+                </div>
+
+                {crossCheckData.anomalies.length === 0 ? (
+                  <div className="p-4 bg-emerald-50/60 border border-emerald-200 rounded-xl text-xs text-emerald-900 font-bold flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span>Duplicate entry emaw, UPI UTR kim lo emaw, Expense Voucher kim lo hmuh a ni lo.</span>
+                  </div>
+                ) : (
+                  <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl max-h-48 overflow-y-auto">
+                    {crossCheckData.anomalies.map((anom, idx) => (
+                      <div key={`${anom.id}_${idx}`} className="p-3 bg-white hover:bg-slate-50 flex items-center justify-between gap-3 text-xs">
+                        <div className="space-y-0.5 min-w-0">
+                          <div className="font-bold text-slate-900 flex items-center gap-1.5 flex-wrap">
+                            <span className={`text-[9px] font-black uppercase px-1.5 py-0.5 rounded ${
+                              anom.severity === 'high' ? 'bg-rose-100 text-rose-800 border border-rose-300' : 'bg-amber-100 text-amber-800 border border-amber-300'
+                            }`}>
+                              {anom.severity === 'high' ? 'HIGH RISK' : 'CHECK'}
+                            </span>
+                            <span>{anom.title}</span>
+                          </div>
+                          <p className="text-[11px] text-slate-500">{anom.detail}</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSearchQuery(anom.id);
+                            setActiveTab(anom.type === 'transaction' ? 'transactions' : 'expenses');
+                          }}
+                          className="px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-[11px] rounded-lg border border-indigo-200 shrink-0 cursor-pointer"
+                        >
+                          Enfiah Rawh →
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* 3. Member Roll vs Ledger & Section/Bial Breakdown */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="bg-white border border-slate-200 rounded-2xl p-4 space-y-3 shadow-2xs">
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-black text-slate-900 text-xs sm:text-sm">
+                      3. Bial / Section-wise Sum Lut Cross-Check
+                    </h4>
+                    <span className="text-[10px] font-bold text-slate-500">
+                      Bial Collector List nena milna
+                    </span>
+                  </div>
+                  <div className="text-[11px] bg-slate-50 p-2.5 rounded-xl border border-slate-200 flex justify-between">
+                    <span>Member Roll Lut ({crossCheckData.memberTxCount} receipts): <strong>₹{crossCheckData.memberGivingAmount.toLocaleString('en-IN')}</strong></span>
+                    <span>Public/General ({crossCheckData.publicTxCount}): <strong>₹{crossCheckData.publicGivingAmount.toLocaleString('en-IN')}</strong></span>
+                  </div>
+                  <div className="border border-slate-200 rounded-xl overflow-hidden max-h-56 overflow-y-auto">
+                    <table className="w-full text-left border-collapse text-xs">
+                      <thead>
+                        <tr className="bg-slate-100 border-b border-slate-200 text-[10px] font-black uppercase text-slate-600">
+                          <th className="p-2.5">Bial / Section</th>
+                          <th className="p-2.5 text-right">Receipts</th>
+                          <th className="p-2.5 text-right">Verified</th>
+                          <th className="p-2.5 text-right">Total (₹)</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {crossCheckData.sectionBreakdown.map(sec => (
+                          <tr key={sec.section} className="hover:bg-slate-50">
+                            <td className="p-2.5 font-bold text-slate-800">{sec.section}</td>
+                            <td className="p-2.5 text-right text-slate-600">{sec.count}</td>
+                            <td className="p-2.5 text-right text-emerald-700 font-bold">{sec.verifiedCount}/{sec.count} ✓</td>
+                            <td className="p-2.5 text-right font-black text-slate-900">₹{sec.amount.toLocaleString('en-IN')}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* 4. Collector / Approver & Payment Channel Breakdown */}
+                <div className="bg-white border border-slate-200 rounded-2xl p-4 space-y-3 shadow-2xs">
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-black text-slate-900 text-xs sm:text-sm">
+                      4. Collector / Receipt Book Cross-Check
+                    </h4>
+                    <span className="text-[10px] font-bold text-slate-500">
+                      Pawisa Khawntu / Gateway milna
+                    </span>
+                  </div>
+                  <div className="text-[11px] bg-slate-50 p-2.5 rounded-xl border border-slate-200 flex justify-between">
+                    <span>UPI/Online: <strong>₹{crossCheckData.onlineInflowAmount.toLocaleString('en-IN')}</strong></span>
+                    <span>Cash/Manual: <strong>₹{crossCheckData.cashInflowAmount.toLocaleString('en-IN')}</strong></span>
+                  </div>
+                  <div className="border border-slate-200 rounded-xl overflow-hidden max-h-56 overflow-y-auto">
+                    <table className="w-full text-left border-collapse text-xs">
+                      <thead>
+                        <tr className="bg-slate-100 border-b border-slate-200 text-[10px] font-black uppercase text-slate-600">
+                          <th className="p-2.5">Collector / Channel</th>
+                          <th className="p-2.5">Mode</th>
+                          <th className="p-2.5 text-right">Receipts</th>
+                          <th className="p-2.5 text-right">Total (₹)</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {crossCheckData.collectorBreakdown.map((col, idx) => (
+                          <tr key={`${col.collector}_${idx}`} className="hover:bg-slate-50">
+                            <td className="p-2.5 font-bold text-slate-800">{col.collector}</td>
+                            <td className="p-2.5">
+                              <span className={`text-[9.5px] font-black px-1.5 py-0.5 rounded ${
+                                col.mode === 'CASH' ? 'bg-amber-100 text-amber-900' : 'bg-indigo-100 text-indigo-900'
+                              }`}>
+                                {col.mode}
+                              </span>
+                            </td>
+                            <td className="p-2.5 text-right text-slate-600">{col.count}</td>
+                            <td className="p-2.5 text-right font-black text-slate-900">₹{col.amount.toLocaleString('en-IN')}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1114,6 +1619,26 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                             <span className="uppercase text-[9px] font-bold text-slate-600 bg-slate-100 px-1.5 py-0.2 rounded">
                               {tx.paymentMethod}
                             </span>
+                            {tx.memberId && (
+                              <span className="text-[9.5px] font-mono font-bold text-indigo-700 bg-indigo-50 px-1.5 py-0.2 rounded border border-indigo-200">
+                                Roll: {tx.memberId}
+                              </span>
+                            )}
+                            {(tx.donorVeng || (tx as any).donorSection) && (
+                              <span className="text-[9.5px] font-semibold text-slate-600 bg-slate-100 px-1.5 py-0.2 rounded">
+                                Bial: {tx.donorVeng || (tx as any).donorSection}
+                              </span>
+                            )}
+                            {(tx.utr || (tx as any).utrRef || tx.referenceNo) && (
+                              <span className="text-[9.5px] font-mono text-emerald-800 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">
+                                UTR/Ref: {tx.utr || (tx as any).utrRef || tx.referenceNo}
+                              </span>
+                            )}
+                            {(tx.approved_by || (tx as any).approvedBy || tx.verifiedBy) && (
+                              <span className="text-[9.5px] text-slate-600">
+                                Collector/Verified: <strong>{tx.approved_by || (tx as any).approvedBy || tx.verifiedBy}</strong>
+                              </span>
+                            )}
                             {tx.audit_period && (
                               <span className="text-[9.5px] font-bold text-amber-800 bg-amber-50 px-1.5 py-0.2 rounded border border-amber-200">
                                 {tx.audit_period}

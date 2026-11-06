@@ -54,6 +54,8 @@ import {
   wipeAllClientStorage,
   findAllBrowserCachedTransactions,
   getActiveAuditorGrantsForUser,
+  syncAuditorGrantsAcrossCloud,
+  saveStoredAuditorGrants,
   isApprovedQRCreator
 } from './utils/storage';
 import {
@@ -423,6 +425,17 @@ export default function App() {
           }
           if (state.campaigns && state.campaigns.length > 0) {
             setCampaigns(state.campaigns);
+            // Extract and save embedded auditorGrants immediately
+            const extractedGrants: any[] = [];
+            for (const c of state.campaigns) {
+              const cg = c.auditorGrants || (c as any)?.metadata?.auditorGrants;
+              if (Array.isArray(cg) && cg.length > 0) {
+                extractedGrants.push(...cg);
+              }
+            }
+            if (extractedGrants.length > 0) {
+              saveStoredAuditorGrants(extractedGrants, true);
+            }
             try {
               window.dispatchEvent(new CustomEvent('ronpay_campaigns_updated', { detail: state.campaigns }));
             } catch {}
@@ -436,6 +449,8 @@ export default function App() {
           if (state.fundPool) {
             setPublicPoolStats(state.fundPool);
           }
+          // Sync auditor grants across cloud so all browsers recognize appointed auditors immediately
+          syncAuditorGrantsAcrossCloud().catch(() => {});
         }
       } catch (err) {
         console.warn('[App] Supabase initial load error:', err);

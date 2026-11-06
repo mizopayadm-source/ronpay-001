@@ -13,7 +13,8 @@ import {
   isCampaignManagerOrOfficer,
   getStoredCreatorProfile,
   getStoredUserPaidTxIds,
-  findAllBrowserCachedTransactions
+  findAllBrowserCachedTransactions,
+  saveStoredAuditorGrants
 } from '../utils/storage';
 
 // =========================================================================
@@ -328,6 +329,13 @@ export const mapCampaignToSupabase = (camp: any) => {
       urgencyLevel: camp.urgencyLevel,
       officerPasscode: camp.officerPasscode,
       authorizedOfficers: camp.authorizedOfficers,
+      auditorGrants: camp.auditorGrants,
+      auditChecklist: camp.auditChecklist,
+      lastAuditedAt: camp.lastAuditedAt,
+      lastAuditedBy: camp.lastAuditedBy,
+      lastAuditPeriod: camp.lastAuditPeriod,
+      lastAuditNotes: camp.lastAuditNotes,
+      auditReconciliation: camp.auditReconciliation,
       expenseHeads: camp.expenseHeads,
       isHidden: Boolean(camp.isHidden),
       hiddenAt: camp.hiddenAt || null,
@@ -340,6 +348,18 @@ export const mapCampaignToSupabase = (camp: any) => {
 export const normalizeCampaign = (row: any): Campaign => {
   if (!row) return row;
   const meta = row.metadata || {};
+  const auditorGrants = Array.isArray(meta.auditorGrants)
+    ? meta.auditorGrants
+    : Array.isArray(row.auditorGrants)
+    ? row.auditorGrants
+    : undefined;
+
+  if (auditorGrants && auditorGrants.length > 0) {
+    try {
+      saveStoredAuditorGrants(auditorGrants, true);
+    } catch {}
+  }
+
   return {
     ...meta,
     ...row,
@@ -391,6 +411,13 @@ export const normalizeCampaign = (row: any): Campaign => {
     urgencyLevel: meta.urgencyLevel ?? row.urgencyLevel,
     officerPasscode: meta.officerPasscode ?? row.officerPasscode,
     authorizedOfficers: meta.authorizedOfficers ?? row.authorizedOfficers,
+    auditorGrants,
+    auditChecklist: meta.auditChecklist ?? row.auditChecklist,
+    lastAuditedAt: meta.lastAuditedAt ?? row.lastAuditedAt,
+    lastAuditedBy: meta.lastAuditedBy ?? row.lastAuditedBy,
+    lastAuditPeriod: meta.lastAuditPeriod ?? row.lastAuditPeriod,
+    lastAuditNotes: meta.lastAuditNotes ?? row.lastAuditNotes,
+    auditReconciliation: meta.auditReconciliation ?? row.auditReconciliation,
     expenseHeads: meta.expenseHeads ?? row.expenseHeads,
     isHidden: Boolean(meta.isHidden ?? row.is_hidden ?? row.isHidden ?? false),
     hiddenAt: meta.hiddenAt ?? row.hidden_at ?? row.hiddenAt,

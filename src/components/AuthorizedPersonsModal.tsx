@@ -51,7 +51,9 @@ import {
   saveStoredAuditorGrants,
   saveAuditorGrant,
   revokeAuditorGrant,
-  formatRemainingAuditTimeMizo
+  permanentlyDeleteAuditorGrant,
+  formatRemainingAuditTimeMizo,
+  syncAuditorGrantsAcrossCloud
 } from '../utils/storage';
 import { formatDateTimeDDMMYYYY, formatDateDDMMYYYY } from '../utils/date';
 import { printHtmlSafely } from '../utils/export';
@@ -110,20 +112,26 @@ export const AuthorizedPersonsModal: React.FC<AuthorizedPersonsModalProps> = ({
     }
   }, [campaign?.id, auditorTick]);
 
-  // Fetch latest auditor grants from server when modal opens
+  // Fetch latest auditor grants from Server AND Supabase when modal opens or tab changes
+  const [isSyncingAuditors, setIsSyncingAuditors] = useState<boolean>(false);
+  const handleSyncAuditorsFromCloud = useCallback(async () => {
+    if (!campaign?.id) return;
+    setIsSyncingAuditors(true);
+    try {
+      await syncAuditorGrantsAcrossCloud();
+      setAuditorGrants(getStoredAuditorGrants(campaign.id));
+      setAuditorTick(t => t + 1);
+    } finally {
+      setIsSyncingAuditors(false);
+    }
+  }, [campaign?.id]);
+
+  const [confirmDeleteGrant, setConfirmDeleteGrant] = useState<AuditorAccessGrant | null>(null);
+
   useEffect(() => {
     if (!isOpen || !campaign?.id) return;
-    fetch('/api/auditor-grants')
-      .then(res => (res.ok ? res.json() : null))
-      .then(data => {
-        const list = data?.auditorGrants || data?.grants;
-        if (Array.isArray(list)) {
-          saveStoredAuditorGrants(list, true);
-          setAuditorGrants(getStoredAuditorGrants(campaign.id));
-        }
-      })
-      .catch(() => {});
-  }, [isOpen, campaign?.id]);
+    handleSyncAuditorsFromCloud();
+  }, [isOpen, campaign?.id, activeTab, handleSyncAuditorsFromCloud]);
 
   useEffect(() => {
     const handleGrantsUpdated = () => setAuditorTick(t => t + 1);
@@ -947,6 +955,11 @@ export const AuthorizedPersonsModal: React.FC<AuthorizedPersonsModalProps> = ({
     };
 
     saveAuditorGrant(newGrant);
+    const updatedGrants = getStoredAuditorGrants(campaign.id);
+    setAuditorGrants(updatedGrants);
+    if (onCampaignUpdated) {
+      onCampaignUpdated({ ...campaign, auditorGrants: updatedGrants });
+    }
     setAuditorTick(t => t + 1);
     setIsAddAuditorOpen(false);
     setSelectedAuditorMember(null);
@@ -954,13 +967,38 @@ export const AuthorizedPersonsModal: React.FC<AuthorizedPersonsModalProps> = ({
     setAuditorPhoneInput('');
     setAuditorPinInput('1234');
     setAuditorNotesInput('');
-    showToast(`✅ Auditor ${trimmedName} (+91 ${cleanPhone}, PIN: ${cleanPin}) ruat fel a ni e!`);
+    showToast(`✅ Auditor ${trimmedName} (+91 ${cleanPhone}, PIN: ${cleanPin}) ruat fel a ni a, Cloud/Browser dangah sync nghal a ni e!`);
   };
 
   const handleRevokeGrant = (grantId: string) => {
     revokeAuditorGrant(grantId, creatorProfile?.name || 'Creator');
+    if (campaign) {
+      const updatedGrants = getStoredAuditorGrants(campaign.id);
+      setAuditorGrants(updatedGrants);
+      if (onCampaignUpdated) {
+        onCampaignUpdated({ ...campaign, auditorGrants: updatedGrants });
+      }
+    }
     setAuditorTick(t => t + 1);
     showToast('🛑 Auditor access tihtawp (revoked) a ni ta.');
+  };
+
+  const handlePermanentlyDeleteGrant = async (grant: AuditorAccessGrant) => {
+    try {
+      await permanentlyDeleteAuditorGrant(grant.id);
+      if (campaign) {
+        const updatedGrants = getStoredAuditorGrants(campaign.id);
+        setAuditorGrants(updatedGrants);
+        if (onCampaignUpdated) {
+          onCampaignUpdated({ ...campaign, auditorGrants: updatedGrants });
+        }
+      }
+      setAuditorTick(t => t + 1);
+      setConfirmDeleteGrant(null);
+      showToast(`🗑️ Auditor ${grant.auditorName || 'record'} hi database atanga paih hlen (Permanent Delete) a ni ta.`);
+    } catch {
+      showToast('❌ Auditor paih theih a ni lo, khawngaihin try leh rawh.');
+    }
   };
 
   if (!isOpen || !campaign) return null;
@@ -1835,8 +1873,20 @@ export const AuthorizedPersonsModal: React.FC<AuthorizedPersonsModalProps> = ({
 
               {/* Auditor Grants List */}
               <div className="space-y-3">
-                <div className="flex items-center justify-between text-xs font-bold text-slate-700">
-                  <span>Auditor Ruat Tawh Te ({auditorGrants.length})</span>
+                <div className="flex items-center justify-between text-xs font-bold text-slate-700 flex-wrap gap-2">
+                  <div className="flex items-center gap-2">
+                    <span>Auditor Ruat Tawh Te ({auditorGrants.length})</span>
+                    <button
+                      type="button"
+                      onClick={handleSyncAuditorsFromCloud}
+                      disabled={isSyncingAuditors}
+                      className="text-[10.5px] px-2 py-0.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 flex items-center gap-1 font-bold cursor-pointer"
+                      title="Browser dang atanga Auditor ruat thar sync na"
+                    >
+                      <RefreshCw className={`w-3 h-3 ${isSyncingAuditors ? 'animate-spin text-indigo-600' : ''}`} />
+                      <span>{isSyncingAuditors ? 'Syncing...' : 'Sync Cloud'}</span>
+                    </button>
+                  </div>
                   <button
                     type="button"
                     onClick={() => setIsAuditorPortalOpen(true)}
@@ -1953,7 +2003,7 @@ export const AuthorizedPersonsModal: React.FC<AuthorizedPersonsModalProps> = ({
                               </button>
                             </div>
 
-                            <div className="flex items-center gap-1.5">
+                            <div className="flex items-center gap-1.5 flex-wrap">
                               <button
                                 type="button"
                                 onClick={() => handleExtendAuditorGrant(grant, 24)}
@@ -1966,12 +2016,22 @@ export const AuthorizedPersonsModal: React.FC<AuthorizedPersonsModalProps> = ({
                                 <button
                                   type="button"
                                   onClick={() => handleRevokeGrant(grant.id)}
-                                  className="py-1.5 px-2 rounded-lg border border-rose-200 text-rose-700 hover:bg-rose-50 text-[10.5px] font-bold transition flex items-center gap-1 cursor-pointer"
-                                  title="Revoke Auditor Access"
+                                  className="py-1.5 px-2 rounded-lg border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-900 text-[10.5px] font-bold transition flex items-center gap-1 cursor-pointer"
+                                  title="Access Tihtawp Rih (Revoke)"
                                 >
-                                  <Trash2 className="w-3 h-3" />
+                                  <Clock className="w-3 h-3 text-amber-700" />
+                                  <span>Tawp tir</span>
                                 </button>
                               )}
+                              <button
+                                type="button"
+                                onClick={() => setConfirmDeleteGrant(grant)}
+                                className="py-1.5 px-2 rounded-lg border border-rose-300 bg-rose-50 hover:bg-rose-100 text-rose-700 text-[10.5px] font-bold transition flex items-center gap-1 cursor-pointer"
+                                title="Auditor he Bawm atanga Paih Hlen (Permanent Delete)"
+                              >
+                                <Trash2 className="w-3 h-3 text-rose-600" />
+                                <span>Paih Hlen</span>
+                              </button>
                               <button
                                 type="button"
                                 onClick={() => setIsAuditorPortalOpen(true)}
@@ -2338,6 +2398,40 @@ export const AuthorizedPersonsModal: React.FC<AuthorizedPersonsModalProps> = ({
             if (onCampaignUpdated && campaign) onCampaignUpdated(campaign);
           }}
         />
+
+        {/* Auditor Permanent Delete Confirmation Modal */}
+        {confirmDeleteGrant && (
+          <div className="fixed inset-0 z-60 flex items-center justify-center p-3 bg-slate-950/75 backdrop-blur-xs animate-fadeIn">
+            <div className="bg-white rounded-3xl max-w-sm w-full p-5 border border-rose-200 shadow-2xl space-y-4 text-slate-800">
+              <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center mx-auto shadow-inner">
+                <Trash2 className="w-6 h-6" />
+              </div>
+              <div className="text-center space-y-1.5">
+                <h4 className="text-sm font-black text-slate-900">Auditor Ruatna Paih Hlen I Chiang Em?</h4>
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  <strong className="text-rose-700 font-bold">{confirmDeleteGrant.auditorName || 'Auditor'}</strong> (+91 {confirmDeleteGrant.auditorPhone}) ruatna record hi <strong>database leh browser zawng zawng atangin paih hlen (Permanent Delete)</strong> a ni ang a, Auditor hian he Bawm audit na hi a lut thei tawh lovang.
+                </p>
+              </div>
+              <div className="grid grid-cols-2 gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setConfirmDeleteGrant(null)}
+                  className="py-2.5 px-3 rounded-xl border border-slate-300 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition cursor-pointer"
+                >
+                  Sut leh rawh
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handlePermanentlyDeleteGrant(confirmDeleteGrant)}
+                  className="py-2.5 px-3 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-black transition flex items-center justify-center gap-1.5 shadow-sm cursor-pointer"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Paih Hlen Rawh</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
       </div>
     </div>

@@ -5182,7 +5182,35 @@ export const clearRonpayLocalStorage = (): void => {
 // ============================================================================
 
 export const AUDITOR_GRANTS_KEY = 'ronpay_auditor_grants_v1';
+export const DELETED_AUDITOR_GRANTS_KEY = 'ronpay_deleted_auditor_grants_v1';
 export const MODIFICATION_REQUESTS_KEY = 'ronpay_modification_requests_v1';
+
+export const getStoredDeletedAuditorGrantIds = (): string[] => {
+  try {
+    const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(DELETED_AUDITOR_GRANTS_KEY) : null;
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+};
+
+export const saveStoredDeletedAuditorGrantIds = (ids: string[]): void => {
+  try {
+    if (typeof localStorage !== 'undefined') {
+      const unique = Array.from(new Set(ids.map(id => String(id).toLowerCase().trim())));
+      localStorage.setItem(DELETED_AUDITOR_GRANTS_KEY, JSON.stringify(unique));
+    }
+  } catch {}
+};
+
+export const unpurgeAuditorGrantId = (grantId: string): void => {
+  try {
+    const clean = String(grantId).toLowerCase().trim();
+    const current = getStoredDeletedAuditorGrantIds();
+    const filtered = current.filter(id => id !== clean);
+    saveStoredDeletedAuditorGrantIds(filtered);
+  } catch {}
+};
 
 /**
  * Formats remaining Auditor Grant time in clear Mizo instead of confusing raw hours like "719h la awm".
@@ -5214,14 +5242,54 @@ export const formatRemainingAuditTimeMizo = (expiresAt?: string | number | null)
 
 export const getStoredAuditorGrants = (campaignId?: string): AuditorAccessGrant[] => {
   try {
+    const deletedSet = new Set(getStoredDeletedAuditorGrantIds());
     const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(AUDITOR_GRANTS_KEY) : null;
     let list: AuditorAccessGrant[] = raw ? JSON.parse(raw) : [];
     if (!Array.isArray(list)) list = [];
 
+    // Filter out deleted grants
+    list = list.filter(g => g && g.id && !deletedSet.has(String(g.id).toLowerCase().trim()));
+
+    // Also merge any auditorGrants embedded inside stored campaigns (synced via Supabase campaigns table)
+    const map = new Map<string, AuditorAccessGrant>();
+    for (const g of list) {
+      if (g && g.id && !deletedSet.has(String(g.id).toLowerCase().trim())) {
+        map.set(String(g.id).trim(), g);
+      }
+    }
+
+    try {
+      const rawCamps = typeof localStorage !== 'undefined' ? localStorage.getItem(CAMPAIGNS_KEY) : null;
+      const camps: Campaign[] = rawCamps ? JSON.parse(rawCamps) : [];
+      if (Array.isArray(camps)) {
+        for (const c of camps) {
+          const cGrants = c?.auditorGrants || (c as any)?.metadata?.auditorGrants;
+          if (Array.isArray(cGrants)) {
+            for (const cg of cGrants) {
+              if (!cg || !cg.id) continue;
+              const k = String(cg.id).trim();
+              if (deletedSet.has(k.toLowerCase())) continue;
+              const existing = map.get(k);
+              if (!existing) {
+                map.set(k, cg);
+              } else {
+                const localT = new Date(existing.updatedAt || existing.updated_at || existing.createdAt || 0).getTime();
+                const campT = new Date(cg.updatedAt || cg.updated_at || cg.createdAt || 0).getTime();
+                if (campT >= localT) {
+                  map.set(k, { ...existing, ...cg });
+                }
+              }
+            }
+          }
+        }
+      }
+    } catch {}
+
+    const combined = Array.from(map.values());
     const now = Date.now();
-    let changed = false;
+    let changed = combined.length !== list.length;
     // Auto-evaluate expired grants
-    const updated = list.map(g => {
+    const updated = combined.map(g => {
       const expStr = g.expiresAt || g.expires_at || '';
       if (g.status === 'active' && expStr && new Date(expStr).getTime() <= now) {
         changed = true;
@@ -5251,14 +5319,18 @@ export const getStoredAuditorGrants = (campaignId?: string): AuditorAccessGrant[
 export const saveStoredAuditorGrants = (grants: AuditorAccessGrant[], fromServer: boolean = false): void => {
   try {
     if (!Array.isArray(grants)) return;
+    const deletedSet = new Set(getStoredDeletedAuditorGrantIds());
     const current = getStoredAuditorGrants();
     const map = new Map<string, AuditorAccessGrant>();
     for (const g of current) {
-      if (g && g.id) map.set(String(g.id).trim(), g);
+      if (g && g.id && !deletedSet.has(String(g.id).toLowerCase().trim())) {
+        map.set(String(g.id).trim(), g);
+      }
     }
     for (const sg of grants) {
       if (!sg || !sg.id) continue;
       const k = String(sg.id).trim();
+      if (deletedSet.has(k.toLowerCase())) continue;
       const existing = map.get(k);
       if (!existing) {
         map.set(k, sg);
@@ -5284,8 +5356,9 @@ export const saveStoredAuditorGrants = (grants: AuditorAccessGrant[], fromServer
 
 export const saveAuditorGrant = (grant: AuditorAccessGrant): void => {
   try {
-    const current = getStoredAuditorGrants();
     const cleanId = String(grant.id).trim();
+    unpurgeAuditorGrantId(cleanId);
+    const current = getStoredAuditorGrants();
     const nowIso = new Date().toISOString();
     const stampedGrant: AuditorAccessGrant = {
       ...grant,
@@ -5318,6 +5391,23 @@ export const saveAuditorGrant = (grant: AuditorAccessGrant): void => {
     if (typeof localStorage !== 'undefined') {
       localStorage.setItem(AUDITOR_GRANTS_KEY, JSON.stringify(updated));
     }
+
+    // Also embed inside the target Campaign and save to Supabase so other browsers see it immediately
+    const targetCampId = String(stampedGrant.campaignId || '').toLowerCase().trim();
+    if (targetCampId) {
+      const camps = getStoredCampaigns();
+      const targetCamp = camps.find(c => String(c.id).toLowerCase().trim() === targetCampId);
+      if (targetCamp) {
+        const campGrants = updated.filter(
+          g => String(g.campaignId || g.campaign_id || '').toLowerCase().trim() === targetCampId
+        );
+        saveCampaign({
+          ...targetCamp,
+          auditorGrants: campGrants,
+        });
+      }
+    }
+
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('ronpay_auditor_grants_updated', { detail: updated }));
       broadcastTabSync('auditor_grants');
@@ -5328,6 +5418,12 @@ export const saveAuditorGrant = (grant: AuditorAccessGrant): void => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(stampedGrant),
+    }).catch(() => {});
+
+    safeApiFetch('/api/data/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ auditorGrants: [stampedGrant] }),
     }).catch(() => {});
 
     recordAuditLog(
@@ -5346,8 +5442,10 @@ export const revokeAuditorGrant = (grantId: string, revokedBy: string = 'Creator
   try {
     const nowIso = new Date().toISOString();
     const current = getStoredAuditorGrants();
+    let targetCampId = '';
     const updated = current.map(g => {
       if (g.id === grantId) {
+        targetCampId = String(g.campaignId || g.campaign_id || '').toLowerCase().trim();
         return { ...g, status: 'revoked' as const, updatedAt: nowIso, updated_at: nowIso };
       }
       return g;
@@ -5356,6 +5454,21 @@ export const revokeAuditorGrant = (grantId: string, revokedBy: string = 'Creator
     if (typeof localStorage !== 'undefined') {
       localStorage.setItem(AUDITOR_GRANTS_KEY, JSON.stringify(updated));
     }
+
+    if (targetCampId) {
+      const camps = getStoredCampaigns();
+      const targetCamp = camps.find(c => String(c.id).toLowerCase().trim() === targetCampId);
+      if (targetCamp) {
+        const campGrants = updated.filter(
+          g => String(g.campaignId || g.campaign_id || '').toLowerCase().trim() === targetCampId
+        );
+        saveCampaign({
+          ...targetCamp,
+          auditorGrants: campGrants,
+        });
+      }
+    }
+
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('ronpay_auditor_grants_updated', { detail: updated }));
       broadcastTabSync('auditor_grants');
@@ -5377,6 +5490,161 @@ export const revokeAuditorGrant = (grantId: string, revokedBy: string = 'Creator
   } catch (e) {
     console.error('Failed to revoke auditor grant:', e);
   }
+};
+
+/**
+ * Permanently deletes an Auditor Grant from local storage, campaign metadata,
+ * database, and Supabase across all browsers ("Paih Hlen").
+ */
+export const permanentlyDeleteAuditorGrant = async (grantId: string): Promise<void> => {
+  try {
+    const cleanId = String(grantId || '').trim();
+    if (!cleanId) return;
+    const cleanLowerId = cleanId.toLowerCase();
+
+    // 1. Record in deleted IDs list so it never revives from old local caches
+    const deletedList = getStoredDeletedAuditorGrantIds();
+    if (!deletedList.includes(cleanLowerId)) {
+      deletedList.push(cleanLowerId);
+      saveStoredDeletedAuditorGrantIds(deletedList);
+    }
+
+    // 2. Remove from local AUDITOR_GRANTS_KEY
+    const current = getStoredAuditorGrants();
+    const targetGrant = current.find(g => String(g.id).trim().toLowerCase() === cleanLowerId);
+    const updated = current.filter(g => String(g.id).trim().toLowerCase() !== cleanLowerId);
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(AUDITOR_GRANTS_KEY, JSON.stringify(updated));
+    }
+
+    // 3. Purge from associated campaigns in localStorage & Supabase
+    const targetCampId = String(targetGrant?.campaignId || targetGrant?.campaign_id || '').toLowerCase().trim();
+    const camps = getStoredCampaigns();
+    for (const c of camps) {
+      let campModified = false;
+      const cId = String(c.id).toLowerCase().trim();
+      if (Array.isArray(c.auditorGrants)) {
+        const filtered = c.auditorGrants.filter(g => String(g?.id).trim().toLowerCase() !== cleanLowerId);
+        if (filtered.length !== c.auditorGrants.length) {
+          c.auditorGrants = filtered;
+          campModified = true;
+        }
+      }
+      if (cId === targetCampId || campModified) {
+        saveCampaign(c);
+        // Also update Supabase directly
+        import('../services/supabaseService').then(({ upsertSupabaseCampaign }) => {
+          upsertSupabaseCampaign({
+            ...c,
+            auditorGrants: Array.isArray(c.auditorGrants)
+              ? c.auditorGrants.filter(g => String(g?.id).trim().toLowerCase() !== cleanLowerId)
+              : []
+          }).catch(() => {});
+        }).catch(() => {});
+      }
+    }
+
+    // 4. Dispatch local and tab events
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('ronpay_auditor_grants_updated', { detail: updated }));
+      broadcastTabSync('auditor_grants');
+    }
+
+    // 5. Call backend endpoints for multi-device sync
+    safeApiFetch(`/api/auditor-grants/${encodeURIComponent(cleanId)}`, {
+      method: 'DELETE',
+    }).catch(() => {});
+
+    safeApiFetch('/api/data/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ deletedAuditorGrantIds: [cleanId] }),
+    }).catch(() => {});
+
+    // 6. Audit log
+    recordAuditLog(
+      'Auditor Grant Permanently Deleted',
+      `Auditor grant ${cleanId} (${targetGrant?.auditorName || 'Auditor'}) permanently deleted from the system.`,
+      'audit_grant',
+      cleanId,
+      targetGrant?.grantedByName || 'Creator'
+    );
+  } catch (e) {
+    console.error('Failed to permanently delete auditor grant:', e);
+  }
+};
+
+/**
+ * Pulls latest auditor grants from both Backend Server (/api/auditor-grants)
+ * and Supabase Campaigns (campaigns.metadata.auditorGrants) so any browser
+ * immediately sees newly appointed or revoked auditors.
+ */
+export const syncAuditorGrantsAcrossCloud = async (): Promise<AuditorAccessGrant[]> => {
+  try {
+    const [apiRes, supaCamps] = await Promise.all([
+      safeApiFetch('/api/auditor-grants').then(r => (r && r.ok ? r.json() : null)).catch(() => null),
+      import('../services/supabaseService')
+        .then(({ fetchSupabaseCampaigns }) => fetchSupabaseCampaigns())
+        .catch(() => [] as Campaign[]),
+    ]);
+
+    // Merge any deletedAuditorGrantIds returned by backend
+    if (Array.isArray(apiRes?.deletedAuditorGrantIds) && apiRes.deletedAuditorGrantIds.length > 0) {
+      const mergedDel = [...getStoredDeletedAuditorGrantIds(), ...apiRes.deletedAuditorGrantIds];
+      saveStoredDeletedAuditorGrantIds(mergedDel);
+    }
+
+    const delSet = new Set(getStoredDeletedAuditorGrantIds());
+
+    const serverGrants = apiRes?.auditorGrants || apiRes?.grants;
+    if (Array.isArray(serverGrants) && serverGrants.length > 0) {
+      const validServerGrants = serverGrants.filter((g: any) => g && g.id && !delSet.has(String(g.id).toLowerCase().trim()));
+      saveStoredAuditorGrants(validServerGrants, true);
+    }
+
+    if (Array.isArray(supaCamps) && supaCamps.length > 0) {
+      const extractedGrants: AuditorAccessGrant[] = [];
+      for (const sc of supaCamps) {
+        const cg = sc?.auditorGrants || (sc as any)?.metadata?.auditorGrants;
+        if (Array.isArray(cg) && cg.length > 0) {
+          for (const g of cg) {
+            if (g && g.id && !delSet.has(String(g.id).toLowerCase().trim())) {
+              extractedGrants.push(g);
+            }
+          }
+        }
+      }
+      if (extractedGrants.length > 0) {
+        saveStoredAuditorGrants(extractedGrants, true);
+      }
+    }
+
+    // Also push any local active grants that might not be in Supabase yet
+    const allLocalGrants = getStoredAuditorGrants();
+    if (allLocalGrants.length > 0 && Array.isArray(supaCamps) && supaCamps.length > 0) {
+      const byCamp = new Map<string, AuditorAccessGrant[]>();
+      for (const g of allLocalGrants) {
+        const cid = String(g.campaignId || g.campaign_id || '').toLowerCase().trim();
+        if (!cid) continue;
+        if (!byCamp.has(cid)) byCamp.set(cid, []);
+        byCamp.get(cid)!.push(g);
+      }
+      const localCamps = getStoredCampaigns();
+      for (const [cid, gList] of byCamp.entries()) {
+        const sc = supaCamps.find(c => String(c.id).toLowerCase().trim() === cid);
+        const lc = localCamps.find(c => String(c.id).toLowerCase().trim() === cid);
+        const remoteGrants = sc?.auditorGrants || (sc as any)?.metadata?.auditorGrants || [];
+        if (lc && gList.length > remoteGrants.length) {
+          import('../services/supabaseService').then(({ upsertSupabaseCampaign }) => {
+            upsertSupabaseCampaign({ ...lc, auditorGrants: gList }).catch(() => {});
+          }).catch(() => {});
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('syncAuditorGrantsAcrossCloud warning:', e);
+  }
+  return getStoredAuditorGrants();
 };
 
 export const checkAuditorAccessForCampaign = (

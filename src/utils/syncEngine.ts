@@ -36,6 +36,7 @@ import {
   markExpenseAsDeleted,
   getStoredAuditorGrants,
   saveStoredAuditorGrants,
+  syncAuditorGrantsAcrossCloud,
   MODIFICATION_REQUESTS_KEY,
   broadcastTabSync,
   safeApiFetch,
@@ -1015,10 +1016,22 @@ export function subscribeServerEvents(onChanged: () => void): () => void {
   if (typeof window !== 'undefined' && typeof EventSource !== 'undefined') {
     try {
       eventSource = new EventSource(resolveApiUrl('/api/sync/events'));
-      eventSource.addEventListener('message', () => {
+      eventSource.addEventListener('message', (ev: MessageEvent) => {
+        try {
+          if (ev?.data) {
+            const parsed = JSON.parse(ev.data);
+            if (parsed?.type === 'auditor_grants_updated') {
+              syncAuditorGrantsAcrossCloud().catch(() => {});
+            }
+          }
+        } catch {}
         if (!isCleanedUp) onChanged();
       });
       eventSource.addEventListener('transactions_updated', () => {
+        if (!isCleanedUp) onChanged();
+      });
+      eventSource.addEventListener('auditor_grants_updated', () => {
+        syncAuditorGrantsAcrossCloud().catch(() => {});
         if (!isCleanedUp) onChanged();
       });
       eventSource.onerror = () => {
