@@ -414,10 +414,11 @@ export default function App() {
         const state = await loadSupabaseInitialState();
         if (isMounted) {
           if (Array.isArray(state.transactions)) {
-            setTransactions(state.transactions);
-            saveStoredTransactions(state.transactions, true);
+            const merged = mergeTransactions(getStoredTransactions(), state.transactions);
+            setTransactions(merged);
+            saveStoredTransactions(merged, true);
             try {
-              window.dispatchEvent(new CustomEvent('ronpay_transactions_updated', { detail: state.transactions }));
+              window.dispatchEvent(new CustomEvent('ronpay_transactions_updated', { detail: merged }));
             } catch {}
           }
           if (state.campaigns && state.campaigns.length > 0) {
@@ -453,8 +454,9 @@ export default function App() {
       txDebounceTimer = setTimeout(() => {
         fetchTableData('transactions', { forceAll: true }).then(txs => {
           if (isMounted && Array.isArray(txs) && txs.length > 0) {
-            setTransactions(txs as Transaction[]);
-            saveStoredTransactions(txs as Transaction[], true);
+            const merged = mergeTransactions(getStoredTransactions(), txs as Transaction[]);
+            setTransactions(merged);
+            saveStoredTransactions(merged, true);
           }
         }).catch(() => {});
       }, 1500);
@@ -705,11 +707,9 @@ export default function App() {
         fetchTableData('campaigns').catch(() => [])
       ]);
       if (Array.isArray(txs) && txs.length > 0) {
-        setTransactions(txs as Transaction[]);
-        try {
-          localStorage.setItem('ronpay_transactions_v2', JSON.stringify(txs));
-          localStorage.setItem('ronpay_transactions', JSON.stringify(txs));
-        } catch {}
+        const merged = mergeTransactions(getStoredTransactions(), txs as Transaction[]);
+        setTransactions(merged);
+        saveStoredTransactions(merged, true);
       }
       if (Array.isArray(camps) && camps.length > 0) {
         setCampaigns(camps as Campaign[]);
@@ -2568,8 +2568,12 @@ export default function App() {
           onLoginSuccess={(newProfile) => {
             setCreatorProfile(newProfile);
             setIsLoginModalOpen(false);
-            if (newProfile.role === 'AUDITOR') {
-              const targetCamp = campaignsRef.current.find(c => c.id === newProfile.activeCampaignId);
+            const activeGrants = getActiveAuditorGrantsForUser(newProfile.phone || newProfile.phoneNumber || '');
+            const targetCampId = newProfile.activeCampaignId || activeGrants[0]?.campaignId || activeGrants[0]?.campaign_id;
+            if (newProfile.role === 'AUDITOR' || activeGrants.length > 0) {
+              const targetCamp = campaignsRef.current.find(
+                c => String(c.id).toLowerCase() === String(targetCampId || '').toLowerCase()
+              );
               if (targetCamp) {
                 setAuditorPortalCampaign(targetCamp);
                 setIsAuditorPortalOpen(true);

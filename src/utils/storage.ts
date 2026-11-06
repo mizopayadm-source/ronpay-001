@@ -1208,6 +1208,29 @@ export const SYSTEM_HARD_PURGE_TIMESTAMP = 0;
 
 export const getStoredTransactions = (): Transaction[] => {
   try {
+    // One-time self-heal: recover any transactions that were falsely marked as deleted by background sync
+    if (typeof localStorage !== 'undefined' && localStorage.getItem('ronpay_audit_tx_healed_v2') !== 'true') {
+      try {
+        const initIds = new Set(
+          (Array.isArray(INITIAL_TRANSACTIONS) ? INITIAL_TRANSACTIONS : [])
+            .map((t: any) => String(t?.id || '').toLowerCase().trim())
+            .filter(Boolean)
+        );
+        const rawDel = localStorage.getItem(DELETED_TX_IDS_KEY) || localStorage.getItem('ronpay_deleted_tx_ids');
+        if (rawDel) {
+          const parsedDel = JSON.parse(rawDel);
+          if (Array.isArray(parsedDel)) {
+            const cleanedDel = parsedDel.filter((id: any) => !initIds.has(String(id || '').toLowerCase().trim()));
+            localStorage.setItem(DELETED_TX_IDS_KEY, JSON.stringify(cleanedDel));
+            localStorage.setItem('ronpay_deleted_tx_ids', JSON.stringify(cleanedDel));
+          }
+        }
+        initIds.forEach(id => PERMANENTLY_PURGED_TX_IDS.delete(id));
+        localStorage.setItem('ronpay_permanently_purged_tx_ids_v1', JSON.stringify(Array.from(PERMANENTLY_PURGED_TX_IDS)));
+        localStorage.setItem('ronpay_audit_tx_healed_v2', 'true');
+      } catch {}
+    }
+
     const raw = typeof localStorage !== 'undefined' 
       ? (localStorage.getItem(TRANSACTIONS_KEY) || localStorage.getItem('ronpay_transactions_v2') || localStorage.getItem('ronpay_transactions'))
       : null;
@@ -1226,7 +1249,11 @@ export const getStoredTransactions = (): Transaction[] => {
         if (t && t.id) map.set(String(t.id).toLowerCase().trim(), t);
       }
       for (const t of parsed) {
-        if (t && t.id) map.set(String(t.id).toLowerCase().trim(), t);
+        if (t && t.id) {
+          const k = String(t.id).toLowerCase().trim();
+          const base = map.get(k);
+          map.set(k, base ? { ...base, ...t } : t);
+        }
       }
       parsed = Array.from(map.values());
       if (typeof localStorage !== 'undefined') {
@@ -1964,37 +1991,39 @@ export const isUserPaidTransaction = (
     return true;
   }
 
-  // 2. Strict Phone Match with currently logged-in user profile
-  if (creatorProfile?.phone && tx.donorPhone) {
-    const userPhoneDigits = creatorProfile.phone.replace(/\D/g, '').slice(-10);
-    const txPhoneDigits = tx.donorPhone.replace(/\D/g, '').slice(-10);
-    if (userPhoneDigits.length >= 8 && txPhoneDigits.length >= 8 && userPhoneDigits === txPhoneDigits) {
+  // 2. Strict Phone Match with currently logged-in user profile ("Ama sulhnu chiah")
+  const userPhoneDigits = (creatorProfile?.phone || '').replace(/\D/g, '').slice(-10);
+  const txPhoneDigits = (tx.donorPhone || '').replace(/\D/g, '').slice(-10);
+
+  if (userPhoneDigits.length >= 8 && txPhoneDigits.length >= 8) {
+    if (userPhoneDigits === txPhoneDigits) {
       return true;
     }
+    // If both have phone numbers and they do NOT match, it belongs to a different person!
+    return false;
   }
 
-  // 3. User ID or Member ID match
+  // 3. User ID or Member ID match (e.g. Member Roll ID)
   if (creatorProfile?.id) {
-    if (tx.memberId && tx.memberId === creatorProfile.id) return true;
-    if ((tx as any).userId && (tx as any).userId === creatorProfile.id) return true;
-    if (tx.subId && tx.subId === creatorProfile.id) return true;
+    const cleanProfId = String(creatorProfile.id).toLowerCase().trim();
+    if (tx.memberId && String(tx.memberId).toLowerCase().trim() === cleanProfId) return true;
+    if ((tx as any).userId && String((tx as any).userId).toLowerCase().trim() === cleanProfId) return true;
+    if (tx.subId && String(tx.subId).toLowerCase().trim() === cleanProfId) return true;
   }
 
-  // 4. Strict Name Match with verified logged-in creator/user profile (only when name is distinctive and non-generic)
-  if (creatorProfile?.name && tx.donorName && !tx.isAnonymous) {
-    const uName = creatorProfile.name.trim().toLowerCase();
-    const dName = tx.donorName.trim().toLowerCase();
-    const isGeneric = ['ronpay user', 'guest user', 'user', 'valued donor', 'anonymous', 'donor', 'khualmi', 'khualmi (guest user)'].includes(uName);
+  // 4. For Auditors and Guests: never match by name alone when phone/memberId is absent,
+  // so they strictly never see another person's transaction in Sulhnu.
+  if (!creatorProfile || creatorProfile.role === 'AUDITOR' || creatorProfile.role === 'GUEST') {
+    return false;
+  }
+
+  // 5. Exact Full Name Match (only when transaction has no conflicting phone and name is distinctive)
+  if (creatorProfile.name && tx.donorName && !tx.isAnonymous && !txPhoneDigits) {
+    const uName = creatorProfile.name.trim().toLowerCase().replace(/\s*\([^)]*\)/g, '').trim();
+    const dName = tx.donorName.trim().toLowerCase().replace(/\s*\([^)]*\)/g, '').trim();
+    const isGeneric = ['ronpay user', 'guest user', 'user', 'valued donor', 'anonymous', 'donor', 'khualmi', 'khualmi (guest user)', 'auditor'].includes(uName);
     
-    if (!isGeneric && uName.length >= 3 && (uName === dName || uName.includes(dName) || dName.includes(uName))) {
-      // If both have phone numbers, verify they do not conflict
-      if (creatorProfile.phone && tx.donorPhone) {
-        const uDigits = creatorProfile.phone.replace(/\D/g, '').slice(-10);
-        const tDigits = tx.donorPhone.replace(/\D/g, '').slice(-10);
-        if (uDigits && tDigits && uDigits !== tDigits) {
-          return false;
-        }
-      }
+    if (!isGeneric && uName.length >= 4 && uName === dName) {
       return true;
     }
   }
@@ -2120,17 +2149,31 @@ export const isUserOrCreatorTransaction = (
   }
 
   // 3. Check if user has an authorized role with campaign oversight
+  // IMPORTANT: Auditors, Members, and Guests in Sulhnu (Pekna Sulhnu) must ONLY see their own personal transactions ("ama sulhnu chiah").
+  // Auditors inspect campaign accounts inside the dedicated Auditor Portal, NEVER in personal Sulhnu!
   const cleanCreatorName = (creatorProfile?.name || '').trim().toLowerCase().replace(/\s*\([^)]*\)/g, '').trim();
-  const isGuest = !creatorProfile || creatorProfile?.role === 'GUEST' || !creatorProfile?.phone || creatorProfile?.phone === '9999999999' || cleanCreatorName === 'khualmi' || cleanCreatorName === 'khualmi (guest user)' || cleanCreatorName === 'guest user';
+  const isPersonalSulhnuOnlyRole =
+    !creatorProfile ||
+    creatorProfile.role === 'GUEST' ||
+    creatorProfile.role === 'AUDITOR' ||
+    creatorProfile.role === 'MEMBER' ||
+    !creatorProfile.phone ||
+    creatorProfile.phone === '9999999999' ||
+    cleanCreatorName === 'khualmi' ||
+    cleanCreatorName === 'khualmi (guest user)' ||
+    cleanCreatorName === 'guest user';
+
+  if (isPersonalSulhnuOnlyRole) {
+    return isUserPaidTransaction(tx, userPaidIds, creatorProfile);
+  }
 
   // Check if profile has any campaigns they manage (as Creator, Treasurer, or Accountant)
-  const managesAnyCampaign = !isGuest && (campaigns || []).some(c => c && isCampaignManagerOrOfficer(c, creatorProfile));
-  const isAuthorizedManager = !isGuest && (
+  const managesAnyCampaign = (campaigns || []).some(c => c && isCampaignManagerOrOfficer(c, creatorProfile));
+  const isAuthorizedManager =
     creatorProfile?.role === 'CREATOR' ||
     creatorProfile?.role === 'TREASURER' ||
     creatorProfile?.role === 'ACCOUNTANT' ||
-    managesAnyCampaign
-  );
+    managesAnyCampaign;
 
   // 4. Regular User / Guest View: STRICT DONOR PRIVACY
   // Only personal transactions; hide all other donors' records entirely!
@@ -5100,7 +5143,32 @@ export function mergeTransactions(existing: Transaction[], incoming: Transaction
   };
 
   (existing || []).filter(filterValid).forEach(t => map.set(String(t.id).toLowerCase().trim(), t));
-  (incoming || []).filter(filterValid).forEach(t => map.set(String(t.id).toLowerCase().trim(), t));
+  (incoming || []).filter(filterValid).forEach(inc => {
+    const k = String(inc.id).toLowerCase().trim();
+    const prev = map.get(k);
+    if (!prev) {
+      map.set(k, inc);
+    } else {
+      const prevTime = new Date(prev.updatedAt || prev.audit_marked_at || prev.audit_date || prev.timestamp || 0).getTime();
+      const incTime = new Date(inc.updatedAt || inc.audit_marked_at || inc.audit_date || inc.timestamp || 0).getTime();
+      const merged: Transaction = incTime >= prevTime ? { ...prev, ...inc } : { ...inc, ...prev };
+      // Preserve local audit verification marks & locks if incoming row lacks them and local was marked more recently
+      if (prev.audit_mark !== undefined && inc.audit_mark === undefined && prevTime >= incTime) {
+        merged.audit_mark = prev.audit_mark;
+        merged.audit_query = prev.audit_query;
+        merged.audit_marked_by = prev.audit_marked_by;
+        merged.audit_marked_at = prev.audit_marked_at;
+      }
+      if (prev.is_locked !== undefined && inc.is_locked === undefined && prevTime >= incTime) {
+        merged.is_locked = prev.is_locked;
+        merged.locked_by = prev.locked_by;
+        merged.audit_date = prev.audit_date;
+        merged.audit_period = prev.audit_period;
+        merged.audit_notes = prev.audit_notes;
+      }
+      map.set(k, merged);
+    }
+  });
   return Array.from(map.values()).sort((a, b) => new Date(b.timestamp || b.createdAt || 0).getTime() - new Date(a.timestamp || a.createdAt || 0).getTime());
 }
 export const clearRonpayLocalStorage = (): void => {
@@ -5116,6 +5184,34 @@ export const clearRonpayLocalStorage = (): void => {
 export const AUDITOR_GRANTS_KEY = 'ronpay_auditor_grants_v1';
 export const MODIFICATION_REQUESTS_KEY = 'ronpay_modification_requests_v1';
 
+/**
+ * Formats remaining Auditor Grant time in clear Mizo instead of confusing raw hours like "719h la awm".
+ * E.g. "Ni 29 leh Darkar 23 la awm" or "Darkar 18 la awm".
+ */
+export const formatRemainingAuditTimeMizo = (expiresAt?: string | number | null): string => {
+  if (!expiresAt) return 'Hun tiam chhung';
+  const expMs = typeof expiresAt === 'number' ? expiresAt : new Date(expiresAt).getTime();
+  if (isNaN(expMs)) return 'Hun tiam chhung';
+  const diffMs = Math.max(0, expMs - Date.now());
+  if (diffMs <= 0) return 'Hun a tawp tawh';
+
+  const totalMinutes = Math.ceil(diffMs / (1000 * 60));
+  if (totalMinutes < 60) {
+    return `Minute ${totalMinutes} la awm`;
+  }
+  const totalHours = Math.floor(diffMs / (1000 * 60 * 60));
+  const days = Math.floor(totalHours / 24);
+  const remHours = totalHours % 24;
+
+  if (days > 0) {
+    if (remHours > 0) {
+      return `Ni ${days} leh Darkar ${remHours} la awm`;
+    }
+    return `Ni ${days} la awm`;
+  }
+  return `Darkar ${Math.max(1, totalHours)} la awm`;
+};
+
 export const getStoredAuditorGrants = (campaignId?: string): AuditorAccessGrant[] => {
   try {
     const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(AUDITOR_GRANTS_KEY) : null;
@@ -5126,7 +5222,8 @@ export const getStoredAuditorGrants = (campaignId?: string): AuditorAccessGrant[
     let changed = false;
     // Auto-evaluate expired grants
     const updated = list.map(g => {
-      if (g.status === 'active' && new Date(g.expiresAt).getTime() <= now) {
+      const expStr = g.expiresAt || g.expires_at || '';
+      if (g.status === 'active' && expStr && new Date(expStr).getTime() <= now) {
         changed = true;
         return { ...g, status: 'expired' as const, updatedAt: new Date().toISOString() };
       }
@@ -5139,7 +5236,10 @@ export const getStoredAuditorGrants = (campaignId?: string): AuditorAccessGrant[
 
     if (campaignId) {
       const cleanId = String(campaignId).toLowerCase().trim();
-      return updated.filter(g => String(g.campaignId).toLowerCase().trim() === cleanId);
+      return updated.filter(g => {
+        const gCampId = String(g.campaignId || g.campaign_id || '').toLowerCase().trim();
+        return gCampId === cleanId;
+      });
     }
     return updated;
   } catch (e) {
@@ -5282,25 +5382,29 @@ export const revokeAuditorGrant = (grantId: string, revokedBy: string = 'Creator
 export const checkAuditorAccessForCampaign = (
   userPhone?: string | null,
   campaignId?: string | null
-): { hasAccess: boolean; grant?: AuditorAccessGrant; remainingHours?: number } => {
+): { hasAccess: boolean; grant?: AuditorAccessGrant; remainingHours?: number; remainingLabel?: string } => {
   if (!userPhone || !campaignId) return { hasAccess: false };
   const cleanPhone = String(userPhone).replace(/\D/g, '').slice(-10);
   if (!cleanPhone) return { hasAccess: false };
 
-  const grants = getStoredAuditorGrants(campaignId);
+  const cleanCampId = String(campaignId).toLowerCase().trim();
+  const allGrants = getStoredAuditorGrants();
   const now = Date.now();
 
-  const activeGrant = grants.find(g => {
+  const activeGrant = allGrants.find(g => {
     const gPhone = String(g.auditorPhone || g.auditor_phone || '').replace(/\D/g, '').slice(-10);
+    const gCampId = String(g.campaignId || g.campaign_id || '').toLowerCase().trim();
     const expTime = new Date(g.expiresAt || g.expires_at || 0).getTime();
-    return gPhone === cleanPhone && g.status === 'active' && expTime > now;
+    return gPhone === cleanPhone && g.status === 'active' && expTime > now && (gCampId === cleanCampId || !gCampId);
   });
 
   if (activeGrant) {
-    const expTime = new Date(activeGrant.expiresAt || activeGrant.expires_at || 0).getTime();
+    const expStr = activeGrant.expiresAt || activeGrant.expires_at || '';
+    const expTime = new Date(expStr || 0).getTime();
     const remainingMs = expTime - now;
     const remainingHours = Math.max(0, Math.round(remainingMs / (1000 * 60 * 60)));
-    return { hasAccess: true, grant: activeGrant, remainingHours };
+    const remainingLabel = formatRemainingAuditTimeMizo(expStr);
+    return { hasAccess: true, grant: activeGrant, remainingHours, remainingLabel };
   }
 
   return { hasAccess: false };
@@ -5499,25 +5603,35 @@ export const markRecordAuditVerification = (
   try {
     if (recordType === 'transaction') {
       const txs = getStoredTransactions();
+      let modifiedTx: Transaction | null = null;
       const updated = txs.map(t => {
         if (String(t.id).toLowerCase().trim() === cleanId) {
-          return {
+          modifiedTx = {
             ...t,
             audit_mark: mark,
             audit_query: queryNote !== undefined ? queryNote : t.audit_query,
             audit_marked_by: mark ? auditorName : undefined,
             audit_marked_at: mark ? nowIso : undefined,
+            isSynced: false,
             updatedAt: nowIso
           };
+          return modifiedTx;
         }
         return t;
       });
       saveStoredTransactions(updated, false);
+      if (modifiedTx) {
+        const txToSync = modifiedTx;
+        import('../services/SupabaseSync').then(({ upsertTransaction }) => {
+          upsertTransaction(txToSync).catch(() => {});
+        }).catch(() => {});
+      }
     } else {
       const exps = getStoredExpenses();
+      let modifiedExp: KumtluangExpense | null = null;
       const updated = exps.map(e => {
         if (String(e.id).toLowerCase().trim() === cleanId) {
-          return {
+          modifiedExp = {
             ...e,
             audit_mark: mark,
             audit_query: queryNote !== undefined ? queryNote : e.audit_query,
@@ -5525,10 +5639,17 @@ export const markRecordAuditVerification = (
             audit_marked_at: mark ? nowIso : undefined,
             updatedAt: nowIso
           };
+          return modifiedExp;
         }
         return e;
       });
       saveStoredExpenses(updated, false);
+      if (modifiedExp) {
+        const expToSync = modifiedExp;
+        import('../services/SupabaseSync').then(({ upsertExpense }) => {
+          upsertExpense(expToSync).catch(() => {});
+        }).catch(() => {});
+      }
     }
     return true;
   } catch (e) {
@@ -5554,11 +5675,12 @@ export const lockCampaignAuditPeriod = (
   try {
     const txs = getStoredTransactions();
     let txChanged = false;
+    const lockedTxsToSync: Transaction[] = [];
     const updatedTxs = txs.map(t => {
       if (String(t.campaignId).toLowerCase().trim() === cleanCampId) {
         if (!t.is_locked) txCount++;
         txChanged = true;
-        return {
+        const lockedItem: Transaction = {
           ...t,
           is_locked: true,
           audit_date: nowIso,
@@ -5567,13 +5689,19 @@ export const lockCampaignAuditPeriod = (
           audit_notes: notes || t.audit_notes,
           audit_mark: t.audit_mark || 'verified',
           unlock_expires_at: undefined,
+          isSynced: false,
           updatedAt: nowIso
         };
+        lockedTxsToSync.push(lockedItem);
+        return lockedItem;
       }
       return t;
     });
     if (txChanged) {
       saveStoredTransactions(updatedTxs, false);
+      import('../services/SupabaseSync').then(({ upsertTransaction }) => {
+        lockedTxsToSync.forEach(lt => upsertTransaction(lt).catch(() => {}));
+      }).catch(() => {});
     }
   } catch (e) {
     console.error('Failed to lock transactions for audit:', e);
@@ -5583,11 +5711,12 @@ export const lockCampaignAuditPeriod = (
   try {
     const exps = getStoredExpenses();
     let expChanged = false;
+    const lockedExpsToSync: KumtluangExpense[] = [];
     const updatedExps = exps.map(e => {
       if (String(e.campaignId).toLowerCase().trim() === cleanCampId) {
         if (!e.is_locked) expCount++;
         expChanged = true;
-        return {
+        const lockedExp: KumtluangExpense = {
           ...e,
           is_locked: true,
           audit_date: nowIso,
@@ -5598,11 +5727,16 @@ export const lockCampaignAuditPeriod = (
           unlock_expires_at: undefined,
           updatedAt: nowIso
         };
+        lockedExpsToSync.push(lockedExp);
+        return lockedExp;
       }
       return e;
     });
     if (expChanged) {
       saveStoredExpenses(updatedExps, false);
+      import('../services/SupabaseSync').then(({ upsertExpense }) => {
+        lockedExpsToSync.forEach(le => upsertExpense(le).catch(() => {}));
+      }).catch(() => {});
     }
   } catch (e) {
     console.error('Failed to lock expenses for audit:', e);
@@ -5652,32 +5786,49 @@ export const unlockSingleRecord = (
   try {
     if (recordType === 'transaction') {
       const txs = getStoredTransactions();
+      let unlockedTx: Transaction | null = null;
       const updated = txs.map(t => {
         if (String(t.id).toLowerCase().trim() === cleanId) {
-          return {
+          unlockedTx = {
             ...t,
             is_locked: false,
             unlock_expires_at: undefined,
+            isSynced: false,
             updatedAt: nowIso
           };
+          return unlockedTx;
         }
         return t;
       });
       saveStoredTransactions(updated, false);
+      if (unlockedTx) {
+        const txToSync = unlockedTx;
+        import('../services/SupabaseSync').then(({ upsertTransaction }) => {
+          upsertTransaction(txToSync).catch(() => {});
+        }).catch(() => {});
+      }
     } else {
       const exps = getStoredExpenses();
+      let unlockedExp: KumtluangExpense | null = null;
       const updated = exps.map(e => {
         if (String(e.id).toLowerCase().trim() === cleanId) {
-          return {
+          unlockedExp = {
             ...e,
             is_locked: false,
             unlock_expires_at: undefined,
             updatedAt: nowIso
           };
+          return unlockedExp;
         }
         return e;
       });
       saveStoredExpenses(updated, false);
+      if (unlockedExp) {
+        const expToSync = unlockedExp;
+        import('../services/SupabaseSync').then(({ upsertExpense }) => {
+          upsertExpense(expToSync).catch(() => {});
+        }).catch(() => {});
+      }
     }
 
     recordAuditLog(

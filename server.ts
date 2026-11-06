@@ -5386,7 +5386,7 @@ app.get('/api/auditor-grants', (req: Request, res: Response) => {
         list = list.filter((g: any) => String(g.auditorPhone || g.auditor_phone || '').replace(/\D/g, '').slice(-10) === cleanPhone);
       }
     }
-    res.json({ success: true, grants: list });
+    res.json({ success: true, grants: list, auditorGrants: list });
   } catch (err: any) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -5407,7 +5407,7 @@ app.post('/api/auditor-grants', (req: Request, res: Response) => {
     db.auditorGrants = mergeCollections(db.auditorGrants || [], [stamped], 'id');
     saveDatabase(db);
     broadcastServerEvent('auditor_grants_updated', { grantId: stamped.id, campaignId: stamped.campaignId });
-    res.json({ success: true, grant: stamped, grants: db.auditorGrants });
+    res.json({ success: true, grant: stamped, grants: db.auditorGrants, auditorGrants: db.auditorGrants });
   } catch (err: any) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -5427,7 +5427,7 @@ app.post('/api/auditor-grants/:id/revoke', (req: Request, res: Response) => {
     });
     saveDatabase(db);
     broadcastServerEvent('auditor_grants_updated', { grantId: id, status: 'revoked' });
-    res.json({ success: true, grants: db.auditorGrants });
+    res.json({ success: true, grants: db.auditorGrants, auditorGrants: db.auditorGrants });
   } catch (err: any) {
     res.status(500).json({ success: false, message: err.message });
   }

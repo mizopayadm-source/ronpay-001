@@ -102,6 +102,16 @@ export const mapTransactionToSupabase = (t: any) => {
   if (t.phonePeTransactionId) metadata.phonePeTransactionId = t.phonePeTransactionId;
   if (t.phonepeMerchantTxId) metadata.phonepeMerchantTxId = t.phonepeMerchantTxId;
   if (t.phonepe_txn_id) metadata.phonepe_txn_id = t.phonepe_txn_id;
+  if (t.is_locked !== undefined) metadata.is_locked = t.is_locked;
+  if (t.locked_by !== undefined) metadata.locked_by = t.locked_by;
+  if (t.audit_date !== undefined) metadata.audit_date = t.audit_date;
+  if (t.audit_period !== undefined) metadata.audit_period = t.audit_period;
+  if (t.audit_notes !== undefined) metadata.audit_notes = t.audit_notes;
+  if (t.audit_mark !== undefined) metadata.audit_mark = t.audit_mark;
+  if (t.audit_query !== undefined) metadata.audit_query = t.audit_query;
+  if (t.audit_marked_by !== undefined) metadata.audit_marked_by = t.audit_marked_by;
+  if (t.audit_marked_at !== undefined) metadata.audit_marked_at = t.audit_marked_at;
+  if (t.unlock_expires_at !== undefined) metadata.unlock_expires_at = t.unlock_expires_at;
 
   return {
     id: t.id,
@@ -192,7 +202,17 @@ export const mapExpenseToSupabase = (e: any) => {
       recordedAt: e.recordedAt,
       status: e.status || 'approved',
       campaignTitle: e.campaignTitle,
-      attachmentUrl: e.attachmentUrl || null
+      attachmentUrl: e.attachmentUrl || null,
+      is_locked: e.is_locked,
+      locked_by: e.locked_by,
+      audit_date: e.audit_date,
+      audit_period: e.audit_period,
+      audit_notes: e.audit_notes,
+      audit_mark: e.audit_mark,
+      audit_query: e.audit_query,
+      audit_marked_by: e.audit_marked_by,
+      audit_marked_at: e.audit_marked_at,
+      unlock_expires_at: e.unlock_expires_at
     }
   };
 };
@@ -201,6 +221,8 @@ export const normalizeExpense = (row: any): KumtluangExpense => {
   if (!row) return row;
   const meta = row.metadata || {};
   return {
+    ...meta,
+    ...row,
     id: row.id,
     campaignId: row.campaign_id || row.campaignId || '',
     campaignTitle: meta.campaignTitle || row.campaign_title || '',

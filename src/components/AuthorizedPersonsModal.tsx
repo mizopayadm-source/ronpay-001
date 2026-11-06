@@ -48,8 +48,10 @@ import {
   getStoredCreatorProfile,
   saveStoredCreatorProfile,
   getStoredAuditorGrants,
+  saveStoredAuditorGrants,
   saveAuditorGrant,
-  revokeAuditorGrant
+  revokeAuditorGrant,
+  formatRemainingAuditTimeMizo
 } from '../utils/storage';
 import { formatDateTimeDDMMYYYY, formatDateDDMMYYYY } from '../utils/date';
 import { printHtmlSafely } from '../utils/export';
@@ -107,6 +109,21 @@ export const AuthorizedPersonsModal: React.FC<AuthorizedPersonsModalProps> = ({
       setAuditorGrants(getStoredAuditorGrants(campaign.id));
     }
   }, [campaign?.id, auditorTick]);
+
+  // Fetch latest auditor grants from server when modal opens
+  useEffect(() => {
+    if (!isOpen || !campaign?.id) return;
+    fetch('/api/auditor-grants')
+      .then(res => (res.ok ? res.json() : null))
+      .then(data => {
+        const list = data?.auditorGrants || data?.grants;
+        if (Array.isArray(list)) {
+          saveStoredAuditorGrants(list, true);
+          setAuditorGrants(getStoredAuditorGrants(campaign.id));
+        }
+      })
+      .catch(() => {});
+  }, [isOpen, campaign?.id]);
 
   useEffect(() => {
     const handleGrantsUpdated = () => setAuditorTick(t => t + 1);
@@ -1883,9 +1900,9 @@ export const AuthorizedPersonsModal: React.FC<AuthorizedPersonsModalProps> = ({
                               </div>
                               <div>
                                 {isActive ? (
-                                  <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1">
+                                  <span className="text-[9px] font-black px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1">
                                     <Clock className="w-2.5 h-2.5" />
-                                    <span>ACTIVE ({remainingHours}h la awm)</span>
+                                    <span>ACTIVE ({formatRemainingAuditTimeMizo(expIso)})</span>
                                   </span>
                                 ) : grant.status === 'revoked' ? (
                                   <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-md bg-rose-100 text-rose-800 border border-rose-300">

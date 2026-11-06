@@ -609,33 +609,43 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
 
             {/* Smart Login & Account Switcher Button */}
-            {onOpenLogin && (
-              <button
-                type="button"
-                id="header-smart-login-btn"
-                onClick={onOpenLogin}
-                title={creatorProfile?.isApproved && creatorProfile.phone ? `Active: ${creatorProfile.name} (Click to switch)` : "Creator & Member Login"}
-                className={`w-7 h-7 sm:w-auto sm:h-8 px-0 sm:px-2.5 rounded-lg flex items-center justify-center gap-1 font-black text-[10px] transition shadow-xs cursor-pointer active:scale-95 shrink-0 ${
-                  creatorProfile?.isApproved && creatorProfile.phone
-                    ? 'bg-emerald-600 hover:bg-emerald-500 text-white border border-emerald-400/60 shadow-emerald-900/30'
-                    : 'bg-indigo-600 hover:bg-indigo-500 text-white border border-indigo-400/50 shadow-indigo-900/30'
-                }`}
-              >
-                {creatorProfile?.isApproved && creatorProfile.phone ? (
-                  <>
-                    <User className="w-3.5 h-3.5 text-emerald-200" />
-                    <span className="tracking-tight font-black hidden sm:inline truncate max-w-[85px]">
-                      {creatorProfile.name ? creatorProfile.name.split(' ')[0] : 'Account'}
-                    </span>
-                  </>
-                ) : (
-                  <>
-                    <LogIn className="w-3.5 h-3.5 text-amber-300" />
-                    <span className="tracking-tight font-black hidden sm:inline">Login</span>
-                  </>
-                )}
-              </button>
-            )}
+            {onOpenLogin && (() => {
+              const isLoggedAccount = Boolean(
+                creatorProfile?.phone &&
+                (creatorProfile?.isApproved ||
+                  creatorProfile?.isAdmin ||
+                  creatorProfile?.role === 'AUDITOR' ||
+                  creatorProfile?.role === 'MEMBER' ||
+                  creatorProfile?.activeCampaignId)
+              );
+              return (
+                <button
+                  type="button"
+                  id="header-smart-login-btn"
+                  onClick={onOpenLogin}
+                  title={isLoggedAccount ? `Active: ${creatorProfile?.name} (${creatorProfile?.designation || creatorProfile?.role})` : "Creator, Member & Auditor Login"}
+                  className={`w-7 h-7 sm:w-auto sm:h-8 px-0 sm:px-2.5 rounded-lg flex items-center justify-center gap-1 font-black text-[10px] transition shadow-xs cursor-pointer active:scale-95 shrink-0 ${
+                    isLoggedAccount
+                      ? 'bg-emerald-600 hover:bg-emerald-500 text-white border border-emerald-400/60 shadow-emerald-900/30'
+                      : 'bg-indigo-600 hover:bg-indigo-500 text-white border border-indigo-400/50 shadow-indigo-900/30'
+                  }`}
+                >
+                  {isLoggedAccount ? (
+                    <>
+                      <User className="w-3.5 h-3.5 text-emerald-200" />
+                      <span className="tracking-tight font-black hidden sm:inline truncate max-w-[85px]">
+                        {creatorProfile?.name ? creatorProfile.name.split(' ')[0] : 'Account'}
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <LogIn className="w-3.5 h-3.5 text-amber-300" />
+                      <span className="tracking-tight font-black hidden sm:inline">Login</span>
+                    </>
+                  )}
+                </button>
+              );
+            })()}
           </div>
         </div>
 

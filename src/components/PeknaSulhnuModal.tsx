@@ -107,10 +107,17 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
 
   // Check if profile manages any campaign as Creator, Treasurer, or Accountant
   const managesAnyCampaign = safeCampaigns.some(c => c && isCampaignManagerOrOfficer(c, creatorProfile));
-  const isAuthorizedStaffOrManager = isSuperAdminUser || isModeratorUser || isTreasurerRole || isAccountantRole || isCreatorRole || managesAnyCampaign;
+  const isPureAuditorOrMemberOrGuest =
+    !isSuperAdminUser &&
+    !isModeratorUser &&
+    !managesAnyCampaign &&
+    !isCreatorRole &&
+    !isTreasurerRole &&
+    !isAccountantRole;
+  const isAuthorizedStaffOrManager = !isPureAuditorOrMemberOrGuest && (isSuperAdminUser || isModeratorUser || isTreasurerRole || isAccountantRole || isCreatorRole || managesAnyCampaign);
   const isGuestUser = !isAuthorizedStaffOrManager;
   
-  // Authorized Roles see 'all' by default, pure regular users/guests see their own 'sent'
+  // Authorized Roles see 'all' by default, Auditors/Members/Guests see only their own 'sent' (ama sulhnu chiah)
   const [directionFilter, setDirectionFilter] = useState<'all' | 'received' | 'sent'>(() => {
     return isGuestUser ? 'sent' : 'all';
   });

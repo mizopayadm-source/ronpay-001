@@ -34,6 +34,7 @@ import {
   saveStoredExpenses,
   getDeletedExpenseIds,
   markExpenseAsDeleted,
+  getStoredAuditorGrants,
   saveStoredAuditorGrants,
   MODIFICATION_REQUESTS_KEY,
   broadcastTabSync,
@@ -491,9 +492,26 @@ export async function syncAllWithServer(forceAuthoritative: boolean = false): Pr
           }
         }
 
-        // 11. Update auditor grants & modification requests
-        if (Array.isArray(serverData.auditorGrants)) {
-          saveStoredAuditorGrants(serverData.auditorGrants, true);
+        // 11. Update auditor grants & modification requests (bidirectional merge)
+        const serverGrants = Array.isArray(serverData.auditorGrants)
+          ? serverData.auditorGrants
+          : Array.isArray(serverData.grants)
+          ? serverData.grants
+          : [];
+        const localGrants = getStoredAuditorGrants();
+        if (serverGrants.length > 0) {
+          saveStoredAuditorGrants(serverGrants, true);
+        }
+        if (localGrants.length > 0) {
+          const serverGrantIds = new Set(serverGrants.map((g: any) => String(g?.id || '').trim()));
+          const unpushedGrants = localGrants.filter(g => g && g.id && !serverGrantIds.has(String(g.id).trim()));
+          if (unpushedGrants.length > 0) {
+            safeApiFetch('/api/data/sync', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ auditorGrants: unpushedGrants })
+            }).catch(() => {});
+          }
         }
         if (Array.isArray(serverData.modificationRequests)) {
           try {
@@ -890,21 +908,35 @@ export async function pullLatestServerState(): Promise<SyncDataState | null> {
                 const existing = txMap.get(k)!;
                 const existingStatus = (existing.status || '').toLowerCase().trim();
                 const localStatus = (lt.status || '').toLowerCase().trim();
-                const localTime = new Date(lt.updatedAt || lt.timestamp || 0).getTime();
-                const serverTime = new Date(existing.updatedAt || existing.timestamp || 0).getTime();
+                const localTime = new Date(lt.updatedAt || lt.audit_marked_at || lt.audit_date || lt.timestamp || 0).getTime();
+                const serverTime = new Date(existing.updatedAt || existing.audit_marked_at || existing.audit_date || existing.timestamp || 0).getTime();
 
                 if (localStatus === 'completed' && existingStatus === 'pending') {
                   txMap.set(k, { ...existing, ...lt, status: 'completed', isSynced: true });
-                } else if (localTime > serverTime) {
+                } else if (localTime >= serverTime) {
                   txMap.set(k, { ...existing, ...lt, isSynced: true });
+                } else {
+                  const merged = { ...lt, ...existing, isSynced: true };
+                  if (lt.audit_mark !== undefined && existing.audit_mark === undefined) {
+                    merged.audit_mark = lt.audit_mark;
+                    merged.audit_query = lt.audit_query;
+                    merged.audit_marked_by = lt.audit_marked_by;
+                    merged.audit_marked_at = lt.audit_marked_at;
+                  }
+                  if (lt.is_locked !== undefined && existing.is_locked === undefined) {
+                    merged.is_locked = lt.is_locked;
+                    merged.locked_by = lt.locked_by;
+                    merged.audit_date = lt.audit_date;
+                    merged.audit_period = lt.audit_period;
+                    merged.audit_notes = lt.audit_notes;
+                  }
+                  txMap.set(k, merged);
                 }
               } else {
+                // Retain valid local transaction unless explicitly in serverData.deletedTransactionIds
+                txMap.set(k, lt);
                 if (isFreshOffline) {
-                  txMap.set(k, lt);
                   unpushedFreshOfflineTxs.push(lt);
-                } else {
-                  // Transaction not on server and was previously synced: item was deleted on server!
-                  markTransactionAsDeleted(k, false);
                 }
               }
             }
@@ -941,8 +973,13 @@ export async function pullLatestServerState(): Promise<SyncDataState | null> {
         }
 
         // 7. Auditor Grants & Modification Requests
-        if (Array.isArray(serverData.auditorGrants)) {
-          saveStoredAuditorGrants(serverData.auditorGrants, true);
+        const serverGrants = Array.isArray(serverData.auditorGrants)
+          ? serverData.auditorGrants
+          : Array.isArray(serverData.grants)
+          ? serverData.grants
+          : [];
+        if (serverGrants.length > 0) {
+          saveStoredAuditorGrants(serverGrants, true);
         }
         if (Array.isArray(serverData.modificationRequests)) {
           try {

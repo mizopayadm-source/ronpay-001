@@ -31,7 +31,8 @@ import {
   saveCampaign,
   markRecordAuditVerification,
   unlockSingleRecord,
-  saveStoredAuditorGrants
+  saveStoredAuditorGrants,
+  formatRemainingAuditTimeMizo
 } from '../utils/storage';
 import { formatDateDDMMYYYY } from '../utils/date';
 import { printHtmlSafely } from '../utils/export';
@@ -65,7 +66,7 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<'overview' | 'transactions' | 'expenses' | 'lock_action' | 'certificate'>('overview');
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [filterLockStatus, setFilterLockStatus] = useState<'all' | 'locked' | 'unlocked' | 'verified' | 'flagged'>('all');
+  const [filterLockStatus, setFilterLockStatus] = useState<'all' | 'locked' | 'unlocked' | 'verified' | 'flagged' | 'unchecked'>('all');
 
   // Local refresh tick
   const [tick, setTick] = useState<number>(0);
@@ -76,8 +77,9 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
     fetch('/api/auditor-grants')
       .then(res => res.ok ? res.json() : null)
       .then(data => {
-        if (data && Array.isArray(data.auditorGrants)) {
-          saveStoredAuditorGrants(data.auditorGrants);
+        const list = data?.auditorGrants || data?.grants;
+        if (Array.isArray(list)) {
+          saveStoredAuditorGrants(list, true);
           setTick(t => t + 1);
         }
       })
@@ -100,8 +102,10 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
   }, [campaign, creatorProfile]);
 
   const canAudit = useMemo(() => {
-    return isAdmin || isCreator || Boolean(accessInfo?.hasAccess);
-  }, [isAdmin, isCreator, accessInfo]);
+    const phone = creatorProfile?.phone || creatorProfile?.phoneNumber || '';
+    const hasAnyActiveGrant = phone ? getActiveAuditorGrantsForUser(phone).length > 0 : false;
+    return isAdmin || isCreator || Boolean(accessInfo?.hasAccess) || creatorProfile?.role === 'AUDITOR' || hasAnyActiveGrant;
+  }, [isAdmin, isCreator, accessInfo, creatorProfile]);
 
   // Accessible campaigns for Multi-Bawm Switcher
   const accessibleCampaigns = useMemo(() => {
@@ -210,14 +214,39 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
     }
   };
 
+  const handleVerifyAllRecords = (targetType: 'transaction' | 'expense') => {
+    if (!canAudit) return;
+    const records = targetType === 'transaction' ? allTransactions : allExpenses;
+    let count = 0;
+    records.forEach(r => {
+      if (r.audit_mark !== 'verified') {
+        markRecordAuditVerification(
+          r.id,
+          targetType,
+          'verified',
+          auditorName || creatorProfile?.name || 'Auditor',
+          ''
+        );
+        count++;
+      }
+    });
+    if (count > 0) {
+      setTick(t => t + 1);
+      setLockToast(`✅ Record ${count} chu '✓ Dik (Verified)' tiin chhinchhiah nghal vek a ni e.`);
+      if (onRecordsUpdated) onRecordsUpdated();
+      setTimeout(() => setLockToast(null), 3500);
+    }
+  };
+
   const checkedCount = useMemo(() => Object.values(checklist).filter(Boolean).length, [checklist]);
   const checklistPercent = useMemo(() => Math.round((checkedCount / 5) * 100), [checkedCount]);
 
-  // Load transactions and expenses
+  // Load transactions and expenses (case-insensitive campaign ID matching)
   const allTransactions = useMemo(() => {
     if (!campaign) return [];
+    const targetId = String(campaign.id || '').trim().toLowerCase();
     const all = getStoredTransactions();
-    return all.filter(t => t.campaignId === campaign.id);
+    return all.filter(t => String(t.campaignId || (t as any).campaign_id || '').trim().toLowerCase() === targetId);
   }, [campaign, tick]);
 
   const allExpenses = useMemo(() => {
@@ -225,22 +254,32 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
     return getStoredExpenses(campaign.id);
   }, [campaign, tick]);
 
-  // Statistics
+  // Statistics with explicit Counts & Rupee Amounts for Total, Verified, Flagged, Unchecked, Locked
   const stats = useMemo(() => {
-    const verifiedTx = allTransactions.filter(t => t.status === 'confirmed' || t.status === 'success' || !t.status);
-    const totalInflow = verifiedTx.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
-    const totalOutflow = allExpenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+    const validStatuses = new Set(['completed', 'confirmed', 'success', 'verified', 'paid', 'approved']);
+    const verifiedTx = allTransactions.filter(t => {
+      const st = String(t.status || '').toLowerCase().trim();
+      return !st || validStatuses.has(st) || (st !== 'failed' && st !== 'rejected' && st !== 'cancelled');
+    });
+
+    const sumTx = (list: typeof verifiedTx) => list.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+    const sumExp = (list: typeof allExpenses) => list.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+
+    const totalInflow = sumTx(verifiedTx);
+    const totalOutflow = sumExp(allExpenses);
     const netBalance = totalInflow - totalOutflow;
 
-    const lockedTxCount = verifiedTx.filter(t => t.is_locked).length;
-    const unlockedTxCount = verifiedTx.length - lockedTxCount;
-    const auditVerifiedTxCount = verifiedTx.filter(t => t.audit_mark === 'verified').length;
-    const auditFlaggedTxCount = verifiedTx.filter(t => t.audit_mark === 'flagged').length;
+    const lockedTxList = verifiedTx.filter(t => t.is_locked);
+    const unlockedTxList = verifiedTx.filter(t => !t.is_locked);
+    const auditVerifiedTxList = verifiedTx.filter(t => t.audit_mark === 'verified');
+    const auditFlaggedTxList = verifiedTx.filter(t => t.audit_mark === 'flagged');
+    const uncheckedTxList = verifiedTx.filter(t => !t.audit_mark);
 
-    const lockedExpCount = allExpenses.filter(e => e.is_locked).length;
-    const unlockedExpCount = allExpenses.length - lockedExpCount;
-    const auditVerifiedExpCount = allExpenses.filter(e => e.audit_mark === 'verified').length;
-    const auditFlaggedExpCount = allExpenses.filter(e => e.audit_mark === 'flagged').length;
+    const lockedExpList = allExpenses.filter(e => e.is_locked);
+    const unlockedExpList = allExpenses.filter(e => !e.is_locked);
+    const auditVerifiedExpList = allExpenses.filter(e => e.audit_mark === 'verified');
+    const auditFlaggedExpList = allExpenses.filter(e => e.audit_mark === 'flagged');
+    const uncheckedExpList = allExpenses.filter(e => !e.audit_mark);
 
     return {
       totalInflow,
@@ -248,19 +287,32 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
       netBalance,
       txCount: verifiedTx.length,
       expCount: allExpenses.length,
-      lockedTxCount,
-      unlockedTxCount,
-      auditVerifiedTxCount,
-      auditFlaggedTxCount,
-      lockedExpCount,
-      unlockedExpCount,
-      auditVerifiedExpCount,
-      auditFlaggedExpCount,
+      lockedTxCount: lockedTxList.length,
+      lockedInflowAmount: sumTx(lockedTxList),
+      unlockedTxCount: unlockedTxList.length,
+      unlockedInflowAmount: sumTx(unlockedTxList),
+      auditVerifiedTxCount: auditVerifiedTxList.length,
+      verifiedInflowAmount: sumTx(auditVerifiedTxList),
+      auditFlaggedTxCount: auditFlaggedTxList.length,
+      flaggedInflowAmount: sumTx(auditFlaggedTxList),
+      uncheckedTxCount: uncheckedTxList.length,
+      uncheckedInflowAmount: sumTx(uncheckedTxList),
+      lockedExpCount: lockedExpList.length,
+      lockedOutflowAmount: sumExp(lockedExpList),
+      unlockedExpCount: unlockedExpList.length,
+      unlockedOutflowAmount: sumExp(unlockedExpList),
+      auditVerifiedExpCount: auditVerifiedExpList.length,
+      verifiedOutflowAmount: sumExp(auditVerifiedExpList),
+      auditFlaggedExpCount: auditFlaggedExpList.length,
+      flaggedOutflowAmount: sumExp(auditFlaggedExpList),
+      uncheckedExpCount: uncheckedExpList.length,
+      uncheckedOutflowAmount: sumExp(uncheckedExpList),
       totalRecords: verifiedTx.length + allExpenses.length,
-      totalLocked: lockedTxCount + lockedExpCount,
-      totalUnlocked: unlockedTxCount + unlockedExpCount,
-      totalAuditVerified: auditVerifiedTxCount + auditVerifiedExpCount,
-      totalAuditFlagged: auditFlaggedTxCount + auditFlaggedExpCount
+      totalLocked: lockedTxList.length + lockedExpList.length,
+      totalUnlocked: unlockedTxList.length + unlockedExpList.length,
+      totalAuditVerified: auditVerifiedTxList.length + auditVerifiedExpList.length,
+      totalAuditFlagged: auditFlaggedTxList.length + auditFlaggedExpList.length,
+      totalUnchecked: uncheckedTxList.length + uncheckedExpList.length
     };
   }, [allTransactions, allExpenses]);
 
@@ -320,6 +372,7 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
       if (filterLockStatus === 'unlocked' && t.is_locked) return false;
       if (filterLockStatus === 'verified' && t.audit_mark !== 'verified') return false;
       if (filterLockStatus === 'flagged' && t.audit_mark !== 'flagged') return false;
+      if (filterLockStatus === 'unchecked' && Boolean(t.audit_mark)) return false;
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
         const donor = (t.donorName || '').toLowerCase();
@@ -338,6 +391,7 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
       if (filterLockStatus === 'unlocked' && e.is_locked) return false;
       if (filterLockStatus === 'verified' && e.audit_mark !== 'verified') return false;
       if (filterLockStatus === 'flagged' && e.audit_mark !== 'flagged') return false;
+      if (filterLockStatus === 'unchecked' && Boolean(e.audit_mark)) return false;
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
         const head = (e.head || e.expenseHead || '').toLowerCase();
@@ -486,9 +540,12 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                   Online Financial Audit Portal
                 </h3>
                 {accessInfo?.hasAccess && !isAdmin && (
-                  <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 flex items-center gap-1">
+                  <span
+                    title={accessInfo.grant?.expiresAt ? `Permit tawp hun: ${formatDateDDMMYYYY(accessInfo.grant.expiresAt)}` : 'Auditor Permit Active'}
+                    className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 flex items-center gap-1"
+                  >
                     <Clock className="w-3 h-3" />
-                    <span>{accessInfo.remainingHours}h la awm</span>
+                    <span>Permit: {accessInfo.remainingLabel || formatRemainingAuditTimeMizo(accessInfo.grant?.expiresAt)}</span>
                   </span>
                 )}
                 {isAdmin && (
@@ -629,47 +686,175 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
             <div className="space-y-6">
               {/* Financial Summary Cards */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
-                <div className="bg-emerald-50/70 border border-emerald-200 rounded-2xl p-4 shadow-2xs">
+                <div className="bg-emerald-50/70 border border-emerald-200 rounded-2xl p-4 shadow-2xs space-y-1.5">
                   <div className="text-[11px] font-bold text-emerald-800 uppercase tracking-wide flex items-center gap-1.5">
                     <TrendingUp className="w-4 h-4 text-emerald-600" />
-                    <span>Total Inflow (Dawn Zat)</span>
+                    <span>Total Inflow (Sum Lut Zawng Zawng)</span>
                   </div>
-                  <div className="text-xl sm:text-2xl font-black text-emerald-950 mt-1">
+                  <div className="text-xl sm:text-2xl font-black text-emerald-950">
                     ₹{stats.totalInflow.toLocaleString('en-IN')}
                   </div>
-                  <div className="text-[11px] text-emerald-700 mt-1 font-medium">
-                    Verified {stats.txCount} transactions ({stats.auditVerifiedTxCount} checked)
+                  <div className="pt-1 border-t border-emerald-200/70 space-y-1 text-[11px]">
+                    <div className="flex justify-between text-emerald-900 font-bold">
+                      <span>✓ Endik Fel (Verified: {stats.auditVerifiedTxCount}):</span>
+                      <span>₹{stats.verifiedInflowAmount.toLocaleString('en-IN')}</span>
+                    </div>
+                    <div className="flex justify-between text-rose-700 font-bold">
+                      <span>⚠️ Query Awm (Flagged: {stats.auditFlaggedTxCount}):</span>
+                      <span>₹{stats.flaggedInflowAmount.toLocaleString('en-IN')}</span>
+                    </div>
+                    <div className="flex justify-between text-slate-600 font-semibold">
+                      <span>⏳ Endik Loh (Pending: {stats.uncheckedTxCount}):</span>
+                      <span>₹{stats.uncheckedInflowAmount.toLocaleString('en-IN')}</span>
+                    </div>
                   </div>
                 </div>
 
-                <div className="bg-rose-50/70 border border-rose-200 rounded-2xl p-4 shadow-2xs">
+                <div className="bg-rose-50/70 border border-rose-200 rounded-2xl p-4 shadow-2xs space-y-1.5">
                   <div className="text-[11px] font-bold text-rose-800 uppercase tracking-wide flex items-center gap-1.5">
                     <TrendingDown className="w-4 h-4 text-rose-600" />
-                    <span>Total Outflow (Senso)</span>
+                    <span>Total Outflow (Sum Chhuak / Senso)</span>
                   </div>
-                  <div className="text-xl sm:text-2xl font-black text-rose-950 mt-1">
+                  <div className="text-xl sm:text-2xl font-black text-rose-950">
                     ₹{stats.totalOutflow.toLocaleString('en-IN')}
                   </div>
-                  <div className="text-[11px] text-rose-700 mt-1 font-medium">
-                    Vouchers {stats.expCount} recorded ({stats.auditVerifiedExpCount} checked)
+                  <div className="pt-1 border-t border-rose-200/70 space-y-1 text-[11px]">
+                    <div className="flex justify-between text-emerald-800 font-bold">
+                      <span>✓ Endik Fel (Verified: {stats.auditVerifiedExpCount}):</span>
+                      <span>₹{stats.verifiedOutflowAmount.toLocaleString('en-IN')}</span>
+                    </div>
+                    <div className="flex justify-between text-rose-700 font-bold">
+                      <span>⚠️ Query Awm (Flagged: {stats.auditFlaggedExpCount}):</span>
+                      <span>₹{stats.flaggedOutflowAmount.toLocaleString('en-IN')}</span>
+                    </div>
+                    <div className="flex justify-between text-slate-600 font-semibold">
+                      <span>⏳ Endik Loh (Pending: {stats.uncheckedExpCount}):</span>
+                      <span>₹{stats.uncheckedOutflowAmount.toLocaleString('en-IN')}</span>
+                    </div>
                   </div>
                 </div>
 
-                <div className="bg-indigo-50/70 border border-indigo-200 rounded-2xl p-4 shadow-2xs">
+                <div className="bg-indigo-50/70 border border-indigo-200 rounded-2xl p-4 shadow-2xs space-y-1.5">
                   <div className="text-[11px] font-bold text-indigo-800 uppercase tracking-wide flex items-center gap-1.5">
                     <Banknote className="w-4 h-4 text-indigo-600" />
-                    <span>Net Closing Balance</span>
+                    <span>Net Closing Balance (Sum Bang)</span>
                   </div>
-                  <div className="text-xl sm:text-2xl font-black text-indigo-950 mt-1">
+                  <div className="text-xl sm:text-2xl font-black text-indigo-950">
                     ₹{stats.netBalance.toLocaleString('en-IN')}
                   </div>
-                  <div className="text-[11px] text-indigo-700 mt-1 font-medium">
-                    {stats.totalAuditFlagged > 0 ? (
-                      <span className="text-rose-600 font-bold">⚠️ {stats.totalAuditFlagged} Flagged Queries</span>
-                    ) : (
-                      'Cash in Hand / Bank verified'
-                    )}
+                  <div className="pt-1 border-t border-indigo-200/70 space-y-1 text-[11px]">
+                    <div className="flex justify-between text-emerald-800 font-bold">
+                      <span>✓ Verified Net Balance:</span>
+                      <span>₹{(stats.verifiedInflowAmount - stats.verifiedOutflowAmount).toLocaleString('en-IN')}</span>
+                    </div>
+                    <div className="flex justify-between text-amber-800 font-bold">
+                      <span>🔒 Locked Balance:</span>
+                      <span>₹{(stats.lockedInflowAmount - stats.lockedOutflowAmount).toLocaleString('en-IN')}</span>
+                    </div>
+                    <div className="flex justify-between text-indigo-700 font-semibold">
+                      <span>Total Records:</span>
+                      <span>{stats.totalRecords} ({stats.totalAuditVerified} ✓ | {stats.totalAuditFlagged} ⚠️)</span>
+                    </div>
                   </div>
+                </div>
+              </div>
+
+              {/* Column-wise Audit Verification Summary Table */}
+              <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-2xs">
+                <div className="bg-slate-900 text-white px-4 py-3 flex items-center justify-between flex-wrap gap-2">
+                  <div className="text-xs sm:text-sm font-black flex items-center gap-2">
+                    <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                    <span>Endikna Dinhmun Kimchang (Column-wise Audit Verification Table)</span>
+                  </div>
+                  <span className="text-[10.5px] font-bold text-indigo-200">
+                    Verified &amp; Flagged Zat (Count leh ₹ Amount)
+                  </span>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="bg-slate-100 border-b border-slate-200 text-[10.5px] font-black uppercase text-slate-700">
+                        <th className="p-3">Account Head</th>
+                        <th className="p-3 text-right">Total Zawng Zawng</th>
+                        <th className="p-3 text-right bg-emerald-50/80 text-emerald-900">✓ Verified (Dik)</th>
+                        <th className="p-3 text-right bg-rose-50/80 text-rose-900">⚠️ Flagged (Query)</th>
+                        <th className="p-3 text-right bg-slate-50 text-slate-700">⏳ Endik Loh (Pending)</th>
+                        <th className="p-3 text-right bg-amber-50/80 text-amber-900">🔒 Locked (Frozen)</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200 font-medium">
+                      <tr className="hover:bg-slate-50/80">
+                        <td className="p-3 font-extrabold text-emerald-900">
+                          1. Inflow (Thawhlawm / Sum Lut)
+                        </td>
+                        <td className="p-3 text-right">
+                          <div className="font-black text-slate-900">₹{stats.totalInflow.toLocaleString('en-IN')}</div>
+                          <div className="text-[10px] text-slate-500">{stats.txCount} records</div>
+                        </td>
+                        <td className="p-3 text-right bg-emerald-50/40">
+                          <div className="font-black text-emerald-700">₹{stats.verifiedInflowAmount.toLocaleString('en-IN')}</div>
+                          <div className="text-[10px] font-bold text-emerald-600">{stats.auditVerifiedTxCount} ✓ dik</div>
+                        </td>
+                        <td className="p-3 text-right bg-rose-50/40">
+                          <div className="font-black text-rose-700">₹{stats.flaggedInflowAmount.toLocaleString('en-IN')}</div>
+                          <div className="text-[10px] font-bold text-rose-600">{stats.auditFlaggedTxCount} ⚠️ query</div>
+                        </td>
+                        <td className="p-3 text-right">
+                          <div className="font-bold text-slate-700">₹{stats.uncheckedInflowAmount.toLocaleString('en-IN')}</div>
+                          <div className="text-[10px] text-slate-500">{stats.uncheckedTxCount} endik loh</div>
+                        </td>
+                        <td className="p-3 text-right bg-amber-50/40">
+                          <div className="font-black text-amber-800">₹{stats.lockedInflowAmount.toLocaleString('en-IN')}</div>
+                          <div className="text-[10px] font-bold text-amber-700">{stats.lockedTxCount} locked</div>
+                        </td>
+                      </tr>
+                      <tr className="hover:bg-slate-50/80">
+                        <td className="p-3 font-extrabold text-rose-900">
+                          2. Outflow (Senso / Sum Chhuak)
+                        </td>
+                        <td className="p-3 text-right">
+                          <div className="font-black text-slate-900">₹{stats.totalOutflow.toLocaleString('en-IN')}</div>
+                          <div className="text-[10px] text-slate-500">{stats.expCount} vouchers</div>
+                        </td>
+                        <td className="p-3 text-right bg-emerald-50/40">
+                          <div className="font-black text-emerald-700">₹{stats.verifiedOutflowAmount.toLocaleString('en-IN')}</div>
+                          <div className="text-[10px] font-bold text-emerald-600">{stats.auditVerifiedExpCount} ✓ dik</div>
+                        </td>
+                        <td className="p-3 text-right bg-rose-50/40">
+                          <div className="font-black text-rose-700">₹{stats.flaggedOutflowAmount.toLocaleString('en-IN')}</div>
+                          <div className="text-[10px] font-bold text-rose-600">{stats.auditFlaggedExpCount} ⚠️ query</div>
+                        </td>
+                        <td className="p-3 text-right">
+                          <div className="font-bold text-slate-700">₹{stats.uncheckedOutflowAmount.toLocaleString('en-IN')}</div>
+                          <div className="text-[10px] text-slate-500">{stats.uncheckedExpCount} endik loh</div>
+                        </td>
+                        <td className="p-3 text-right bg-amber-50/40">
+                          <div className="font-black text-amber-800">₹{stats.lockedOutflowAmount.toLocaleString('en-IN')}</div>
+                          <div className="text-[10px] font-bold text-amber-700">{stats.lockedExpCount} locked</div>
+                        </td>
+                      </tr>
+                      <tr className="bg-indigo-50/60 font-black border-t-2 border-indigo-200">
+                        <td className="p-3 text-indigo-950">
+                          3. Net Closing Balance (Lut - Chhuak)
+                        </td>
+                        <td className="p-3 text-right text-indigo-950">
+                          ₹{stats.netBalance.toLocaleString('en-IN')}
+                        </td>
+                        <td className="p-3 text-right text-emerald-800">
+                          ₹{(stats.verifiedInflowAmount - stats.verifiedOutflowAmount).toLocaleString('en-IN')}
+                        </td>
+                        <td className="p-3 text-right text-rose-800">
+                          ₹{(stats.flaggedInflowAmount + stats.flaggedOutflowAmount).toLocaleString('en-IN')} (Queries)
+                        </td>
+                        <td className="p-3 text-right text-slate-700">
+                          {stats.totalUnchecked} items left
+                        </td>
+                        <td className="p-3 text-right text-amber-900">
+                          {stats.totalLocked} / {stats.totalRecords} Locked
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
                 </div>
               </div>
 
@@ -697,25 +882,6 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                   />
                 </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 text-xs">
-                  <div className="bg-white p-2.5 rounded-xl border border-slate-200">
-                    <span className="text-slate-500 block text-[10px]">Locked Inflow</span>
-                    <span className="font-bold text-slate-800">{stats.lockedTxCount} records</span>
-                  </div>
-                  <div className="bg-white p-2.5 rounded-xl border border-slate-200">
-                    <span className="text-slate-500 block text-[10px]">Unlocked Inflow</span>
-                    <span className="font-bold text-amber-700">{stats.unlockedTxCount} records</span>
-                  </div>
-                  <div className="bg-white p-2.5 rounded-xl border border-slate-200">
-                    <span className="text-slate-500 block text-[10px]">Auditor Verified</span>
-                    <span className="font-bold text-emerald-700">{stats.totalAuditVerified} items ✓</span>
-                  </div>
-                  <div className="bg-white p-2.5 rounded-xl border border-slate-200">
-                    <span className="text-slate-500 block text-[10px]">Flagged / Query</span>
-                    <span className="font-bold text-rose-700">{stats.totalAuditFlagged} items ⚠️</span>
-                  </div>
-                </div>
-
                 <div className="pt-2 flex flex-wrap gap-2">
                   <button
                     type="button"
@@ -723,7 +889,7 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                     className="py-2.5 px-4 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-xl shadow-2xs transition flex items-center gap-1.5"
                   >
                     <Lock className="w-3.5 h-3.5" />
-                    <span>Audit Sign & Lock Records</span>
+                    <span>Audit Sign &amp; Lock Records</span>
                   </button>
                   <button
                     type="button"
@@ -818,6 +984,37 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
           {/* TAB: TRANSACTIONS */}
           {activeTab === 'transactions' && (
             <div className="space-y-4">
+              {/* Column-wise Summary Bar for Inflow */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-slate-50 p-3 rounded-2xl border border-slate-200 text-xs">
+                <div className="bg-white p-2.5 rounded-xl border border-slate-200">
+                  <span className="text-[10px] font-bold text-slate-500 uppercase block">Total Sum Lut ({stats.txCount})</span>
+                  <span className="text-sm font-black text-slate-900">₹{stats.totalInflow.toLocaleString('en-IN')}</span>
+                </div>
+                <div className="bg-emerald-50/80 p-2.5 rounded-xl border border-emerald-200">
+                  <span className="text-[10px] font-bold text-emerald-800 uppercase block">✓ Dik / Verified ({stats.auditVerifiedTxCount})</span>
+                  <span className="text-sm font-black text-emerald-700">₹{stats.verifiedInflowAmount.toLocaleString('en-IN')}</span>
+                </div>
+                <div className="bg-rose-50/80 p-2.5 rounded-xl border border-rose-200">
+                  <span className="text-[10px] font-bold text-rose-800 uppercase block">⚠️ Query / Flagged ({stats.auditFlaggedTxCount})</span>
+                  <span className="text-sm font-black text-rose-700">₹{stats.flaggedInflowAmount.toLocaleString('en-IN')}</span>
+                </div>
+                <div className="bg-amber-50/70 p-2.5 rounded-xl border border-amber-200 flex items-center justify-between gap-2">
+                  <div>
+                    <span className="text-[10px] font-bold text-amber-900 uppercase block">⏳ Endik Loh ({stats.uncheckedTxCount})</span>
+                    <span className="text-sm font-black text-amber-800">₹{stats.uncheckedInflowAmount.toLocaleString('en-IN')}</span>
+                  </div>
+                  {canAudit && stats.uncheckedTxCount > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => handleVerifyAllRecords('transaction')}
+                      className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[10px] rounded-lg shadow-2xs shrink-0 cursor-pointer"
+                    >
+                      ✓ Endik Vek Rawh
+                    </button>
+                  )}
+                </div>
+              </div>
+
               <div className="flex flex-col sm:flex-row gap-2 justify-between items-stretch sm:items-center">
                 <div className="relative flex-1">
                   <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
@@ -841,30 +1038,12 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                   </button>
                   <button
                     type="button"
-                    onClick={() => setFilterLockStatus('locked')}
-                    className={`text-[11px] px-2.5 py-1 rounded-lg font-bold transition whitespace-nowrap ${
-                      filterLockStatus === 'locked' ? 'bg-white shadow-2xs text-amber-800' : 'text-slate-600'
-                    }`}
-                  >
-                    Locked ({stats.lockedTxCount})
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFilterLockStatus('unlocked')}
-                    className={`text-[11px] px-2.5 py-1 rounded-lg font-bold transition whitespace-nowrap ${
-                      filterLockStatus === 'unlocked' ? 'bg-white shadow-2xs text-indigo-800' : 'text-slate-600'
-                    }`}
-                  >
-                    Unlocked ({stats.unlockedTxCount})
-                  </button>
-                  <button
-                    type="button"
                     onClick={() => setFilterLockStatus('verified')}
                     className={`text-[11px] px-2.5 py-1 rounded-lg font-bold transition whitespace-nowrap ${
                       filterLockStatus === 'verified' ? 'bg-white shadow-2xs text-emerald-700' : 'text-slate-600'
                     }`}
                   >
-                    ✓ Verified ({stats.auditVerifiedTxCount})
+                    ✓ Dik ({stats.auditVerifiedTxCount})
                   </button>
                   <button
                     type="button"
@@ -873,7 +1052,25 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                       filterLockStatus === 'flagged' ? 'bg-white shadow-2xs text-rose-700' : 'text-slate-600'
                     }`}
                   >
-                    ⚠️ Flagged ({stats.auditFlaggedTxCount})
+                    ⚠️ Query ({stats.auditFlaggedTxCount})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFilterLockStatus('unchecked')}
+                    className={`text-[11px] px-2.5 py-1 rounded-lg font-bold transition whitespace-nowrap ${
+                      filterLockStatus === 'unchecked' ? 'bg-white shadow-2xs text-amber-800' : 'text-slate-600'
+                    }`}
+                  >
+                    ⏳ Endik Loh ({stats.uncheckedTxCount})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFilterLockStatus('locked')}
+                    className={`text-[11px] px-2.5 py-1 rounded-lg font-bold transition whitespace-nowrap ${
+                      filterLockStatus === 'locked' ? 'bg-white shadow-2xs text-amber-800' : 'text-slate-600'
+                    }`}
+                  >
+                    🔒 Locked ({stats.lockedTxCount})
                   </button>
                 </div>
               </div>
@@ -1037,6 +1234,37 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
           {/* TAB: EXPENSES */}
           {activeTab === 'expenses' && (
             <div className="space-y-4">
+              {/* Column-wise Summary Bar for Outflow */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-slate-50 p-3 rounded-2xl border border-slate-200 text-xs">
+                <div className="bg-white p-2.5 rounded-xl border border-slate-200">
+                  <span className="text-[10px] font-bold text-slate-500 uppercase block">Total Senso ({stats.expCount})</span>
+                  <span className="text-sm font-black text-rose-900">₹{stats.totalOutflow.toLocaleString('en-IN')}</span>
+                </div>
+                <div className="bg-emerald-50/80 p-2.5 rounded-xl border border-emerald-200">
+                  <span className="text-[10px] font-bold text-emerald-800 uppercase block">✓ Dik / Verified ({stats.auditVerifiedExpCount})</span>
+                  <span className="text-sm font-black text-emerald-700">₹{stats.verifiedOutflowAmount.toLocaleString('en-IN')}</span>
+                </div>
+                <div className="bg-rose-50/80 p-2.5 rounded-xl border border-rose-200">
+                  <span className="text-[10px] font-bold text-rose-800 uppercase block">⚠️ Query / Flagged ({stats.auditFlaggedExpCount})</span>
+                  <span className="text-sm font-black text-rose-700">₹{stats.flaggedOutflowAmount.toLocaleString('en-IN')}</span>
+                </div>
+                <div className="bg-amber-50/70 p-2.5 rounded-xl border border-amber-200 flex items-center justify-between gap-2">
+                  <div>
+                    <span className="text-[10px] font-bold text-amber-900 uppercase block">⏳ Endik Loh ({stats.uncheckedExpCount})</span>
+                    <span className="text-sm font-black text-amber-800">₹{stats.uncheckedOutflowAmount.toLocaleString('en-IN')}</span>
+                  </div>
+                  {canAudit && stats.uncheckedExpCount > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => handleVerifyAllRecords('expense')}
+                      className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[10px] rounded-lg shadow-2xs shrink-0 cursor-pointer"
+                    >
+                      ✓ Endik Vek Rawh
+                    </button>
+                  )}
+                </div>
+              </div>
+
               <div className="flex flex-col sm:flex-row gap-2 justify-between items-stretch sm:items-center">
                 <div className="relative flex-1">
                   <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
@@ -1060,30 +1288,12 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                   </button>
                   <button
                     type="button"
-                    onClick={() => setFilterLockStatus('locked')}
-                    className={`text-[11px] px-2.5 py-1 rounded-lg font-bold transition whitespace-nowrap ${
-                      filterLockStatus === 'locked' ? 'bg-white shadow-2xs text-amber-800' : 'text-slate-600'
-                    }`}
-                  >
-                    Locked ({stats.lockedExpCount})
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFilterLockStatus('unlocked')}
-                    className={`text-[11px] px-2.5 py-1 rounded-lg font-bold transition whitespace-nowrap ${
-                      filterLockStatus === 'unlocked' ? 'bg-white shadow-2xs text-indigo-800' : 'text-slate-600'
-                    }`}
-                  >
-                    Unlocked ({stats.unlockedExpCount})
-                  </button>
-                  <button
-                    type="button"
                     onClick={() => setFilterLockStatus('verified')}
                     className={`text-[11px] px-2.5 py-1 rounded-lg font-bold transition whitespace-nowrap ${
                       filterLockStatus === 'verified' ? 'bg-white shadow-2xs text-emerald-700' : 'text-slate-600'
                     }`}
                   >
-                    ✓ Verified ({stats.auditVerifiedExpCount})
+                    ✓ Dik ({stats.auditVerifiedExpCount})
                   </button>
                   <button
                     type="button"
@@ -1092,7 +1302,25 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                       filterLockStatus === 'flagged' ? 'bg-white shadow-2xs text-rose-700' : 'text-slate-600'
                     }`}
                   >
-                    ⚠️ Flagged ({stats.auditFlaggedExpCount})
+                    ⚠️ Query ({stats.auditFlaggedExpCount})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFilterLockStatus('unchecked')}
+                    className={`text-[11px] px-2.5 py-1 rounded-lg font-bold transition whitespace-nowrap ${
+                      filterLockStatus === 'unchecked' ? 'bg-white shadow-2xs text-amber-800' : 'text-slate-600'
+                    }`}
+                  >
+                    ⏳ Endik Loh ({stats.uncheckedExpCount})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFilterLockStatus('locked')}
+                    className={`text-[11px] px-2.5 py-1 rounded-lg font-bold transition whitespace-nowrap ${
+                      filterLockStatus === 'locked' ? 'bg-white shadow-2xs text-amber-800' : 'text-slate-600'
+                    }`}
+                  >
+                    🔒 Locked ({stats.lockedExpCount})
                   </button>
                 </div>
               </div>
@@ -1361,7 +1589,9 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                   <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 space-y-3">
                     <div className="text-xs font-bold text-rose-900 flex items-center gap-2">
                       <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
-                      <span>I chiang chiah em? Record {stats.totalUnlocked} lock a ni dawn e.</span>
+                      <span>
+                        I chiang chiah em? {stats.totalUnlocked > 0 ? `Record ${stats.totalUnlocked} lock nghal a ni ang a,` : 'Record zawng zawng lock fel sa a ni a,'} Audit Sign-off nemngheh a ni dawn e.
+                      </span>
                     </div>
                     <p className="text-[11px] text-rose-800">
                       Record te hi lock an nih hnuah chuan Admin approval (Maker-Checker request) lovin direct edit theih an ni tawh lovang.
@@ -1370,7 +1600,7 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                       <button
                         type="button"
                         onClick={() => setIsConfirmingLock(false)}
-                        className="py-2 px-3.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-50"
+                        className="py-2 px-3.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-50 cursor-pointer"
                       >
                         Thulh Leh Rawh
                       </button>
@@ -1378,25 +1608,27 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                         type="button"
                         disabled={isLocking || !canAudit}
                         onClick={handleExecuteLock}
-                        className="py-2 px-4 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow transition flex items-center gap-1.5 disabled:opacity-50"
+                        className="py-2 px-4 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow transition flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
                       >
                         <Lock className="w-3.5 h-3.5" />
-                        <span>{isLocking ? 'Locking...' : 'Aw, Nemnghet La Lock Rawh'}</span>
+                        <span>{isLocking ? 'Locking...' : 'Aw, Audit Sign & Lock Rawh'}</span>
                       </button>
                     </div>
                   </div>
                 ) : (
                   <button
                     type="button"
-                    disabled={!canAudit || stats.totalUnlocked === 0 || !auditorName.trim()}
+                    disabled={!canAudit || !auditorName.trim()}
                     onClick={() => setIsConfirmingLock(true)}
-                    className="w-full py-3 px-4 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-2xl shadow transition flex items-center justify-center gap-2 disabled:opacity-50"
+                    className="w-full py-3.5 px-4 bg-amber-600 hover:bg-amber-700 text-white text-xs sm:text-sm font-black rounded-2xl shadow-md transition flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
                   >
                     <Lock className="w-4 h-4" />
                     <span>
                       {!canAudit
                         ? 'Auditor Phalna Active A Awm Lo (View-Only)'
-                        : `Audit Sign & Freeze Unlocked Records (${stats.totalUnlocked})`}
+                        : stats.totalUnlocked > 0
+                        ? `✍️ Audit Sign & Freeze Unlocked Records (${stats.totalUnlocked} Records)`
+                        : `✍️ Audit Sign-Off & Update Certificate (${stats.totalLocked} Locked)`}
                     </span>
                   </button>
                 )}
