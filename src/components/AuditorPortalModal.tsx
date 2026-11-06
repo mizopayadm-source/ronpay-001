@@ -6,7 +6,6 @@ import {
   Unlock, 
   CheckCircle2, 
   AlertCircle, 
-  Calendar, 
   Printer, 
   Download, 
   Search, 
@@ -14,83 +13,76 @@ import {
   Banknote, 
   TrendingUp, 
   TrendingDown, 
-  FileText, 
-  UserCheck, 
   Award,
-  Sparkles,
-  Info
+  Info,
+  Flag,
+  MessageSquareWarning,
+  FolderKanban
 } from 'lucide-react';
-import { Campaign, Transaction, KumtluangExpense, CreatorProfile } from '../types';
+import { Campaign, CreatorProfile } from '../types';
 import { 
   getStoredTransactions, 
   getStoredExpenses, 
   lockCampaignAuditPeriod, 
   checkAuditorAccessForCampaign,
-  isSuperAdminOrAdminProfile
+  getActiveAuditorGrantsForUser,
+  isSuperAdminOrAdminProfile,
+  isCampaignCreator,
+  saveCampaign,
+  markRecordAuditVerification,
+  unlockSingleRecord,
+  saveStoredAuditorGrants
 } from '../utils/storage';
-import { formatDateDDMMYYYY, formatDateTimeDDMMYYYY } from '../utils/date';
+import { formatDateDDMMYYYY } from '../utils/date';
 import { printHtmlSafely } from '../utils/export';
 
 interface AuditorPortalModalProps {
   isOpen: boolean;
   campaign: Campaign | null;
+  campaigns?: Campaign[];
+  onSelectCampaign?: (campaign: Campaign) => void;
   creatorProfile?: CreatorProfile | null;
   onClose: () => void;
   onRecordsUpdated?: () => void;
 }
 
+const DEFAULT_CHECKLIST: Record<string, boolean> = {
+  bank_reconciliation: true,
+  vouchers_receipts: true,
+  member_giving_roll: true,
+  cash_in_hand: true,
+  discrepancy_check: true
+};
+
 export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
   isOpen,
   campaign,
+  campaigns = [],
+  onSelectCampaign,
   creatorProfile,
   onClose,
   onRecordsUpdated
 }) => {
   const [activeTab, setActiveTab] = useState<'overview' | 'transactions' | 'expenses' | 'lock_action' | 'certificate'>('overview');
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [filterLockStatus, setFilterLockStatus] = useState<'all' | 'locked' | 'unlocked'>('all');
-
-  // Sign & Lock inputs
-  const [auditPeriod, setAuditPeriod] = useState<string>(`FY ${new Date().getFullYear() - 1}-${new Date().getFullYear()}`);
-  const [auditorName, setAuditorName] = useState<string>(creatorProfile?.name || 'Auditor');
-  const [auditorPhone, setAuditorPhone] = useState<string>(creatorProfile?.phone || creatorProfile?.phoneNumber || '');
-  const [auditNotes, setAuditNotes] = useState<string>('Accounts and vouchers verified with bank statements and receipts.');
-  const [isConfirmingLock, setIsConfirmingLock] = useState<boolean>(false);
-  const [isLocking, setIsLocking] = useState<boolean>(false);
-  const [lockToast, setLockToast] = useState<string | null>(null);
-
-  // Interactive Audit Checklist state
-  const [checklist, setChecklist] = useState<Record<string, boolean>>({
-    bank_reconciliation: true,
-    vouchers_receipts: true,
-    member_giving_roll: true,
-    cash_in_hand: true,
-    discrepancy_check: true
-  });
-
-  // Interactive Item Verification Markers (ID -> 'verified' | 'flagged')
-  const [itemMarks, setItemMarks] = useState<Record<string, 'verified' | 'flagged'>>({});
-
-  const toggleChecklistItem = (key: string) => {
-    setChecklist(prev => ({ ...prev, [key]: !prev[key] }));
-  };
-
-  const toggleItemMark = (id: string, status: 'verified' | 'flagged') => {
-    setItemMarks(prev => {
-      if (prev[id] === status) {
-        const next = { ...prev };
-        delete next[id];
-        return next;
-      }
-      return { ...prev, [id]: status };
-    });
-  };
-
-  const checkedCount = useMemo(() => Object.values(checklist).filter(Boolean).length, [checklist]);
-  const checklistPercent = useMemo(() => Math.round((checkedCount / 5) * 100), [checkedCount]);
+  const [filterLockStatus, setFilterLockStatus] = useState<'all' | 'locked' | 'unlocked' | 'verified' | 'flagged'>('all');
 
   // Local refresh tick
   const [tick, setTick] = useState<number>(0);
+
+  // Sync latest auditor grants from backend when portal opens
+  useEffect(() => {
+    if (!isOpen) return;
+    fetch('/api/auditor-grants')
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (data && Array.isArray(data.auditorGrants)) {
+          saveStoredAuditorGrants(data.auditorGrants);
+          setTick(t => t + 1);
+        }
+      })
+      .catch(() => {});
+  }, [isOpen]);
 
   // Check access & remaining hours
   const accessInfo = useMemo(() => {
@@ -102,6 +94,124 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
   const isAdmin = useMemo(() => {
     return isSuperAdminOrAdminProfile(creatorProfile);
   }, [creatorProfile]);
+
+  const isCreator = useMemo(() => {
+    return campaign ? isCampaignCreator(campaign, creatorProfile || null) : false;
+  }, [campaign, creatorProfile]);
+
+  const canAudit = useMemo(() => {
+    return isAdmin || isCreator || Boolean(accessInfo?.hasAccess);
+  }, [isAdmin, isCreator, accessInfo]);
+
+  // Accessible campaigns for Multi-Bawm Switcher
+  const accessibleCampaigns = useMemo(() => {
+    if (!campaigns || campaigns.length === 0) return campaign ? [campaign] : [];
+    if (isAdmin) return campaigns;
+    const phone = creatorProfile?.phone || creatorProfile?.phoneNumber || '';
+    const activeGrants = getActiveAuditorGrantsForUser(phone);
+    const grantCampIds = new Set(activeGrants.map(g => g.campaignId || g.campaign_id));
+    const filtered = campaigns.filter(
+      c => grantCampIds.has(c.id) || isCampaignCreator(c, creatorProfile || null) || (campaign && c.id === campaign.id)
+    );
+    return filtered.length > 0 ? filtered : (campaign ? [campaign] : []);
+  }, [campaigns, campaign, isAdmin, creatorProfile, tick]);
+
+  // Sign & Lock inputs
+  const [auditPeriod, setAuditPeriod] = useState<string>(`FY ${new Date().getFullYear() - 1}-${new Date().getFullYear()}`);
+  const [auditorName, setAuditorName] = useState<string>(creatorProfile?.name || 'Auditor');
+  const [auditorPhone, setAuditorPhone] = useState<string>(creatorProfile?.phone || creatorProfile?.phoneNumber || '');
+  const [auditNotes, setAuditNotes] = useState<string>('Accounts and vouchers verified with bank statements and receipts.');
+  const [isConfirmingLock, setIsConfirmingLock] = useState<boolean>(false);
+  const [isLocking, setIsLocking] = useState<boolean>(false);
+  const [lockToast, setLockToast] = useState<string | null>(null);
+
+  // Flag query input state
+  const [flaggingRecordId, setFlaggingRecordId] = useState<string | null>(null);
+  const [flaggingRecordType, setFlaggingRecordType] = useState<'transaction' | 'expense'>('transaction');
+  const [flagQueryText, setFlagQueryText] = useState<string>('');
+
+  // Keep auditor details and checklist synced when campaign or profile changes
+  const [checklist, setChecklist] = useState<Record<string, boolean>>(DEFAULT_CHECKLIST);
+
+  useEffect(() => {
+    if (campaign) {
+      setChecklist(campaign.auditChecklist || DEFAULT_CHECKLIST);
+      if (campaign.lastAuditPeriod) {
+        setAuditPeriod(campaign.lastAuditPeriod);
+      }
+    }
+  }, [campaign?.id]);
+
+  useEffect(() => {
+    const grantName = accessInfo?.grant?.auditorName || accessInfo?.grant?.auditor_name;
+    const grantPhone = accessInfo?.grant?.auditorPhone || accessInfo?.grant?.auditor_phone;
+    if (grantName) {
+      setAuditorName(grantName);
+    } else if (creatorProfile?.name && creatorProfile.name !== 'Guest User') {
+      setAuditorName(creatorProfile.name);
+    }
+    if (grantPhone) {
+      setAuditorPhone(grantPhone);
+    } else if (creatorProfile?.phone || creatorProfile?.phoneNumber) {
+      setAuditorPhone(creatorProfile.phone || creatorProfile.phoneNumber || '');
+    }
+  }, [accessInfo, creatorProfile]);
+
+  const toggleChecklistItem = (key: string) => {
+    if (!canAudit || !campaign) return;
+    setChecklist(prev => {
+      const next = { ...prev, [key]: !prev[key] };
+      saveCampaign({
+        ...campaign,
+        auditChecklist: next
+      });
+      if (onRecordsUpdated) onRecordsUpdated();
+      return next;
+    });
+  };
+
+  const handleMarkItem = (
+    targetType: 'transaction' | 'expense',
+    targetId: string,
+    currentMark: 'verified' | 'flagged' | null | undefined,
+    desiredMark: 'verified' | 'flagged',
+    queryText?: string
+  ) => {
+    if (!canAudit) return;
+    const nextMark = currentMark === desiredMark && queryText === undefined ? undefined : desiredMark;
+    const ok = markRecordAuditVerification(
+      targetId,
+      targetType,
+      nextMark,
+      auditorName || creatorProfile?.name || 'Auditor',
+      nextMark === 'flagged' ? (queryText || 'Enfiah ngai / Query awm') : ''
+    );
+    if (ok) {
+      setTick(t => t + 1);
+      setFlaggingRecordId(null);
+      setFlagQueryText('');
+      if (onRecordsUpdated) onRecordsUpdated();
+    }
+  };
+
+  const handleSingleUnlock = (targetType: 'transaction' | 'expense', targetId: string) => {
+    if (!canAudit) return;
+    const ok = unlockSingleRecord(
+      targetId,
+      targetType,
+      auditorName || creatorProfile?.name || 'Auditor',
+      'Unlocked inside Auditor Portal for correction'
+    );
+    if (ok) {
+      setTick(t => t + 1);
+      setLockToast('🔓 Record hi siam that theih turin Unlock lailawk a ni e.');
+      if (onRecordsUpdated) onRecordsUpdated();
+      setTimeout(() => setLockToast(null), 3500);
+    }
+  };
+
+  const checkedCount = useMemo(() => Object.values(checklist).filter(Boolean).length, [checklist]);
+  const checklistPercent = useMemo(() => Math.round((checkedCount / 5) * 100), [checkedCount]);
 
   // Load transactions and expenses
   const allTransactions = useMemo(() => {
@@ -124,9 +234,13 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
 
     const lockedTxCount = verifiedTx.filter(t => t.is_locked).length;
     const unlockedTxCount = verifiedTx.length - lockedTxCount;
+    const auditVerifiedTxCount = verifiedTx.filter(t => t.audit_mark === 'verified').length;
+    const auditFlaggedTxCount = verifiedTx.filter(t => t.audit_mark === 'flagged').length;
 
     const lockedExpCount = allExpenses.filter(e => e.is_locked).length;
     const unlockedExpCount = allExpenses.length - lockedExpCount;
+    const auditVerifiedExpCount = allExpenses.filter(e => e.audit_mark === 'verified').length;
+    const auditFlaggedExpCount = allExpenses.filter(e => e.audit_mark === 'flagged').length;
 
     return {
       totalInflow,
@@ -136,18 +250,24 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
       expCount: allExpenses.length,
       lockedTxCount,
       unlockedTxCount,
+      auditVerifiedTxCount,
+      auditFlaggedTxCount,
       lockedExpCount,
       unlockedExpCount,
+      auditVerifiedExpCount,
+      auditFlaggedExpCount,
       totalRecords: verifiedTx.length + allExpenses.length,
       totalLocked: lockedTxCount + lockedExpCount,
-      totalUnlocked: unlockedTxCount + unlockedExpCount
+      totalUnlocked: unlockedTxCount + unlockedExpCount,
+      totalAuditVerified: auditVerifiedTxCount + auditVerifiedExpCount,
+      totalAuditFlagged: auditFlaggedTxCount + auditFlaggedExpCount
     };
   }, [allTransactions, allExpenses]);
 
   // Download Audited Ledger CSV
   const handleExportAuditedLedgerCSV = () => {
     if (!campaign) return;
-    const headers = ['Type', 'Record ID', 'Date', 'Name / Head', 'Details / Payee', 'Amount (INR)', 'Payment Method', 'Audit Period', 'Lock Status', 'Auditor Marker'];
+    const headers = ['Type', 'Record ID', 'Date', 'Name / Head', 'Details / Payee', 'Amount (INR)', 'Payment Method', 'Audit Period', 'Lock Status', 'Auditor Marker', 'Auditor Query'];
     const rows: string[][] = [];
 
     allTransactions.forEach(tx => {
@@ -161,7 +281,8 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
         tx.paymentMethod || 'UPI',
         tx.audit_period || 'N/A',
         tx.is_locked ? 'LOCKED' : 'UNLOCKED',
-        itemMarks[tx.id] === 'verified' ? 'VERIFIED_OK' : itemMarks[tx.id] === 'flagged' ? 'FLAGGED_DISCREPANCY' : 'UNCHECKED'
+        tx.audit_mark === 'verified' ? 'VERIFIED_OK' : tx.audit_mark === 'flagged' ? 'FLAGGED_DISCREPANCY' : 'UNCHECKED',
+        tx.audit_query || ''
       ]);
     });
 
@@ -176,7 +297,8 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
         'CASH / BANK',
         exp.audit_period || 'N/A',
         exp.is_locked ? 'LOCKED' : 'UNLOCKED',
-        itemMarks[exp.id] === 'verified' ? 'VERIFIED_OK' : itemMarks[exp.id] === 'flagged' ? 'FLAGGED_DISCREPANCY' : 'UNCHECKED'
+        exp.audit_mark === 'verified' ? 'VERIFIED_OK' : exp.audit_mark === 'flagged' ? 'FLAGGED_DISCREPANCY' : 'UNCHECKED',
+        exp.audit_query || ''
       ]);
     });
 
@@ -196,6 +318,8 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
     return allTransactions.filter(t => {
       if (filterLockStatus === 'locked' && !t.is_locked) return false;
       if (filterLockStatus === 'unlocked' && t.is_locked) return false;
+      if (filterLockStatus === 'verified' && t.audit_mark !== 'verified') return false;
+      if (filterLockStatus === 'flagged' && t.audit_mark !== 'flagged') return false;
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
         const donor = (t.donorName || '').toLowerCase();
@@ -212,6 +336,8 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
     return allExpenses.filter(e => {
       if (filterLockStatus === 'locked' && !e.is_locked) return false;
       if (filterLockStatus === 'unlocked' && e.is_locked) return false;
+      if (filterLockStatus === 'verified' && e.audit_mark !== 'verified') return false;
+      if (filterLockStatus === 'flagged' && e.audit_mark !== 'flagged') return false;
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
         const head = (e.head || e.expenseHead || '').toLowerCase();
@@ -228,7 +354,7 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
 
   // Handle Sign & Lock Action
   const handleExecuteLock = () => {
-    if (!campaign) return;
+    if (!campaign || !canAudit) return;
     setIsLocking(true);
     try {
       const result = lockCampaignAuditPeriod(
@@ -244,7 +370,7 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
       if (onRecordsUpdated) onRecordsUpdated();
       setTimeout(() => setLockToast(null), 4000);
     } catch (err: any) {
-      alert(err?.message || 'Lock operation failed');
+      setLockToast(`⚠️ ${err?.message || 'Lock operation failed'}`);
     } finally {
       setIsLocking(false);
     }
@@ -314,7 +440,7 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
             <strong>Auditor Observations / Notes:</strong><br>
             <em>${auditNotes || 'Records and balances verified in order.'}</em>
             <br><br>
-            <strong>Total Locked Audited Records:</strong> ${stats.totalLocked} records frozen under Tamper-Proof Financial Lock.
+            <strong>Total Locked Audited Records:</strong> ${stats.totalLocked} records frozen under Tamper-Proof Financial Lock (${stats.totalAuditVerified} items explicitly checked).
           </div>
         </div>
 
@@ -349,12 +475,12 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-4 sm:p-5 flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-2xl bg-indigo-500/20 border border-indigo-400/30 flex items-center justify-center shadow-inner">
+        <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-4 sm:p-5 flex items-center justify-between gap-3 shrink-0">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-11 h-11 rounded-2xl bg-indigo-500/20 border border-indigo-400/30 flex items-center justify-center shadow-inner shrink-0">
               <ShieldCheck className="w-6 h-6 text-indigo-300" />
             </div>
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <h3 className="font-black text-base sm:text-xl tracking-tight">
                   Online Financial Audit Portal
@@ -370,20 +496,59 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                     Admin Full Access
                   </span>
                 )}
+                {!canAudit && (
+                  <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-400/30">
+                    View-Only Mode
+                  </span>
+                )}
               </div>
-              <p className="text-xs text-indigo-200/80 mt-0.5 font-medium">
-                {campaign.title} • {campaign.category.toUpperCase()}
-              </p>
+              <div className="flex items-center gap-2 mt-1 flex-wrap">
+                {accessibleCampaigns.length > 1 && onSelectCampaign ? (
+                  <div className="flex items-center gap-1.5 bg-white/10 border border-white/15 rounded-xl px-2.5 py-1">
+                    <FolderKanban className="w-3.5 h-3.5 text-indigo-300 shrink-0" />
+                    <select
+                      value={campaign.id}
+                      onChange={e => {
+                        const found = accessibleCampaigns.find(c => c.id === e.target.value);
+                        if (found) onSelectCampaign(found);
+                      }}
+                      className="bg-transparent text-xs font-bold text-white focus:outline-none cursor-pointer pr-2"
+                    >
+                      {accessibleCampaigns.map(c => (
+                        <option key={c.id} value={c.id} className="text-slate-900 font-bold">
+                          {c.title} ({c.category.toUpperCase()})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ) : (
+                  <p className="text-xs text-indigo-200/80 font-medium truncate">
+                    {campaign.title} • {campaign.category.toUpperCase()}
+                  </p>
+                )}
+              </div>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-full hover:bg-white/10 text-white/80 transition"
+            className="p-1.5 rounded-full hover:bg-white/10 text-white/80 transition shrink-0"
             aria-label="Close"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
+
+        {/* Access / Expiry Banner if View-Only */}
+        {!canAudit && (
+          <div className="bg-amber-50 border-b border-amber-200 px-5 py-2.5 text-amber-900 text-xs flex items-center justify-between gap-2 shrink-0">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+              <span>
+                <strong>View-Only Access:</strong> He Bawm-ah hian active Auditor phalna (time-bound grant) i nei rih lo a, a nih loh leh a hun a tawp tawh. Record i thlir thei a, mahse Lock/Verify turin Bawm neitu (Creator) hnenah phalna dil belh rawh.
+              </span>
+            </div>
+          </div>
+        )}
 
         {/* Toast */}
         {lockToast && (
@@ -473,7 +638,7 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                     ₹{stats.totalInflow.toLocaleString('en-IN')}
                   </div>
                   <div className="text-[11px] text-emerald-700 mt-1 font-medium">
-                    Verified {stats.txCount} transactions
+                    Verified {stats.txCount} transactions ({stats.auditVerifiedTxCount} checked)
                   </div>
                 </div>
 
@@ -486,7 +651,7 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                     ₹{stats.totalOutflow.toLocaleString('en-IN')}
                   </div>
                   <div className="text-[11px] text-rose-700 mt-1 font-medium">
-                    Vouchers {stats.expCount} recorded
+                    Vouchers {stats.expCount} recorded ({stats.auditVerifiedExpCount} checked)
                   </div>
                 </div>
 
@@ -499,21 +664,30 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                     ₹{stats.netBalance.toLocaleString('en-IN')}
                   </div>
                   <div className="text-[11px] text-indigo-700 mt-1 font-medium">
-                    Cash in Hand / Bank verified
+                    {stats.totalAuditFlagged > 0 ? (
+                      <span className="text-rose-600 font-bold">⚠️ {stats.totalAuditFlagged} Flagged Queries</span>
+                    ) : (
+                      'Cash in Hand / Bank verified'
+                    )}
                   </div>
                 </div>
               </div>
 
               {/* Audit Lock Status Box */}
               <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 sm:p-5 space-y-3">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between flex-wrap gap-2">
                   <h4 className="font-extrabold text-slate-900 text-sm flex items-center gap-2">
                     <Lock className="w-4 h-4 text-amber-600" />
                     <span>Financial Tamper-Proof Lock Status</span>
                   </h4>
-                  <span className="text-xs font-bold text-slate-500">
-                    {stats.totalLocked} of {stats.totalRecords} records locked
-                  </span>
+                  <div className="flex items-center gap-2 text-xs font-bold text-slate-500">
+                    {campaign.lastAuditedBy && (
+                      <span className="text-[11px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-lg border border-emerald-200">
+                        Last Audited by: {campaign.lastAuditedBy}
+                      </span>
+                    )}
+                    <span>{stats.totalLocked} of {stats.totalRecords} records locked</span>
+                  </div>
                 </div>
 
                 <div className="w-full bg-slate-200 h-2.5 rounded-full overflow-hidden">
@@ -533,12 +707,12 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                     <span className="font-bold text-amber-700">{stats.unlockedTxCount} records</span>
                   </div>
                   <div className="bg-white p-2.5 rounded-xl border border-slate-200">
-                    <span className="text-slate-500 block text-[10px]">Locked Outflow</span>
-                    <span className="font-bold text-slate-800">{stats.lockedExpCount} vouchers</span>
+                    <span className="text-slate-500 block text-[10px]">Auditor Verified</span>
+                    <span className="font-bold text-emerald-700">{stats.totalAuditVerified} items ✓</span>
                   </div>
                   <div className="bg-white p-2.5 rounded-xl border border-slate-200">
-                    <span className="text-slate-500 block text-[10px]">Unlocked Outflow</span>
-                    <span className="font-bold text-amber-700">{stats.unlockedExpCount} vouchers</span>
+                    <span className="text-slate-500 block text-[10px]">Flagged / Query</span>
+                    <span className="font-bold text-rose-700">{stats.totalAuditFlagged} items ⚠️</span>
                   </div>
                 </div>
 
@@ -576,7 +750,7 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                   <div>
                     <h4 className="font-black text-slate-900 text-xs sm:text-sm flex items-center gap-2">
                       <ShieldCheck className="w-4 h-4 text-indigo-600" />
-                      <span>Audit Verification Checklist (Interactive Tracker)</span>
+                      <span>Audit Verification Checklist (Saved to Bawm)</span>
                     </h4>
                     <p className="text-[11px] text-slate-500 mt-0.5">
                       Checklist hi ziak felin audit nemnghehna neih nan hmang rawh
@@ -604,7 +778,9 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                   ].map(item => (
                     <label 
                       key={item.key} 
-                      className={`flex items-center gap-3 p-2.5 rounded-xl border transition cursor-pointer select-none ${
+                      className={`flex items-center gap-3 p-2.5 rounded-xl border transition select-none ${
+                        canAudit ? 'cursor-pointer' : 'cursor-not-allowed opacity-75'
+                      } ${
                         checklist[item.key]
                           ? 'bg-emerald-50/60 border-emerald-300 text-emerald-950 font-bold'
                           : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-white'
@@ -612,6 +788,7 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                     >
                       <input 
                         type="checkbox"
+                        disabled={!canAudit}
                         checked={Boolean(checklist[item.key])}
                         onChange={() => toggleChecklistItem(item.key)}
                         className="w-4 h-4 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500"
@@ -631,7 +808,7 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                 <div className="space-y-1">
                   <div className="font-bold text-blue-950">Auditor Tan Hriattur:</div>
                   <p className="leading-relaxed text-blue-800">
-                    He portal hmang hian he Bawm sum dinhmun leh record zawng zawng hi i check fel hnuah <strong>"Sign & Lock Period"</strong> tab-ah record zawng zawng i lock thei a ni. Record lock tawh te chu Maker-Checker approval lovin direct-in tumahin an edit/delete thei lovang.
+                    Inflow leh Outflow tab-ah lutin record tin hi <strong>"✓ Dik"</strong> tih emaw, enfiah ngai a awm chuan <strong>"⚠️ Query"</strong> hmangin i chhinchhiah thei a. I check fel vek hnuah <strong>"Sign & Lock Period"</strong> tab-ah record zawng zawng i lock thei a ni.
                   </p>
                 </div>
               </div>
@@ -652,11 +829,11 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                     className="w-full text-xs pl-9 pr-3 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   />
                 </div>
-                <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl shrink-0">
+                <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl shrink-0 overflow-x-auto">
                   <button
                     type="button"
                     onClick={() => setFilterLockStatus('all')}
-                    className={`text-xs px-2.5 py-1 rounded-lg font-bold transition ${
+                    className={`text-[11px] px-2.5 py-1 rounded-lg font-bold transition whitespace-nowrap ${
                       filterLockStatus === 'all' ? 'bg-white shadow-2xs text-slate-900' : 'text-slate-600'
                     }`}
                   >
@@ -665,7 +842,7 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                   <button
                     type="button"
                     onClick={() => setFilterLockStatus('locked')}
-                    className={`text-xs px-2.5 py-1 rounded-lg font-bold transition ${
+                    className={`text-[11px] px-2.5 py-1 rounded-lg font-bold transition whitespace-nowrap ${
                       filterLockStatus === 'locked' ? 'bg-white shadow-2xs text-amber-800' : 'text-slate-600'
                     }`}
                   >
@@ -674,67 +851,182 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                   <button
                     type="button"
                     onClick={() => setFilterLockStatus('unlocked')}
-                    className={`text-xs px-2.5 py-1 rounded-lg font-bold transition ${
+                    className={`text-[11px] px-2.5 py-1 rounded-lg font-bold transition whitespace-nowrap ${
                       filterLockStatus === 'unlocked' ? 'bg-white shadow-2xs text-indigo-800' : 'text-slate-600'
                     }`}
                   >
                     Unlocked ({stats.unlockedTxCount})
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => setFilterLockStatus('verified')}
+                    className={`text-[11px] px-2.5 py-1 rounded-lg font-bold transition whitespace-nowrap ${
+                      filterLockStatus === 'verified' ? 'bg-white shadow-2xs text-emerald-700' : 'text-slate-600'
+                    }`}
+                  >
+                    ✓ Verified ({stats.auditVerifiedTxCount})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFilterLockStatus('flagged')}
+                    className={`text-[11px] px-2.5 py-1 rounded-lg font-bold transition whitespace-nowrap ${
+                      filterLockStatus === 'flagged' ? 'bg-white shadow-2xs text-rose-700' : 'text-slate-600'
+                    }`}
+                  >
+                    ⚠️ Flagged ({stats.auditFlaggedTxCount})
+                  </button>
                 </div>
               </div>
 
-              <div className="border border-slate-200 rounded-2xl overflow-hidden divide-y divide-slate-100 max-h-[50vh] overflow-y-auto">
+              <div className="border border-slate-200 rounded-2xl overflow-hidden divide-y divide-slate-100 max-h-[52vh] overflow-y-auto">
                 {filteredTransactions.length === 0 ? (
                   <div className="p-8 text-center text-xs text-slate-400">
                     No transactions found matching filter.
                   </div>
                 ) : (
                   filteredTransactions.map(tx => (
-                    <div key={tx.id} className="p-3 bg-white hover:bg-slate-50 transition flex items-center justify-between text-xs gap-3">
-                      <div className="space-y-0.5 min-w-0">
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="font-extrabold text-slate-900 truncate">
-                            {tx.donorName || 'Anonymous Donor'}
-                          </span>
-                          {tx.donorPhone && (
+                    <div key={tx.id} className="p-3 bg-white hover:bg-slate-50 transition text-xs space-y-2">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="space-y-0.5 min-w-0">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="font-extrabold text-slate-900 truncate">
+                              {tx.donorName || 'Anonymous Donor'}
+                            </span>
+                            {tx.donorPhone && (
+                              <span className="text-[10px] text-slate-400 font-mono">
+                                ({tx.donorPhone})
+                              </span>
+                            )}
                             <span className="text-[10px] text-slate-400 font-mono">
-                              ({tx.donorPhone})
+                              • {tx.id}
                             </span>
+                            {tx.audit_mark === 'verified' && (
+                              <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                ✓ AUDITOR VERIFIED
+                              </span>
+                            )}
+                            {tx.audit_mark === 'flagged' && (
+                              <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-rose-100 text-rose-800 border border-rose-300">
+                                ⚠️ QUERY / FLAGGED
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[11px] text-slate-500 flex items-center gap-2 flex-wrap">
+                            <span>{formatDateDDMMYYYY(tx.timestamp)}</span>
+                            <span>•</span>
+                            <span className="uppercase text-[9px] font-bold text-slate-600 bg-slate-100 px-1.5 py-0.2 rounded">
+                              {tx.paymentMethod}
+                            </span>
+                            {tx.audit_period && (
+                              <span className="text-[9.5px] font-bold text-amber-800 bg-amber-50 px-1.5 py-0.2 rounded border border-amber-200">
+                                {tx.audit_period}
+                              </span>
+                            )}
+                          </div>
+                          {tx.audit_query && (
+                            <div className="mt-1 text-[11px] bg-rose-50 text-rose-900 border border-rose-200 rounded-lg px-2.5 py-1 flex items-center gap-1.5">
+                              <MessageSquareWarning className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                              <span><strong>Auditor Query:</strong> {tx.audit_query}</span>
+                            </div>
                           )}
-                          <span className="text-[10px] text-slate-400 font-mono">
-                            • {tx.id}
-                          </span>
                         </div>
-                        <div className="text-[11px] text-slate-500 flex items-center gap-2">
-                          <span>{formatDateDDMMYYYY(tx.timestamp)}</span>
-                          <span>•</span>
-                          <span className="uppercase text-[9px] font-bold text-slate-600 bg-slate-100 px-1.5 py-0.2 rounded">
-                            {tx.paymentMethod}
-                          </span>
-                          {tx.audit_period && (
-                            <span className="text-[9.5px] font-bold text-amber-800 bg-amber-50 px-1.5 py-0.2 rounded border border-amber-200">
-                              {tx.audit_period}
-                            </span>
+
+                        <div className="text-right shrink-0 space-y-1">
+                          <div className="font-black text-slate-900 text-sm">
+                            ₹{Number(tx.amount || 0).toLocaleString('en-IN')}
+                          </div>
+                          <div className="flex items-center justify-end gap-1 flex-wrap">
+                            {tx.is_locked ? (
+                              <>
+                                <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300 inline-flex items-center gap-1">
+                                  <Lock className="w-2.5 h-2.5 text-amber-700" />
+                                  <span>LOCKED</span>
+                                </span>
+                                {canAudit && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleSingleUnlock('transaction', tx.id)}
+                                    title="Unlock this record for correction"
+                                    className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300"
+                                  >
+                                    Unlock
+                                  </button>
+                                )}
+                              </>
+                            ) : (
+                              <span className="text-[9px] font-bold uppercase px-2 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200 inline-flex items-center gap-1">
+                                <Unlock className="w-2.5 h-2.5 text-slate-400" />
+                                <span>UNLOCKED</span>
+                              </span>
+                            )}
+                          </div>
+                          {canAudit && (
+                            <div className="flex items-center justify-end gap-1 pt-0.5">
+                              <button
+                                type="button"
+                                onClick={() => handleMarkItem('transaction', tx.id, tx.audit_mark, 'verified')}
+                                className={`text-[10px] font-bold px-2 py-0.5 rounded-lg border transition ${
+                                  tx.audit_mark === 'verified'
+                                    ? 'bg-emerald-600 text-white border-emerald-600'
+                                    : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-200'
+                                }`}
+                              >
+                                ✓ Dik
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (flaggingRecordId === tx.id) {
+                                    setFlaggingRecordId(null);
+                                  } else {
+                                    setFlaggingRecordType('transaction');
+                                    setFlaggingRecordId(tx.id);
+                                    setFlagQueryText(tx.audit_query || '');
+                                  }
+                                }}
+                                className={`text-[10px] font-bold px-2 py-0.5 rounded-lg border transition flex items-center gap-1 ${
+                                  tx.audit_mark === 'flagged'
+                                    ? 'bg-rose-600 text-white border-rose-600'
+                                    : 'bg-rose-50 hover:bg-rose-100 text-rose-800 border-rose-200'
+                                }`}
+                              >
+                                <Flag className="w-2.5 h-2.5" />
+                                <span>Query</span>
+                              </button>
+                            </div>
                           )}
                         </div>
                       </div>
 
-                      <div className="text-right shrink-0">
-                        <div className="font-black text-slate-900 text-sm">
-                          ₹{Number(tx.amount || 0).toLocaleString('en-IN')}
+                      {flaggingRecordId === tx.id && flaggingRecordType === 'transaction' && (
+                        <div className="bg-rose-50/80 border border-rose-200 rounded-xl p-2.5 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                          <input
+                            type="text"
+                            value={flagQueryText}
+                            onChange={e => setFlagQueryText(e.target.value)}
+                            placeholder="Enfiah ngai chhan ziak rawh (e.g., Receipt mil lo, Amount fiah ngai)..."
+                            className="flex-1 text-xs px-2.5 py-1.5 rounded-lg bg-white border border-rose-300 focus:outline-none focus:ring-2 focus:ring-rose-500"
+                          />
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => handleMarkItem('transaction', tx.id, tx.audit_mark, 'flagged', flagQueryText || 'Enfiah ngai')}
+                              className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-[11px] rounded-lg"
+                            >
+                              Save Query
+                            </button>
+                            {tx.audit_mark === 'flagged' && (
+                              <button
+                                type="button"
+                                onClick={() => handleMarkItem('transaction', tx.id, 'flagged', 'flagged')}
+                                className="px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 font-bold text-[11px] rounded-lg border border-slate-300"
+                              >
+                                Clear Flag
+                              </button>
+                            )}
+                          </div>
                         </div>
-                        {tx.is_locked ? (
-                          <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300 inline-flex items-center gap-1">
-                            <Lock className="w-2.5 h-2.5 text-amber-700" />
-                            <span>LOCKED</span>
-                          </span>
-                        ) : (
-                          <span className="text-[9px] font-bold uppercase px-2 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200 inline-flex items-center gap-1">
-                            <Unlock className="w-2.5 h-2.5 text-slate-400" />
-                            <span>UNLOCKED</span>
-                          </span>
-                        )}
-                      </div>
+                      )}
                     </div>
                   ))
                 )}
@@ -756,11 +1048,11 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                     className="w-full text-xs pl-9 pr-3 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   />
                 </div>
-                <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl shrink-0">
+                <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl shrink-0 overflow-x-auto">
                   <button
                     type="button"
                     onClick={() => setFilterLockStatus('all')}
-                    className={`text-xs px-2.5 py-1 rounded-lg font-bold transition ${
+                    className={`text-[11px] px-2.5 py-1 rounded-lg font-bold transition whitespace-nowrap ${
                       filterLockStatus === 'all' ? 'bg-white shadow-2xs text-slate-900' : 'text-slate-600'
                     }`}
                   >
@@ -769,7 +1061,7 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                   <button
                     type="button"
                     onClick={() => setFilterLockStatus('locked')}
-                    className={`text-xs px-2.5 py-1 rounded-lg font-bold transition ${
+                    className={`text-[11px] px-2.5 py-1 rounded-lg font-bold transition whitespace-nowrap ${
                       filterLockStatus === 'locked' ? 'bg-white shadow-2xs text-amber-800' : 'text-slate-600'
                     }`}
                   >
@@ -778,69 +1070,184 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                   <button
                     type="button"
                     onClick={() => setFilterLockStatus('unlocked')}
-                    className={`text-xs px-2.5 py-1 rounded-lg font-bold transition ${
+                    className={`text-[11px] px-2.5 py-1 rounded-lg font-bold transition whitespace-nowrap ${
                       filterLockStatus === 'unlocked' ? 'bg-white shadow-2xs text-indigo-800' : 'text-slate-600'
                     }`}
                   >
                     Unlocked ({stats.unlockedExpCount})
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => setFilterLockStatus('verified')}
+                    className={`text-[11px] px-2.5 py-1 rounded-lg font-bold transition whitespace-nowrap ${
+                      filterLockStatus === 'verified' ? 'bg-white shadow-2xs text-emerald-700' : 'text-slate-600'
+                    }`}
+                  >
+                    ✓ Verified ({stats.auditVerifiedExpCount})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFilterLockStatus('flagged')}
+                    className={`text-[11px] px-2.5 py-1 rounded-lg font-bold transition whitespace-nowrap ${
+                      filterLockStatus === 'flagged' ? 'bg-white shadow-2xs text-rose-700' : 'text-slate-600'
+                    }`}
+                  >
+                    ⚠️ Flagged ({stats.auditFlaggedExpCount})
+                  </button>
                 </div>
               </div>
 
-              <div className="border border-slate-200 rounded-2xl overflow-hidden divide-y divide-slate-100 max-h-[50vh] overflow-y-auto">
+              <div className="border border-slate-200 rounded-2xl overflow-hidden divide-y divide-slate-100 max-h-[52vh] overflow-y-auto">
                 {filteredExpenses.length === 0 ? (
                   <div className="p-8 text-center text-xs text-slate-400">
                     No expense vouchers found matching filter.
                   </div>
                 ) : (
                   filteredExpenses.map(exp => (
-                    <div key={exp.id} className="p-3 bg-white hover:bg-slate-50 transition flex items-center justify-between text-xs gap-3">
-                      <div className="space-y-0.5 min-w-0">
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="font-extrabold text-slate-900 truncate">
-                            {exp.head || exp.expenseHead || 'Expenditure'}
-                          </span>
-                          {(exp.paidTo || exp.payeeName) && (
-                            <span className="text-[10px] text-slate-500">
-                              (Payee: {exp.paidTo || exp.payeeName})
+                    <div key={exp.id} className="p-3 bg-white hover:bg-slate-50 transition text-xs space-y-2">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="space-y-0.5 min-w-0">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="font-extrabold text-slate-900 truncate">
+                              {exp.head || exp.expenseHead || 'Expenditure'}
                             </span>
+                            {(exp.paidTo || exp.payeeName) && (
+                              <span className="text-[10px] text-slate-500">
+                                (Payee: {exp.paidTo || exp.payeeName})
+                              </span>
+                            )}
+                            <span className="text-[10px] text-slate-400 font-mono">
+                              • {exp.voucherNo || exp.id}
+                            </span>
+                            {exp.audit_mark === 'verified' && (
+                              <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                ✓ VOUCHER VERIFIED
+                              </span>
+                            )}
+                            {exp.audit_mark === 'flagged' && (
+                              <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-rose-100 text-rose-800 border border-rose-300">
+                                ⚠️ QUERY / FLAGGED
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[11px] text-slate-500 flex items-center gap-2 flex-wrap">
+                            <span>{formatDateDDMMYYYY(exp.spentDate || exp.date || exp.createdAt || '')}</span>
+                            {(exp.purpose || exp.description) && (
+                              <>
+                                <span>•</span>
+                                <span className="truncate">{exp.purpose || exp.description}</span>
+                              </>
+                            )}
+                            {exp.audit_period && (
+                              <span className="text-[9.5px] font-bold text-amber-800 bg-amber-50 px-1.5 py-0.2 rounded border border-amber-200">
+                                {exp.audit_period}
+                              </span>
+                            )}
+                          </div>
+                          {exp.audit_query && (
+                            <div className="mt-1 text-[11px] bg-rose-50 text-rose-900 border border-rose-200 rounded-lg px-2.5 py-1 flex items-center gap-1.5">
+                              <MessageSquareWarning className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                              <span><strong>Auditor Query:</strong> {exp.audit_query}</span>
+                            </div>
                           )}
-                          <span className="text-[10px] text-slate-400 font-mono">
-                            • {exp.voucherNo || exp.id}
-                          </span>
                         </div>
-                        <div className="text-[11px] text-slate-500 flex items-center gap-2 truncate">
-                          <span>{formatDateDDMMYYYY(exp.spentDate || exp.date || exp.createdAt || '')}</span>
-                          {(exp.purpose || exp.description) && (
-                            <>
-                              <span>•</span>
-                              <span className="truncate">{exp.purpose || exp.description}</span>
-                            </>
-                          )}
-                          {exp.audit_period && (
-                            <span className="text-[9.5px] font-bold text-amber-800 bg-amber-50 px-1.5 py-0.2 rounded border border-amber-200">
-                              {exp.audit_period}
-                            </span>
+
+                        <div className="text-right shrink-0 space-y-1">
+                          <div className="font-black text-rose-700 text-sm">
+                            ₹{Number(exp.amount || 0).toLocaleString('en-IN')}
+                          </div>
+                          <div className="flex items-center justify-end gap-1 flex-wrap">
+                            {exp.is_locked ? (
+                              <>
+                                <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300 inline-flex items-center gap-1">
+                                  <Lock className="w-2.5 h-2.5 text-amber-700" />
+                                  <span>LOCKED</span>
+                                </span>
+                                {canAudit && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleSingleUnlock('expense', exp.id)}
+                                    title="Unlock this voucher for correction"
+                                    className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300"
+                                  >
+                                    Unlock
+                                  </button>
+                                )}
+                              </>
+                            ) : (
+                              <span className="text-[9px] font-bold uppercase px-2 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200 inline-flex items-center gap-1">
+                                <Unlock className="w-2.5 h-2.5 text-slate-400" />
+                                <span>UNLOCKED</span>
+                              </span>
+                            )}
+                          </div>
+                          {canAudit && (
+                            <div className="flex items-center justify-end gap-1 pt-0.5">
+                              <button
+                                type="button"
+                                onClick={() => handleMarkItem('expense', exp.id, exp.audit_mark, 'verified')}
+                                className={`text-[10px] font-bold px-2 py-0.5 rounded-lg border transition ${
+                                  exp.audit_mark === 'verified'
+                                    ? 'bg-emerald-600 text-white border-emerald-600'
+                                    : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-200'
+                                }`}
+                              >
+                                ✓ Dik
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (flaggingRecordId === exp.id) {
+                                    setFlaggingRecordId(null);
+                                  } else {
+                                    setFlaggingRecordType('expense');
+                                    setFlaggingRecordId(exp.id);
+                                    setFlagQueryText(exp.audit_query || '');
+                                  }
+                                }}
+                                className={`text-[10px] font-bold px-2 py-0.5 rounded-lg border transition flex items-center gap-1 ${
+                                  exp.audit_mark === 'flagged'
+                                    ? 'bg-rose-600 text-white border-rose-600'
+                                    : 'bg-rose-50 hover:bg-rose-100 text-rose-800 border-rose-200'
+                                }`}
+                              >
+                                <Flag className="w-2.5 h-2.5" />
+                                <span>Query</span>
+                              </button>
+                            </div>
                           )}
                         </div>
                       </div>
 
-                      <div className="text-right shrink-0">
-                        <div className="font-black text-rose-700 text-sm">
-                          ₹{Number(exp.amount || 0).toLocaleString('en-IN')}
+                      {flaggingRecordId === exp.id && flaggingRecordType === 'expense' && (
+                        <div className="bg-rose-50/80 border border-rose-200 rounded-xl p-2.5 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                          <input
+                            type="text"
+                            value={flagQueryText}
+                            onChange={e => setFlagQueryText(e.target.value)}
+                            placeholder="Voucher enfiah ngai chhan ziak rawh (e.g., Cash memo kim lo, Signature awm lo)..."
+                            className="flex-1 text-xs px-2.5 py-1.5 rounded-lg bg-white border border-rose-300 focus:outline-none focus:ring-2 focus:ring-rose-500"
+                          />
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => handleMarkItem('expense', exp.id, exp.audit_mark, 'flagged', flagQueryText || 'Voucher enfiah ngai')}
+                              className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-[11px] rounded-lg"
+                            >
+                              Save Query
+                            </button>
+                            {exp.audit_mark === 'flagged' && (
+                              <button
+                                type="button"
+                                onClick={() => handleMarkItem('expense', exp.id, 'flagged', 'flagged')}
+                                className="px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 font-bold text-[11px] rounded-lg border border-slate-300"
+                              >
+                                Clear Flag
+                              </button>
+                            )}
+                          </div>
                         </div>
-                        {exp.is_locked ? (
-                          <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300 inline-flex items-center gap-1">
-                            <Lock className="w-2.5 h-2.5 text-amber-700" />
-                            <span>LOCKED</span>
-                          </span>
-                        ) : (
-                          <span className="text-[9px] font-bold uppercase px-2 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200 inline-flex items-center gap-1">
-                            <Unlock className="w-2.5 h-2.5 text-slate-400" />
-                            <span>UNLOCKED</span>
-                          </span>
-                        )}
-                      </div>
+                      )}
                     </div>
                   ))
                 )}
@@ -969,7 +1376,7 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                       </button>
                       <button
                         type="button"
-                        disabled={isLocking}
+                        disabled={isLocking || !canAudit}
                         onClick={handleExecuteLock}
                         className="py-2 px-4 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow transition flex items-center gap-1.5 disabled:opacity-50"
                       >
@@ -981,12 +1388,16 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                 ) : (
                   <button
                     type="button"
-                    disabled={stats.totalUnlocked === 0 || !auditorName.trim()}
+                    disabled={!canAudit || stats.totalUnlocked === 0 || !auditorName.trim()}
                     onClick={() => setIsConfirmingLock(true)}
                     className="w-full py-3 px-4 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-2xl shadow transition flex items-center justify-center gap-2 disabled:opacity-50"
                   >
                     <Lock className="w-4 h-4" />
-                    <span>Audit Sign & Freeze Unlocked Records ({stats.totalUnlocked})</span>
+                    <span>
+                      {!canAudit
+                        ? 'Auditor Phalna Active A Awm Lo (View-Only)'
+                        : `Audit Sign & Freeze Unlocked Records (${stats.totalUnlocked})`}
+                    </span>
                   </button>
                 )}
               </div>

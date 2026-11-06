@@ -4268,6 +4268,8 @@ interface DatabaseSchema {
   deletedStaffIds?: string[];
   expenses?: any[];
   deletedExpenseIds?: string[];
+  auditorGrants?: any[];
+  modificationRequests?: any[];
   hardPurgeTimestamp?: number;
   lastUpdated: string;
 }
@@ -4304,6 +4306,8 @@ function getDefaultDatabase(): DatabaseSchema {
     deletedStaffIds: [],
     expenses: [],
     deletedExpenseIds: [],
+    auditorGrants: [],
+    modificationRequests: [],
     hardPurgeTimestamp: 0,
     lastUpdated: new Date().toISOString()
   };
@@ -4811,6 +4815,8 @@ function getDatabase(): DatabaseSchema {
         deletedStaffIds: Array.isArray(parsed?.deletedStaffIds) ? parsed.deletedStaffIds : [],
         expenses: Array.isArray(parsed?.expenses) ? parsed.expenses : [],
         deletedExpenseIds: Array.isArray(parsed?.deletedExpenseIds) ? parsed.deletedExpenseIds : [],
+        auditorGrants: Array.isArray(parsed?.auditorGrants) ? parsed.auditorGrants : [],
+        modificationRequests: Array.isArray(parsed?.modificationRequests) ? parsed.modificationRequests : [],
         hardPurgeTimestamp: 0,
         lastUpdated: parsed?.lastUpdated || new Date().toISOString()
       };
@@ -5345,6 +5351,12 @@ app.post('/api/data/sync', (req: Request, res: Response) => {
     if (Array.isArray(body.auditLogs) && body.auditLogs.length > 0) {
       db.auditLogs = mergeCollections(db.auditLogs, body.auditLogs, 'id');
     }
+    if (Array.isArray(body.auditorGrants) && body.auditorGrants.length > 0) {
+      db.auditorGrants = mergeCollections(db.auditorGrants || [], body.auditorGrants, 'id');
+    }
+    if (Array.isArray(body.modificationRequests) && body.modificationRequests.length > 0) {
+      db.modificationRequests = mergeCollections(db.modificationRequests || [], body.modificationRequests, 'id');
+    }
 
     saveDatabase(db);
     res.json({
@@ -5353,6 +5365,90 @@ app.post('/api/data/sync', (req: Request, res: Response) => {
       data: db,
       timestamp: db.lastUpdated
     });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// Auditor Grants & Modification Requests Multi-Device Sync Endpoints
+app.get('/api/auditor-grants', (req: Request, res: Response) => {
+  try {
+    const db = getDatabase();
+    let list = Array.isArray(db.auditorGrants) ? db.auditorGrants : [];
+    const { campaignId, phone } = req.query;
+    if (campaignId && typeof campaignId === 'string') {
+      const cleanId = campaignId.toLowerCase().trim();
+      list = list.filter((g: any) => String(g.campaignId || g.campaign_id || '').toLowerCase().trim() === cleanId);
+    }
+    if (phone && typeof phone === 'string') {
+      const cleanPhone = phone.replace(/\D/g, '').slice(-10);
+      if (cleanPhone) {
+        list = list.filter((g: any) => String(g.auditorPhone || g.auditor_phone || '').replace(/\D/g, '').slice(-10) === cleanPhone);
+      }
+    }
+    res.json({ success: true, grants: list });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+app.post('/api/auditor-grants', (req: Request, res: Response) => {
+  try {
+    const grant = req.body;
+    if (!grant || !grant.id) {
+      return res.status(400).json({ success: false, message: 'Invalid auditor grant payload' });
+    }
+    const db = getDatabase();
+    const stamped = {
+      ...grant,
+      updatedAt: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+    db.auditorGrants = mergeCollections(db.auditorGrants || [], [stamped], 'id');
+    saveDatabase(db);
+    broadcastServerEvent('auditor_grants_updated', { grantId: stamped.id, campaignId: stamped.campaignId });
+    res.json({ success: true, grant: stamped, grants: db.auditorGrants });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+app.post('/api/auditor-grants/:id/revoke', (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { revokedBy = 'Creator' } = req.body || {};
+    const db = getDatabase();
+    const nowIso = new Date().toISOString();
+    db.auditorGrants = (db.auditorGrants || []).map((g: any) => {
+      if (String(g.id).trim() === String(id).trim()) {
+        return { ...g, status: 'revoked', revokedBy, updatedAt: nowIso, updated_at: nowIso };
+      }
+      return g;
+    });
+    saveDatabase(db);
+    broadcastServerEvent('auditor_grants_updated', { grantId: id, status: 'revoked' });
+    res.json({ success: true, grants: db.auditorGrants });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+app.post('/api/modification-requests', (req: Request, res: Response) => {
+  try {
+    const modReq = req.body;
+    if (!modReq || !modReq.id) {
+      return res.status(400).json({ success: false, message: 'Invalid modification request payload' });
+    }
+    const db = getDatabase();
+    const stamped = {
+      ...modReq,
+      updatedAt: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+    db.modificationRequests = mergeCollections(db.modificationRequests || [], [stamped], 'id');
+    saveDatabase(db);
+    broadcastServerEvent('modification_requests_updated', { requestId: stamped.id });
+    res.json({ success: true, request: stamped, requests: db.modificationRequests });
   } catch (err: any) {
     res.status(500).json({ success: false, message: err.message });
   }

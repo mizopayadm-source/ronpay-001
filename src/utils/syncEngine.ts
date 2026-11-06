@@ -34,6 +34,8 @@ import {
   saveStoredExpenses,
   getDeletedExpenseIds,
   markExpenseAsDeleted,
+  saveStoredAuditorGrants,
+  MODIFICATION_REQUESTS_KEY,
   broadcastTabSync,
   safeApiFetch,
   SYSTEM_HARD_PURGE_TIMESTAMP
@@ -489,6 +491,19 @@ export async function syncAllWithServer(forceAuthoritative: boolean = false): Pr
           }
         }
 
+        // 11. Update auditor grants & modification requests
+        if (Array.isArray(serverData.auditorGrants)) {
+          saveStoredAuditorGrants(serverData.auditorGrants, true);
+        }
+        if (Array.isArray(serverData.modificationRequests)) {
+          try {
+            localStorage.setItem(MODIFICATION_REQUESTS_KEY, JSON.stringify(serverData.modificationRequests));
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new CustomEvent('ronpay_modification_requests_updated', { detail: serverData.modificationRequests }));
+            }
+          } catch {}
+        }
+
         // Dispatch event to re-render any listening UI
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent(RONPAY_SYNC_EVENT, { detail: serverData }));
@@ -923,6 +938,19 @@ export async function pullLatestServerState(): Promise<SyncDataState | null> {
         }
         if (serverData.announcement) {
           saveStoredAnnouncement(serverData.announcement, true);
+        }
+
+        // 7. Auditor Grants & Modification Requests
+        if (Array.isArray(serverData.auditorGrants)) {
+          saveStoredAuditorGrants(serverData.auditorGrants, true);
+        }
+        if (Array.isArray(serverData.modificationRequests)) {
+          try {
+            localStorage.setItem(MODIFICATION_REQUESTS_KEY, JSON.stringify(serverData.modificationRequests));
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new CustomEvent('ronpay_modification_requests_updated', { detail: serverData.modificationRequests }));
+            }
+          } catch {}
         }
 
         if (typeof window !== 'undefined') {

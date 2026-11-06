@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
   ArrowLeft, 
   ShieldCheck, 
@@ -25,8 +25,10 @@ import {
 } from 'lucide-react';
 import { BawmCategory, CreatorProfile } from '../types';
 import { BAWM_CONFIG } from '../data/initialData';
-import { getStoredCreatorsList, saveStoredCreatorsList } from '../utils/storage';
+import { getStoredCreatorsList, saveStoredCreatorsList, isApprovedQRCreator } from '../utils/storage';
 import { getGuestActivity } from '../utils/guestPersonalization';
+import { sendFirebasePhoneOtp, verifyFirebasePhoneOtp } from '../lib/firebaseAuth';
+import type { ConfirmationResult } from 'firebase/auth';
 
 interface CreatorRegScreenProps {
   onBack: () => void;
@@ -34,6 +36,8 @@ interface CreatorRegScreenProps {
   creatorProfile: CreatorProfile;
   onOpenAdminDashboard?: () => void;
   onRegisterCreator?: (profile: CreatorProfile) => void;
+  initialMode?: 'login' | 'register';
+  initialPhone?: string;
 }
 
 export const CreatorRegScreen: React.FC<CreatorRegScreenProps> = ({
@@ -42,13 +46,16 @@ export const CreatorRegScreen: React.FC<CreatorRegScreenProps> = ({
   creatorProfile,
   onOpenAdminDashboard,
   onRegisterCreator,
+  initialMode = 'login',
+  initialPhone,
 }) => {
   // Mode: 'login' vs 'register'
-  const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
+  const [authMode, setAuthMode] = useState<'login' | 'register'>(initialMode);
   const [registeredPendingProfile, setRegisteredPendingProfile] = useState<CreatorProfile | null>(null);
 
   // Login states
   const [loginPhone, setLoginPhone] = useState<string>(() => {
+    if (initialPhone) return initialPhone;
     if (creatorProfile.phone && creatorProfile.phone !== '9999999999') return creatorProfile.phone;
     return getGuestActivity().lastDonorPhone || '';
   });
@@ -58,15 +65,32 @@ export const CreatorRegScreen: React.FC<CreatorRegScreenProps> = ({
   // Register states
   const [applicantName, setApplicantName] = useState<string>(() => {
     const n = (creatorProfile.name || '').trim().toLowerCase();
-    if (n && n !== 'khualmi' && n !== 'guest user' && n !== 'khualmi (guest user)') return creatorProfile.name;
+    if (n && n !== 'khualmi' && n !== 'guest user' && n !== 'khualmi (guest user)' && !n.startsWith('ronpay user (')) return creatorProfile.name;
     return getGuestActivity().lastDonorName || '';
   });
-  const [orgName, setOrgName] = useState<string>(creatorProfile.orgName || '');
-  const [designation, setDesignation] = useState<string>(creatorProfile.designation || '');
+  const [orgName, setOrgName] = useState<string>(
+    creatorProfile.orgName && creatorProfile.orgName !== 'Mizoram Community Member' ? creatorProfile.orgName : ''
+  );
+  const [designation, setDesignation] = useState<string>(
+    creatorProfile.designation && creatorProfile.designation !== 'Verified Member' && creatorProfile.designation !== 'Donor / Citizen'
+      ? creatorProfile.designation
+      : ''
+  );
   const [phone, setPhone] = useState<string>(() => {
+    if (initialPhone) return initialPhone;
     if (creatorProfile.phone && creatorProfile.phone !== '9999999999') return creatorProfile.phone;
     return getGuestActivity().lastDonorPhone || '';
   });
+
+  useEffect(() => {
+    if (initialMode) {
+      setAuthMode(initialMode);
+    }
+    if (initialPhone) {
+      setPhone(initialPhone);
+      setLoginPhone(initialPhone);
+    }
+  }, [initialMode, initialPhone]);
   const [password, setPassword] = useState<string>('');
   const [category, setCategory] = useState<BawmCategory>('ralna');
   const [uploadedDocName, setUploadedDocName] = useState<string>(creatorProfile.authDocName || '');
@@ -76,10 +100,15 @@ export const CreatorRegScreen: React.FC<CreatorRegScreenProps> = ({
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const logoInputRef = useRef<HTMLInputElement>(null);
 
-  // OTP state for registration
+  // Firebase Phone OTP state for registration
   const [isOtpSent, setIsOtpSent] = useState<boolean>(false);
   const [otpCode, setOtpCode] = useState<string>('');
-  const [isPhoneVerified, setIsPhoneVerified] = useState<boolean>(creatorProfile.isPhoneVerified || false);
+  const [isPhoneVerified, setIsPhoneVerified] = useState<boolean>(false);
+  const [isSendingOtp, setIsSendingOtp] = useState<boolean>(false);
+  const [isVerifyingOtp, setIsVerifyingOtp] = useState<boolean>(false);
+  const [otpStatusMsg, setOtpStatusMsg] = useState<string>('');
+  const [otpErrorMsg, setOtpErrorMsg] = useState<string>('');
+  const [otpConfirmation, setOtpConfirmation] = useState<ConfirmationResult | null>(null);
 
   // 5-click secret dev toggle
   const [devSecretClicks, setDevSecretClicks] = useState<number>(0);
@@ -145,22 +174,50 @@ export const CreatorRegScreen: React.FC<CreatorRegScreenProps> = ({
     reader.readAsDataURL(file);
   };
 
-  const handleSendOtp = () => {
-    if (!phone || phone.trim().length < 10) {
-      alert('Khawngaihin Phone number dik tak chhu lut rawh (10 digits).');
+  const handleSendOtp = async () => {
+    setOtpErrorMsg('');
+    setOtpStatusMsg('');
+    const cleanDigits = (phone || '').replace(/\D/g, '');
+    if (cleanDigits.length < 10) {
+      setOtpErrorMsg('Khawngaihin Phone number dik tak chhu lut rawh (10 digits).');
       return;
     }
-    setIsOtpSent(true);
-    alert('📲 OTP chu i phone (' + phone + ')-ah thawn a ni ta! (Test OTP: 1234)');
+
+    setIsSendingOtp(true);
+    try {
+      const res = await sendFirebasePhoneOtp(cleanDigits, 'ronpay-creator-reg-recaptcha');
+      if (res.success && res.confirmationResult) {
+        setOtpConfirmation(res.confirmationResult);
+        setIsOtpSent(true);
+        setOtpStatusMsg(`📲 Firebase SMS OTP (6 digits) chu ${res.e164Phone}-ah thawn a ni ta! SMS lo thleng chhu lut rawh.`);
+      } else {
+        setOtpErrorMsg(res.error || 'SMS OTP thawn theih a ni rih lo.');
+      }
+    } finally {
+      setIsSendingOtp(false);
+    }
   };
 
-  const handleVerifyOtp = () => {
-    if (otpCode.trim() === '1234' || otpCode.trim().length === 4) {
-      setIsPhoneVerified(true);
-      setIsOtpSent(false);
-      alert('✅ Phone number verified successfully!');
-    } else {
-      alert('❌ OTP a dik lo! Test OTP atan "1234" hmang rawh.');
+  const handleVerifyOtp = async () => {
+    setOtpErrorMsg('');
+    setOtpStatusMsg('');
+    if (!otpCode || otpCode.trim().length < 6) {
+      setOtpErrorMsg('Khawngaihin SMS-a 6-digit OTP lo thleng kha kim takin chhu lut rawh.');
+      return;
+    }
+
+    setIsVerifyingOtp(true);
+    try {
+      const res = await verifyFirebasePhoneOtp(otpCode.trim(), otpConfirmation);
+      if (res.success) {
+        setIsPhoneVerified(true);
+        setIsOtpSent(false);
+        setOtpStatusMsg('✅ Firebase Phone OTP Verified Successfully!');
+      } else {
+        setOtpErrorMsg(res.error || '❌ OTP Code a dik lo! Khawngaihin enfiah la chhu nawn rawh.');
+      }
+    } finally {
+      setIsVerifyingOtp(false);
     }
   };
 
@@ -225,8 +282,8 @@ export const CreatorRegScreen: React.FC<CreatorRegScreenProps> = ({
            (cleanPhoneDigits.length >= 10 && c.phone.replace(/\D/g, '') === cleanPhoneDigits)
     );
 
-    // Also check current active creator profile if it was registered
-    const activeStoredProfile = (creatorProfile.isApproved && (creatorProfile.phone === cleanInput || (cleanPhoneDigits.length >= 10 && creatorProfile.phone.replace(/\D/g, '') === cleanPhoneDigits)))
+    // Also check current active creator profile if it is a genuinely approved QR creator
+    const activeStoredProfile = (isApprovedQRCreator(creatorProfile) && (creatorProfile.phone === cleanInput || (cleanPhoneDigits.length >= 10 && creatorProfile.phone.replace(/\D/g, '') === cleanPhoneDigits)))
       ? creatorProfile
       : null;
 
@@ -234,7 +291,7 @@ export const CreatorRegScreen: React.FC<CreatorRegScreenProps> = ({
 
     // Reject unregistered numbers strictly
     if (!targetCreator) {
-      setLoginError(`Phone number "${cleanInput}" hi Creator account-ah a la in-register lo! "New Registration" tab-ah in-register hmasa rawh.`);
+      setLoginError(`Phone number "${cleanInput}" hi Creator account-ah a la in-register lo! "New Registration" tab-ah QR Creator dilna thehlut hmasa rawh.`);
       return;
     }
 
@@ -250,23 +307,31 @@ export const CreatorRegScreen: React.FC<CreatorRegScreenProps> = ({
       return;
     }
 
-    // Check password strictly
+    // Check password strictly (no 1234 bypass if custom password is set)
     const expectedPassword = targetCreator.password || targetCreator.pin || '1234';
-    if (loginPassword.trim() !== expectedPassword && loginPassword.trim() !== '1234') {
-      setLoginError('Password / PIN a dik lo! Khawngaihin chhu nawn rawh.');
+    if (loginPassword.trim() !== expectedPassword) {
+      setLoginError('Password / MPIN a dik lo! Khawngaihin chhu nawn rawh.');
+      return;
+    }
+
+    const approvedCats = Array.isArray(targetCreator.approvedCategories)
+      ? targetCreator.approvedCategories
+      : [];
+
+    if (!targetCreator.isAdmin && approvedCats.length === 0) {
+      setLoginError('⏳ I Creator Account-ah hian Bawm Category approve a la awm lo. Khawngaihin Admin hnenah approval dil rawh.');
       return;
     }
 
     const activeProfile: CreatorProfile = {
       ...targetCreator,
+      role: targetCreator.isAdmin ? 'SUPER_ADMIN' : 'CREATOR',
       isPhoneVerified: true,
       isApproved: true,
-      approvedCategories: targetCreator.approvedCategories && targetCreator.approvedCategories.length > 0 
-        ? targetCreator.approvedCategories 
-        : ['kumtluang', 'ralna', 'khawlsak', 'rikrum'],
+      approvedCategories: approvedCats,
     };
 
-    onSuccess(activeProfile, activeProfile.approvedCategories[0] || 'kumtluang');
+    onSuccess(activeProfile, activeProfile.approvedCategories[0] || 'ralna');
   };
 
   // Handle Registration submission
@@ -292,7 +357,6 @@ export const CreatorRegScreen: React.FC<CreatorRegScreenProps> = ({
     const trialExpiry = new Date(now.getTime() + 180 * 24 * 60 * 60 * 1000); // 6 Months (180 Days) dynamic fair trial from registration date
 
     const updatedProfile: CreatorProfile = {
-      ...creatorProfile,
       name: applicantName.trim(),
       orgName: orgName.trim() || 'Community Organization',
       designation: designation.trim() || 'Authorized Creator',
@@ -301,10 +365,13 @@ export const CreatorRegScreen: React.FC<CreatorRegScreenProps> = ({
       pin: password.trim(),
       avatarUrl: avatarUrl.trim() || undefined,
       logoUrl: logoUrl.trim() || undefined,
+      role: 'CREATOR',
+      isAdmin: false,
+      isBlocked: false,
       isPhoneVerified: true,
       isApproved: false, // Explicit: Requires Admin Approval before posting!
       authDocName: uploadedDocName || 'Authorization_Letter.pdf',
-      approvedCategories: [category],
+      approvedCategories: [category], // Strictly only the requested Bawm category!
       createdQRsCount: 0,
       registeredAt: now.toISOString(),
       trialExpiresAt: trialExpiry.toISOString(),
@@ -670,15 +737,21 @@ export const CreatorRegScreen: React.FC<CreatorRegScreenProps> = ({
                         <button
                           type="button"
                           onClick={() => {
+                            if (!creator.isApproved) {
+                              setLoginError(`⏳ ${creator.name} hi Admin approval nghah mek a ni.`);
+                              return;
+                            }
+                            const approvedCats: BawmCategory[] = Array.isArray(creator.approvedCategories) && creator.approvedCategories.length > 0
+                              ? creator.approvedCategories
+                              : ['ralna'];
                             const targetProfile: CreatorProfile = {
                               ...creator,
+                              role: creator.isAdmin ? 'SUPER_ADMIN' : 'CREATOR',
                               isPhoneVerified: true,
                               isApproved: true,
-                              approvedCategories: creator.approvedCategories && creator.approvedCategories.length > 0 
-                                ? creator.approvedCategories 
-                                : ['kumtluang', 'ralna', 'khawlsak', 'rikrum'],
+                              approvedCategories: approvedCats,
                             };
-                            const initialCat = (targetProfile.approvedCategories && targetProfile.approvedCategories[0]) || 'ralna';
+                            const initialCat = targetProfile.approvedCategories[0] || 'ralna';
                             onSuccess(targetProfile, initialCat);
                           }}
                           className={`shrink-0 px-2.5 py-1.5 rounded-lg text-[10px] font-black transition cursor-pointer flex items-center gap-1 ${
@@ -886,60 +959,99 @@ export const CreatorRegScreen: React.FC<CreatorRegScreenProps> = ({
             />
           </div>
 
-          {/* Phone Number & OTP Verification */}
+          {/* Phone Number & Firebase OTP Verification */}
           <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2.5">
             <div className="flex items-center justify-between">
               <label className="text-[10.5px] font-extrabold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
-                <Smartphone className="w-3.5 h-3.5 text-indigo-600" /> Phone & OTP Verification
+                <Smartphone className="w-3.5 h-3.5 text-indigo-600" /> Firebase Phone & OTP Verification *
               </label>
               {isPhoneVerified && (
                 <span className="text-[9px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-black flex items-center gap-1 border border-emerald-300">
-                  <CheckCircle2 className="w-2.5 h-2.5" /> VERIFIED
+                  <CheckCircle2 className="w-2.5 h-2.5" /> FIREBASE VERIFIED
                 </span>
               )}
             </div>
 
             <div className="flex gap-2">
-              <input
-                type="tel"
-                value={phone}
-                disabled={isPhoneVerified}
-                onChange={(e) => setPhone(e.target.value)}
-                placeholder="Mobile Number (10 digits)"
-                maxLength={10}
-                className={`flex-1 border rounded-xl p-2 text-xs font-bold focus:outline-none ${
-                  isPhoneVerified 
-                    ? 'bg-slate-100 border-slate-200 text-slate-500' 
-                    : 'bg-white border-slate-300 text-slate-800 focus:border-indigo-600'
-                }`}
-              />
-              {!isPhoneVerified && (
+              <div className="relative flex-1 flex items-center">
+                <span className="absolute left-2.5 text-xs font-bold text-slate-400 select-none">+91</span>
+                <input
+                  type="tel"
+                  value={phone}
+                  disabled={isPhoneVerified || isSendingOtp}
+                  onChange={(e) => {
+                    setPhone(e.target.value);
+                    setIsPhoneVerified(false);
+                    setIsOtpSent(false);
+                    setOtpErrorMsg('');
+                  }}
+                  placeholder="Mobile Number (10 digits)"
+                  maxLength={10}
+                  className={`w-full pl-9 pr-2.5 py-2 border rounded-xl text-xs font-bold focus:outline-none ${
+                    isPhoneVerified 
+                      ? 'bg-slate-100 border-slate-200 text-slate-500' 
+                      : 'bg-white border-slate-300 text-slate-800 focus:border-indigo-600'
+                  }`}
+                />
+              </div>
+              {!isPhoneVerified ? (
                 <button
                   type="button"
+                  disabled={isSendingOtp}
                   onClick={handleSendOtp}
-                  className="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition cursor-pointer"
+                  className="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white rounded-xl text-xs font-bold transition cursor-pointer shrink-0"
                 >
-                  Send OTP
+                  {isSendingOtp ? 'Sending...' : isOtpSent ? 'Resend OTP' : 'Send OTP'}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsPhoneVerified(false);
+                    setIsOtpSent(false);
+                    setOtpCode('');
+                    setOtpStatusMsg('');
+                  }}
+                  className="px-2.5 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl text-[10px] font-bold transition cursor-pointer shrink-0"
+                >
+                  Thlak
                 </button>
               )}
             </div>
+
+            {/* Invisible reCAPTCHA container for Firebase Phone Auth */}
+            <div id="ronpay-creator-reg-recaptcha" />
+
+            {otpStatusMsg && (
+              <div className="p-2 bg-emerald-50 border border-emerald-200 rounded-lg text-[10.5px] font-bold text-emerald-800 leading-snug">
+                {otpStatusMsg}
+              </div>
+            )}
+
+            {otpErrorMsg && (
+              <div className="p-2 bg-rose-50 border border-rose-200 rounded-lg text-[10.5px] font-bold text-rose-700 leading-snug">
+                {otpErrorMsg}
+              </div>
+            )}
 
             {isOtpSent && !isPhoneVerified && (
               <div className="flex gap-2 pt-1">
                 <input
                   type="text"
                   value={otpCode}
-                  onChange={(e) => setOtpCode(e.target.value)}
-                  placeholder="Enter OTP (Test: 1234)"
-                  maxLength={4}
-                  className="flex-1 bg-white border border-amber-300 rounded-xl p-2 text-xs font-black text-slate-800 focus:outline-none focus:border-amber-500"
+                  disabled={isVerifyingOtp}
+                  onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  placeholder="Enter 6-Digit SMS OTP"
+                  maxLength={6}
+                  className="flex-1 bg-white border border-amber-300 rounded-xl p-2 text-xs font-black tracking-widest text-slate-800 focus:outline-none focus:border-amber-500"
                 />
                 <button
                   type="button"
+                  disabled={isVerifyingOtp}
                   onClick={handleVerifyOtp}
-                  className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition cursor-pointer"
+                  className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400 text-white rounded-xl text-xs font-bold transition cursor-pointer shrink-0"
                 >
-                  Verify
+                  {isVerifyingOtp ? 'Verifying...' : 'Verify OTP'}
                 </button>
               </div>
             )}
@@ -961,20 +1073,28 @@ export const CreatorRegScreen: React.FC<CreatorRegScreenProps> = ({
           </div>
 
           {/* Creator Category Selection */}
-          <div>
-            <label className="text-[10.5px] font-bold text-slate-700 block mb-1">
-              Creator Category Dil Duh *
-            </label>
+          <div className="bg-amber-50/70 p-3 rounded-2xl border border-amber-200 space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-[10.5px] font-extrabold text-amber-950 uppercase tracking-wider block">
+                QR Siamna Tur Bawm Dil Duh Thlang Rawh *
+              </label>
+              <span className="text-[9px] bg-amber-200 text-amber-900 font-black px-2 py-0.5 rounded-full">
+                1 Bawm per Request
+              </span>
+            </div>
             <select
               value={category}
               onChange={(e) => setCategory(e.target.value as BawmCategory)}
-              className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600 transition"
+              className="w-full bg-white border border-amber-300 rounded-xl p-2.5 font-black text-slate-900 focus:outline-none focus:border-indigo-600 transition"
             >
               <option value="ralna">Ralna Bawm Creator (Chhiatni & Ralna)</option>
-              <option value="khawlsak">Khawlsak Bawm Creator (Riangvai, Chanhai)</option>
-              <option value="rikrum">Rikrum Bawm Creator (Emergency, Kangmei)</option>
-              <option value="kumtluang">Kumtluang Bawm Creator (Permanent / Kohhran)</option>
+              <option value="khawlsak">Khawlsak Bawm Creator (Riangvai, Chanhai, Tanpui Ngai)</option>
+              <option value="rikrum">Rikrum Bawm Creator (Emergency, Kangmei, Khuarel Chhiatna)</option>
+              <option value="kumtluang">Kumtluang Bawm Creator (Permanent / Kohhran / NGO / Pawl)</option>
             </select>
+            <p className="text-[10px] text-amber-900 font-semibold leading-snug">
+              🔒 <b>Pawimawh:</b> Hetah hian i Bawm dil leh Admin-in a approve sak chauh che hi <b>Create QR</b> ah a inhawng ang (Bawm 4 a inhawng nghal vek dawn lo). Bawm dang mamawh belh chuan Admin approval dil belh leh theih a ni.
+            </p>
           </div>
 
           {/* Recommendation Letter Upload */}

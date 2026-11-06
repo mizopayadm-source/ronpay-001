@@ -160,6 +160,10 @@ export interface Campaign {
   hiddenAt?: string;
   hiddenBy?: string;
   hideReason?: string;
+  auditChecklist?: Record<string, boolean>;
+  lastAuditedAt?: string;
+  lastAuditedBy?: string;
+  lastAuditPeriod?: string;
 }
 
 export interface ExpenseRecord {
@@ -251,6 +255,10 @@ export interface Transaction {
   audit_notes?: string;
   unlock_expires_at?: string;
   donorComment?: string;
+  audit_mark?: 'verified' | 'flagged';
+  audit_query?: string;
+  audit_marked_by?: string;
+  audit_marked_at?: string;
 }
 
 export interface KumtluangExpense {
@@ -283,6 +291,10 @@ export interface KumtluangExpense {
   payeeName?: string;
   description?: string;
   date?: string;
+  audit_mark?: 'verified' | 'flagged';
+  audit_query?: string;
+  audit_marked_by?: string;
+  audit_marked_at?: string;
 }
 
 export interface AuditorAccessGrant {
@@ -295,6 +307,9 @@ export interface AuditorAccessGrant {
   auditor_phone?: string;
   auditorName: string;
   auditor_name?: string;
+  memberId?: string;
+  section?: string;
+  pin?: string;
   grantedBy: string;
   granted_by?: string;
   grantedByName?: string;
@@ -305,6 +320,7 @@ export interface AuditorAccessGrant {
   status: 'active' | 'expired' | 'revoked';
   notes?: string;
   permissions?: string[];
+  checklist?: Record<string, boolean>;
   createdAt?: string;
   created_at?: string;
   updatedAt?: string;

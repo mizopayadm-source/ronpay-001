@@ -617,12 +617,14 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
   const handleQuickApproveCreator = (creator: CreatorProfile) => {
     const trialDays = creator.customTrialDays !== undefined && creator.customTrialDays > 0 ? creator.customTrialDays : 180;
     const expiresAt = new Date(Date.now() + trialDays * 24 * 60 * 60 * 1000);
+    // Preserve ONLY the specific Bawm category/categories requested by the applicant
     const approvedCats: BawmCategory[] = creator.approvedCategories && creator.approvedCategories.length > 0
       ? creator.approvedCategories
-      : ['ralna', 'khawlsak', 'rikrum', 'kumtluang'];
+      : ['ralna'];
 
     const updated: CreatorProfile = {
       ...creator,
+      role: creator.isAdmin ? 'SUPER_ADMIN' : 'CREATOR',
       isApproved: true,
       isBlocked: false,
       isPhoneVerified: true,
@@ -640,7 +642,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
       creator.phone
     );
     setLogsList(getStoredAuditLogs());
-    alert(`✅ ${creator.name} (${creator.phone}) creator account approve fel a ni ta!\nTrial: ${trialDays} Days active.`);
+    alert(`✅ ${creator.name} (${creator.phone}) creator account approve fel a ni ta!\nApproved Bawm: ${approvedCats.map(c => BAWM_CONFIG[c]?.name || c).join(', ')}\nTrial: ${trialDays} Days active.`);
   };
 
   // Creator moderation helper (Opens Review & Inspection Studio)
@@ -658,7 +660,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
     setCreatorEditAddress(creator.address || '');
     setCreatorEditPassword(creator.password || creator.pin || '');
     setIsCreatorVerifiedCheck(creator.isPhoneVerified !== false);
-    setSelectedCreatorCategories(creator.approvedCategories?.length > 0 ? creator.approvedCategories : ['ralna', 'khawlsak', 'rikrum', 'kumtluang']);
+    setSelectedCreatorCategories(creator.approvedCategories?.length > 0 ? creator.approvedCategories : ['ralna']);
     const isTrialExpired = creator.trialExpiresAt ? new Date(creator.trialExpiresAt).getTime() <= Date.now() : (creator.customTrialDays === 0);
     setIsCreatorTrialActiveToggle(!isTrialExpired);
     setLicenseDuration(creator.customTrialDays !== undefined ? creator.customTrialDays : 180);
@@ -689,6 +691,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
 
     const updated: CreatorProfile = {
       ...creator,
+      role: creator.isAdmin ? 'SUPER_ADMIN' : 'CREATOR',
       name: nextName,
       orgName: nextOrg,
       designation: nextDesignation,
@@ -705,7 +708,9 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
       isBlocked: false,
       isPhoneVerified: isCreatorVerifiedCheck,
       rejectionReason: willBeApproved ? undefined : creator.rejectionReason,
-      approvedCategories: selectedCreatorCategories.length > 0 ? selectedCreatorCategories : ['ralna', 'khawlsak', 'rikrum', 'kumtluang'],
+      approvedCategories: selectedCreatorCategories.length > 0
+        ? selectedCreatorCategories
+        : (creator.approvedCategories?.length > 0 ? creator.approvedCategories : ['ralna']),
       trialExpiresAt: expiresAt.toISOString(),
       customTrialDays: (!isCreatorTrialActiveToggle || licenseDuration === 0) ? 0 : licenseDuration,
       freePostsQuota: creatorFreePostsQuota,

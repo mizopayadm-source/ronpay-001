@@ -123,10 +123,18 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
   const [deletingCampaign, setDeletingCampaign] = useState<Campaign | null>(null);
   const [deleteReasonText, setDeleteReasonText] = useState<string>('');
 
-  // Default to first approved category or ralna
+  // Default to first approved category
   const [selectedCategory, setSelectedCategory] = useState<BawmCategory>(
-    creatorProfile.approvedCategories[0] || 'ralna'
+    creatorProfile.approvedCategories?.[0] || 'ralna'
   );
+
+  // Keep selectedCategory strictly within creatorProfile.approvedCategories
+  useEffect(() => {
+    const allowed = creatorProfile.approvedCategories || [];
+    if (!creatorProfile.isAdmin && allowed.length > 0 && !allowed.includes(selectedCategory)) {
+      setSelectedCategory(allowed[0]);
+    }
+  }, [creatorProfile.approvedCategories, creatorProfile.isAdmin, selectedCategory]);
 
   // Common fields
   const [upiId, setUpiId] = useState<string>('');
@@ -390,8 +398,14 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
   ];
 
   const handleCategorySelect = (catKey: BawmCategory) => {
-    if (!creatorProfile.approvedCategories.includes(catKey)) {
-      alert(`⚠️ He bawm (${BAWM_CONFIG[catKey].name}) hi i Creator registration-ah a la tel ve lo. I category neih chin chauh hman theih a ni e. Upgrade Menu hmangin i belh thei ang.`);
+    const isAllowed = isPrivilegedUser || (creatorProfile.approvedCategories || []).includes(catKey);
+    if (!isAllowed) {
+      const wantRequest = window.confirm(
+        `🔒 "${BAWM_CONFIG[catKey].name}" hi i Creator Account-ah approve a la ni ve lo!\n\nI Bawm neih mek: ${(creatorProfile.approvedCategories || []).map(c => BAWM_CONFIG[c]?.name || c).join(', ') || 'None'}\n\nHe Bawm (${BAWM_CONFIG[catKey].name}) hi hawn belh turin Admin hnenah Category Dilna (Request) thawn i duh em?`
+      );
+      if (wantRequest) {
+        onOpenUpgradeModal();
+      }
       return;
     }
     setSelectedCategory(catKey);
@@ -490,13 +504,18 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
   const handleGenerateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!creatorProfile.isApproved) {
+    if (!creatorProfile.isApproved && !isPrivilegedUser) {
       alert('⚠️ I Creator Account hi Admin Approval nghah mek a ni a. Admin-in an approve hma chuan Post leh QR Code thar siam theih a ni rih lo.');
       return;
     }
 
     if (creatorProfile.isBlocked) {
       alert('⚠️ I Creator Account hi Admin-in a block rih avangin Post/QR thar i siam thei rih lo.');
+      return;
+    }
+
+    if (!isPrivilegedUser && !(creatorProfile.approvedCategories || []).includes(selectedCategory)) {
+      alert(`🔒 "${BAWM_CONFIG[selectedCategory]?.name || selectedCategory}" hi i Creator Account-ah Admin-in a la approve ve lo. I Bawm neih sa chauh hmangin QR i siam thei a, Bawm dang hawn belh nan Admin approval dil hmasak a ngai.`);
       return;
     }
 
@@ -885,7 +904,7 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
               {allCategories.map((cat) => {
                 const Icon = cat.icon;
                 const isSelected = selectedCategory === cat.key;
-                const isAllowed = creatorProfile.approvedCategories.includes(cat.key);
+                const isAllowed = isPrivilegedUser || (creatorProfile.approvedCategories || []).includes(cat.key);
 
                 return (
                   <button
@@ -913,10 +932,10 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
                       
                       {!isAllowed && (
                         <span className="text-[8.5px] bg-slate-200 text-slate-600 font-extrabold px-1.5 py-0.5 rounded flex items-center gap-0.5">
-                          <Lock className="w-2.5 h-2.5" /> Locked
+                          <Lock className="w-2.5 h-2.5" /> Dil Ngai
                         </span>
                       )}
-                      {isSelected && (
+                      {isSelected && isAllowed && (
                         <div className={`w-5 h-5 rounded-full ${cat.selectedIconBg} flex items-center justify-center text-white shadow-xs`}>
                           <CheckCircle2 className="w-3.5 h-3.5" />
                         </div>

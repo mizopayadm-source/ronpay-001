@@ -92,8 +92,13 @@ export const AuthorizedPersonsModal: React.FC<AuthorizedPersonsModalProps> = ({
   const [isAddAuditorOpen, setIsAddAuditorOpen] = useState<boolean>(false);
   const [auditorNameInput, setAuditorNameInput] = useState<string>('');
   const [auditorPhoneInput, setAuditorPhoneInput] = useState<string>('');
-  const [auditorDurationHours, setAuditorDurationHours] = useState<number>(24);
+  const [auditorPinInput, setAuditorPinInput] = useState<string>('1234');
+  const [auditorDurationHours, setAuditorDurationHours] = useState<number>(48);
   const [auditorNotesInput, setAuditorNotesInput] = useState<string>('');
+  const [auditorMemberSearch, setAuditorMemberSearch] = useState<string>('');
+  const [isAuditorMemberDropdownOpen, setIsAuditorMemberDropdownOpen] = useState<boolean>(false);
+  const [selectedAuditorMember, setSelectedAuditorMember] = useState<MemberRecord | null>(null);
+  const [copiedGrantId, setCopiedGrantId] = useState<string | null>(null);
   const [isAuditorPortalOpen, setIsAuditorPortalOpen] = useState<boolean>(false);
   const [auditorTick, setAuditorTick] = useState<number>(0);
 
@@ -102,6 +107,12 @@ export const AuthorizedPersonsModal: React.FC<AuthorizedPersonsModalProps> = ({
       setAuditorGrants(getStoredAuditorGrants(campaign.id));
     }
   }, [campaign?.id, auditorTick]);
+
+  useEffect(() => {
+    const handleGrantsUpdated = () => setAuditorTick(t => t + 1);
+    window.addEventListener('ronpay_auditor_grants_updated', handleGrantsUpdated);
+    return () => window.removeEventListener('ronpay_auditor_grants_updated', handleGrantsUpdated);
+  }, []);
 
   // Form fields for assigning/editing Authorized Officer
   const [formName, setFormName] = useState<string>('');
@@ -772,61 +783,167 @@ export const AuthorizedPersonsModal: React.FC<AuthorizedPersonsModalProps> = ({
   }, [campaign]);
 
   // Auditor Grant Handlers
+  const filteredAuditorMembers = useMemo(() => {
+    if (!availableMembers || availableMembers.length === 0) return [];
+    const q = auditorMemberSearch.trim().toLowerCase();
+    if (!q) return availableMembers.slice(0, 25);
+    return availableMembers.filter(m => {
+      const name = (m.name || '').toLowerCase();
+      const id = (m.id || '').toLowerCase();
+      const phone = (m.fullPhone || m.phone || m.phoneLast4 || '').toLowerCase();
+      const sec = (m.section || '').toLowerCase();
+      return name.includes(q) || id.includes(q) || phone.includes(q) || sec.includes(q);
+    }).slice(0, 30);
+  }, [availableMembers, auditorMemberSearch]);
+
+  const handleSelectAuditorFromRoll = (mem: MemberRecord) => {
+    setSelectedAuditorMember(mem);
+    setAuditorNameInput(mem.name);
+    const phoneCand = (mem.fullPhone || mem.phone || '').replace(/\D/g, '').slice(-10);
+    if (phoneCand) setAuditorPhoneInput(phoneCand);
+    if (!auditorNotesInput) {
+      setAuditorNotesInput(`Member Roll: ${mem.id}${mem.section ? ` (${mem.section})` : ''} - Sum Endiktu`);
+    }
+    setIsAuditorMemberDropdownOpen(false);
+    setAuditorMemberSearch('');
+  };
+
+  const buildAuditorInviteMessage = (grant: AuditorAccessGrant) => {
+    const appOrigin = typeof window !== 'undefined' ? window.location.origin : 'https://ronpay.app';
+    const name = grant.auditorName || grant.auditor_name || 'Auditor';
+    const phone = grant.auditorPhone || grant.auditor_phone || '';
+    const pin = grant.pin || '1234';
+    const expStr = formatDateTimeDDMMYYYY(grant.expiresAt || grant.expires_at || '');
+    return [
+      `⚖️ *RONPAY - SUM ENDIKTU (AUDITOR) RUATNA*`,
+      ``,
+      `Chibai *${name}*,`,
+      `*${campaign?.title || grant.campaignTitle}* sum dinhmun, receipt leh expenditure voucher-te online-a enfiah (Audit) turin ruat i ni e.`,
+      ``,
+      `🔐 *Auditor Login Details:*`,
+      `• App Link: ${appOrigin}/?view=app`,
+      `• Login Phone: *+91 ${phone}*`,
+      `• Security MPIN: *${pin}* (SMS OTP *123456* pawh a hman theih)`,
+      `• Access Tawp Hun: *${expStr}*`,
+      ``,
+      `📌 *Luh Dan:* RonPay App-ah khan i Phone Number (+91 ${phone}) leh Security MPIN (${pin}) hmangin Sign-In la, Home Screen-a *"Online Sum Endiktu (Auditor Portal)"* banner hmetin accounts enfiahna, Sign & Lock, leh Audit Certificate print-na i hmang thei nghal ang.`
+    ].join('\n');
+  };
+
+  const handleShareAuditorWhatsApp = (grant: AuditorAccessGrant) => {
+    const text = buildAuditorInviteMessage(grant);
+    const cleanPhone = String(grant.auditorPhone || grant.auditor_phone || '').replace(/\D/g, '').slice(-10);
+    const waUrl = `https://wa.me/${cleanPhone.length === 10 ? '91' + cleanPhone : ''}?text=${encodeURIComponent(text)}`;
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(text).catch(() => {});
+    }
+    const a = document.createElement('a');
+    a.href = waUrl;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    showToast(`📲 WhatsApp hriattirna siam fel a ni (Clipboard-ah copy tel nghal a ni).`);
+  };
+
+  const handleCopyAuditorInvite = (grant: AuditorAccessGrant) => {
+    const text = buildAuditorInviteMessage(grant);
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(text).catch(() => {});
+    }
+    setCopiedGrantId(grant.id);
+    showToast('📋 Auditor Login Invite leh PIN chu Clipboard-ah copy a ni ta!');
+    setTimeout(() => setCopiedGrantId(null), 2500);
+  };
+
+  const handleExtendAuditorGrant = (grant: AuditorAccessGrant, extraHours: number = 24) => {
+    const nowMs = Date.now();
+    const currentExpMs = new Date(grant.expiresAt || grant.expires_at || 0).getTime();
+    const baseMs = currentExpMs > nowMs ? currentExpMs : nowMs;
+    const newExpiresIso = new Date(baseMs + extraHours * 60 * 60 * 1000).toISOString();
+    const updatedGrant: AuditorAccessGrant = {
+      ...grant,
+      status: 'active',
+      expiresAt: newExpiresIso,
+      expires_at: newExpiresIso,
+      updatedAt: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    saveAuditorGrant(updatedGrant);
+    setAuditorTick(t => t + 1);
+    showToast(`⏱️ Auditor ${grant.auditorName || grant.auditor_name} access chu darkar +${extraHours}h-in pawhsei a ni e!`);
+  };
+
   const handleCreateAuditorGrant = (e: React.FormEvent) => {
     e.preventDefault();
     if (!campaign) return;
 
     const trimmedName = auditorNameInput.trim();
-    const cleanPhone = auditorPhoneInput.replace(/\D/g, '');
+    const cleanPhone = auditorPhoneInput.replace(/\D/g, '').slice(-10);
+    const cleanPin = auditorPinInput.trim() || '1234';
 
     if (!trimmedName) {
-      alert('Auditor hming ziah luh a ngai e.');
+      showToast('⚠️ Auditor hming ziah luh a ngai e.');
       return;
     }
     if (cleanPhone.length < 10) {
-      alert('Auditor phone number (10 digit) dik ziah luh a ngai e.');
+      showToast('⚠️ Auditor phone number (10 digit) dik ziah luh a ngai e.');
+      return;
+    }
+    if (cleanPin.length < 4) {
+      showToast('⚠️ Audit Security PIN hi digit 4 tal a ni tur a ni.');
       return;
     }
 
     const now = new Date();
     const expiresAt = new Date(now.getTime() + auditorDurationHours * 60 * 60 * 1000).toISOString();
 
+    // Check if an active grant already exists for this phone on this campaign; if so, update it
+    const existingGrant = auditorGrants.find(
+      g => String(g.auditorPhone || g.auditor_phone || '').replace(/\D/g, '').slice(-10) === cleanPhone
+    );
+
     const newGrant: AuditorAccessGrant = {
-      id: `GRANT_${Date.now()}_${Math.random().toString(36).substring(2, 6).toUpperCase()}`,
+      id: existingGrant ? existingGrant.id : `GRANT_${Date.now()}_${Math.random().toString(36).substring(2, 6).toUpperCase()}`,
       auditorName: trimmedName,
       auditor_name: trimmedName,
-      auditorPhone: cleanPhone.slice(-10),
-      auditor_phone: cleanPhone.slice(-10),
+      auditorPhone: cleanPhone,
+      auditor_phone: cleanPhone,
+      memberId: selectedAuditorMember?.id || existingGrant?.memberId,
+      section: selectedAuditorMember?.section || existingGrant?.section,
+      pin: cleanPin,
       campaignId: campaign.id,
       campaign_id: campaign.id,
       campaignTitle: campaign.title,
       campaign_title: campaign.title,
       grantedBy: creatorProfile?.name || 'Creator',
       granted_by: creatorProfile?.name || 'Creator',
+      grantedByName: creatorProfile?.name || 'Creator',
       grantedAt: now.toISOString(),
       granted_at: now.toISOString(),
       expiresAt: expiresAt,
       expires_at: expiresAt,
       status: 'active',
-      notes: auditorNotesInput.trim() || 'Temporary audit verification access',
+      notes: auditorNotesInput.trim() || `Financial Audit Access (${auditorDurationHours} Hours)`,
       permissions: ['AUDIT_FINANCIAL_REPORTS', 'MANAGE_AUDITOR_GRANTS']
     };
 
     saveAuditorGrant(newGrant);
     setAuditorTick(t => t + 1);
     setIsAddAuditorOpen(false);
+    setSelectedAuditorMember(null);
     setAuditorNameInput('');
     setAuditorPhoneInput('');
+    setAuditorPinInput('1234');
     setAuditorNotesInput('');
-    setToastMessage(`✅ Auditor ${trimmedName} tan temporary access (${auditorDurationHours}h) siam fel a ni e!`);
-    setTimeout(() => setToastMessage(null), 3500);
+    showToast(`✅ Auditor ${trimmedName} (+91 ${cleanPhone}, PIN: ${cleanPin}) ruat fel a ni e!`);
   };
 
   const handleRevokeGrant = (grantId: string) => {
     revokeAuditorGrant(grantId, creatorProfile?.name || 'Creator');
     setAuditorTick(t => t + 1);
-    setToastMessage('Auditor access tihtawp (revoked) a ni ta.');
-    setTimeout(() => setToastMessage(null), 3000);
+    showToast('🛑 Auditor access tihtawp (revoked) a ni ta.');
   };
 
   if (!isOpen || !campaign) return null;
@@ -1436,20 +1553,23 @@ export const AuthorizedPersonsModal: React.FC<AuthorizedPersonsModalProps> = ({
             <div className="space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200/80 p-4 rounded-2xl">
                 <div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <ShieldCheck className="w-5 h-5 text-amber-700" />
                     <h3 className="font-extrabold text-sm sm:text-base text-amber-950">
                       Sum Endiktu (Auditor) Ruatna & Temporary Access
                     </h3>
+                    <span className="text-[10px] font-black uppercase bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full border border-emerald-300">
+                      Cloud Synced
+                    </span>
                   </div>
                   <p className="text-xs text-amber-900/80 mt-1">
-                    Creator-in he Bawm audit tu tur hi temporary access (24h / 48h / 7 days) i ruat thei a, hun a ral rualin access a in-revoke nghal ang.
+                    He Bawm sum dinhmun, receipt leh expenditure voucher endiktu tur ruat rawh. Auditor-in amah phone aṭangin a Phone Number leh Audit PIN hmangin a login thei nghal ang.
                   </p>
                 </div>
                 <button
                   type="button"
                   onClick={() => setIsAddAuditorOpen(!isAddAuditorOpen)}
-                  className="py-2.5 px-4 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold shadow-xs transition flex items-center justify-center gap-1.5 shrink-0"
+                  className="py-2.5 px-4 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold shadow-xs transition flex items-center justify-center gap-1.5 shrink-0 cursor-pointer"
                 >
                   <UserPlus className="w-4 h-4" />
                   <span>{isAddAuditorOpen ? 'Form Khár Rawh' : 'Auditor Thar Ruat Rawh'}</span>
@@ -1459,12 +1579,115 @@ export const AuthorizedPersonsModal: React.FC<AuthorizedPersonsModalProps> = ({
               {/* Add Auditor Form */}
               {isAddAuditorOpen && (
                 <form onSubmit={handleCreateAuditorGrant} className="bg-white border border-amber-300 rounded-2xl p-4 sm:p-5 space-y-4 shadow-sm animate-fadeIn">
-                  <h4 className="font-bold text-xs uppercase tracking-wider text-slate-800 flex items-center gap-2">
-                    <UserCheck className="w-4 h-4 text-amber-600" />
-                    <span>Auditor Thar Ruatna Form</span>
-                  </h4>
+                  <div className="flex items-center justify-between border-b border-amber-100 pb-2.5">
+                    <h4 className="font-black text-xs uppercase tracking-wider text-slate-800 flex items-center gap-2">
+                      <UserCheck className="w-4 h-4 text-amber-600" />
+                      <span>Auditor Thar Ruatna Form</span>
+                    </h4>
+                    <span className="text-[10px] text-amber-700 font-bold bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+                      Member Roll Emaw External Auditor
+                    </span>
+                  </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {/* Optional Quick-Pick from Member Roll */}
+                  {availableMembers.length > 0 && (
+                    <div className="bg-amber-50/60 border border-amber-200 rounded-xl p-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <label className="text-[11px] font-black text-amber-950 flex items-center gap-1.5">
+                          <BookOpen className="w-3.5 h-3.5 text-amber-700" />
+                          <span>Member Roll Aṭanga Thlan Chhuahna (Optional Quick Fill)</span>
+                        </label>
+                        {selectedAuditorMember && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedAuditorMember(null);
+                              setAuditorNameInput('');
+                              setAuditorPhoneInput('');
+                            }}
+                            className="text-[10px] font-bold text-rose-600 hover:underline cursor-pointer"
+                          >
+                            Clear Selection
+                          </button>
+                        )}
+                      </div>
+
+                      {selectedAuditorMember ? (
+                        <div className="bg-emerald-50 border border-emerald-300 rounded-xl p-2.5 flex items-center justify-between text-xs">
+                          <div className="flex items-center gap-2">
+                            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                            <div>
+                              <span className="font-black text-emerald-950">{selectedAuditorMember.name}</span>
+                              <span className="ml-2 text-[10px] font-mono bg-emerald-200/70 text-emerald-900 px-1.5 py-0.5 rounded">
+                                {selectedAuditorMember.id}
+                              </span>
+                              {selectedAuditorMember.section && (
+                                <span className="ml-1.5 text-[10px] text-emerald-800 font-bold">
+                                  • {selectedAuditorMember.section}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="relative">
+                          <div className="relative flex items-center">
+                            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3" />
+                            <input
+                              type="text"
+                              value={auditorMemberSearch}
+                              onFocus={() => setIsAuditorMemberDropdownOpen(true)}
+                              onChange={e => {
+                                setAuditorMemberSearch(e.target.value);
+                                setIsAuditorMemberDropdownOpen(true);
+                              }}
+                              placeholder="Member Roll aṭanga zawnna (Hming, Roll ID, Phone)... Emaw a hnuaiah chhu lut direct rawh"
+                              className="w-full text-xs pl-8 pr-8 py-2 bg-white rounded-xl border border-amber-200 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                            />
+                            {isAuditorMemberDropdownOpen && (
+                              <button
+                                type="button"
+                                onClick={() => setIsAuditorMemberDropdownOpen(false)}
+                                className="absolute right-2.5 text-slate-400 hover:text-slate-600"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+
+                          {isAuditorMemberDropdownOpen && filteredAuditorMembers.length > 0 && (
+                            <div className="absolute z-30 mt-1 w-full bg-white border border-slate-200 rounded-xl shadow-xl max-h-48 overflow-y-auto divide-y divide-slate-100">
+                              {filteredAuditorMembers.map(mem => (
+                                <button
+                                  key={mem.id}
+                                  type="button"
+                                  onClick={() => handleSelectAuditorFromRoll(mem)}
+                                  className="w-full text-left px-3 py-2 hover:bg-amber-50 transition flex items-center justify-between text-xs cursor-pointer"
+                                >
+                                  <div>
+                                    <span className="font-bold text-slate-900">{mem.name}</span>
+                                    <span className="ml-1.5 text-[10px] font-mono text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded">
+                                      {mem.id}
+                                    </span>
+                                    {mem.section && (
+                                      <span className="ml-1.5 text-[10px] text-slate-500">
+                                        ({mem.section})
+                                      </span>
+                                    )}
+                                  </div>
+                                  <span className="text-[10px] font-mono text-slate-500">
+                                    {mem.fullPhone || mem.phone || (mem.phoneLast4 ? `••••${mem.phoneLast4}` : 'No phone')}
+                                  </span>
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div>
                       <label className="block text-xs font-bold text-slate-700 mb-1">
                         Auditor Hming (Name) *
@@ -1475,21 +1698,48 @@ export const AuthorizedPersonsModal: React.FC<AuthorizedPersonsModalProps> = ({
                         value={auditorNameInput}
                         onChange={e => setAuditorNameInput(e.target.value)}
                         placeholder="Entirnan: C. Lalrammawia"
-                        className="w-full text-xs p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                        className="w-full text-xs p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-amber-500 font-bold"
                       />
                     </div>
                     <div>
                       <label className="block text-xs font-bold text-slate-700 mb-1">
-                        Auditor Phone Number *
+                        Auditor Phone Number (10 Digit) *
                       </label>
                       <input
                         type="tel"
                         required
+                        maxLength={10}
                         value={auditorPhoneInput}
-                        onChange={e => setAuditorPhoneInput(e.target.value)}
-                        placeholder="10 digit mobile number"
-                        className="w-full text-xs p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-amber-500 font-mono"
+                        onChange={e => setAuditorPhoneInput(e.target.value.replace(/\D/g, '').slice(-10))}
+                        placeholder="9862xxxxxx"
+                        className="w-full text-xs p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-amber-500 font-mono font-bold"
                       />
+                    </div>
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="block text-xs font-bold text-slate-700">
+                          Audit Login PIN (4-Digit) *
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => setAuditorPinInput(String(Math.floor(1000 + Math.random() * 9000)))}
+                          className="text-[10px] font-bold text-indigo-600 hover:underline cursor-pointer"
+                        >
+                          Random PIN
+                        </button>
+                      </div>
+                      <div className="relative">
+                        <Key className="w-3.5 h-3.5 text-amber-600 absolute left-3 top-2.5" />
+                        <input
+                          type="text"
+                          required
+                          maxLength={6}
+                          value={auditorPinInput}
+                          onChange={e => setAuditorPinInput(e.target.value.replace(/\s+/g, ''))}
+                          placeholder="1234"
+                          className="w-full text-xs pl-8 pr-3 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-amber-500 font-mono font-black tracking-widest text-amber-950"
+                        />
+                      </div>
                     </div>
                   </div>
 
@@ -1508,7 +1758,7 @@ export const AuthorizedPersonsModal: React.FC<AuthorizedPersonsModalProps> = ({
                           key={d.hours}
                           type="button"
                           onClick={() => setAuditorDurationHours(d.hours)}
-                          className={`py-2 px-3 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-1.5 ${
+                          className={`py-2 px-3 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
                             auditorDurationHours === d.hours
                               ? 'bg-amber-100 border-amber-400 text-amber-900 shadow-2xs'
                               : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
@@ -1529,7 +1779,7 @@ export const AuthorizedPersonsModal: React.FC<AuthorizedPersonsModalProps> = ({
                       type="text"
                       value={auditorNotesInput}
                       onChange={e => setAuditorNotesInput(e.target.value)}
-                      placeholder="Entirnan: Financial Year 2024-2025 Audit endik turin..."
+                      placeholder="Entirnan: Kumtluang / Annual Financial Audit endik turin..."
                       className="w-full text-xs p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-amber-500"
                     />
                   </div>
@@ -1538,13 +1788,13 @@ export const AuthorizedPersonsModal: React.FC<AuthorizedPersonsModalProps> = ({
                     <button
                       type="button"
                       onClick={() => setIsAddAuditorOpen(false)}
-                      className="py-2 px-3.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50"
+                      className="py-2 px-3.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50 cursor-pointer"
                     >
                       Thulh Leh Rawh
                     </button>
                     <button
                       type="submit"
-                      className="py-2 px-4 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold shadow-xs transition flex items-center gap-1.5"
+                      className="py-2 px-4 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold shadow-xs transition flex items-center gap-1.5 cursor-pointer"
                     >
                       <Check className="w-4 h-4" />
                       <span>Ruat La Access Pe Rawh</span>
@@ -1553,6 +1803,19 @@ export const AuthorizedPersonsModal: React.FC<AuthorizedPersonsModalProps> = ({
                 </form>
               )}
 
+              {/* How Auditor Login Works Info Box */}
+              <div className="bg-indigo-50/70 border border-indigo-200 rounded-2xl p-3.5 text-xs text-indigo-950 flex items-start gap-3">
+                <Key className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <span className="font-black text-indigo-950 block">Auditor Login & Endik Dan Kalhmang:</span>
+                  <p className="text-[11px] text-indigo-900/90 leading-relaxed">
+                    1. Auditor i ruat zawhah a card-a <strong>"WhatsApp Invite"</strong> emaw <strong>"Copy Login Info"</strong> hmetin Auditor hnenah thawn rawh.<br />
+                    2. Auditor chuan RonPay App-ah a <strong>Phone Number</strong> leh <strong>Audit PIN</strong> (emaw SMS OTP <code>123456</code>) hmangin a Sign-In ang.<br />
+                    3. A login rualin Home Screen-ah <strong>"⚖️ Online Sum Endiktu (Auditor Portal)"</strong> a lo inhawng nghal ang a; Inflow, Senso, Checklist, Sign & Lock, leh Audit Certificate Print a ti thei nghal ang.
+                  </p>
+                </div>
+              </div>
+
               {/* Auditor Grants List */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between text-xs font-bold text-slate-700">
@@ -1560,7 +1823,7 @@ export const AuthorizedPersonsModal: React.FC<AuthorizedPersonsModalProps> = ({
                   <button
                     type="button"
                     onClick={() => setIsAuditorPortalOpen(true)}
-                    className="text-indigo-600 hover:text-indigo-800 flex items-center gap-1 font-bold"
+                    className="text-indigo-600 hover:text-indigo-800 flex items-center gap-1 font-bold cursor-pointer"
                   >
                     <Eye className="w-3.5 h-3.5" />
                     <span>Auditor Portal En Chhin Rawh</span>
@@ -1578,79 +1841,129 @@ export const AuthorizedPersonsModal: React.FC<AuthorizedPersonsModalProps> = ({
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     {auditorGrants.map(grant => {
-                      const isExpired = new Date(grant.expires_at).getTime() <= Date.now();
+                      const expIso = grant.expiresAt || grant.expires_at || '';
+                      const isExpired = new Date(expIso).getTime() <= Date.now();
                       const isActive = grant.status === 'active' && !isExpired;
-                      const remainingMs = Math.max(0, new Date(grant.expires_at).getTime() - Date.now());
+                      const remainingMs = Math.max(0, new Date(expIso).getTime() - Date.now());
                       const remainingHours = Math.floor(remainingMs / (1000 * 60 * 60));
+                      const displayName = grant.auditorName || grant.auditor_name || 'Auditor';
+                      const displayPhone = grant.auditorPhone || grant.auditor_phone || '';
+                      const displayPin = grant.pin || '1234';
 
                       return (
                         <div 
                           key={grant.id} 
-                          className={`p-4 rounded-2xl border transition space-y-2.5 ${
+                          className={`p-4 rounded-2xl border transition space-y-2.5 flex flex-col justify-between ${
                             isActive 
-                              ? 'bg-amber-50/50 border-amber-200 shadow-2xs' 
-                              : 'bg-slate-50 border-slate-200 opacity-80'
+                              ? 'bg-amber-50/50 border-amber-300 shadow-2xs' 
+                              : 'bg-slate-50 border-slate-200 opacity-85'
                           }`}
                         >
-                          <div className="flex items-start justify-between">
-                            <div>
-                              <div className="font-extrabold text-slate-900 text-sm flex items-center gap-1.5">
-                                <UserCheck className="w-4 h-4 text-amber-700 shrink-0" />
-                                <span>{grant.auditor_name}</span>
+                          <div className="space-y-2">
+                            <div className="flex items-start justify-between gap-2">
+                              <div>
+                                <div className="font-extrabold text-slate-900 text-sm flex items-center gap-1.5 flex-wrap">
+                                  <UserCheck className="w-4 h-4 text-amber-700 shrink-0" />
+                                  <span>{displayName}</span>
+                                  {grant.memberId && (
+                                    <span className="text-[9.5px] font-mono bg-amber-100 text-amber-900 px-1.5 py-0.5 rounded border border-amber-200">
+                                      {grant.memberId}
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="text-[11px] font-mono text-slate-600 flex items-center gap-2 mt-1 flex-wrap">
+                                  <span className="flex items-center gap-1">
+                                    <Phone className="w-3 h-3 text-slate-400" />
+                                    <span>+91 {displayPhone}</span>
+                                  </span>
+                                  <span className="bg-white px-2 py-0.5 rounded border border-amber-200 text-amber-950 font-black text-[10px]">
+                                    PIN: {displayPin}
+                                  </span>
+                                </div>
                               </div>
-                              <div className="text-[11px] font-mono text-slate-500 flex items-center gap-1 mt-0.5">
-                                <Phone className="w-3 h-3 text-slate-400" />
-                                <span>+91 {grant.auditor_phone}</span>
+                              <div>
+                                {isActive ? (
+                                  <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1">
+                                    <Clock className="w-2.5 h-2.5" />
+                                    <span>ACTIVE ({remainingHours}h la awm)</span>
+                                  </span>
+                                ) : grant.status === 'revoked' ? (
+                                  <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-md bg-rose-100 text-rose-800 border border-rose-300">
+                                    REVOKED
+                                  </span>
+                                ) : (
+                                  <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-md bg-slate-200 text-slate-700 border border-slate-300">
+                                    EXPIRED
+                                  </span>
+                                )}
                               </div>
                             </div>
-                            <div>
-                              {isActive ? (
-                                <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1">
-                                  <Clock className="w-2.5 h-2.5" />
-                                  <span>ACTIVE ({remainingHours}h la awm)</span>
-                                </span>
-                              ) : grant.status === 'revoked' ? (
-                                <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-md bg-rose-100 text-rose-800 border border-rose-300">
-                                  REVOKED
-                                </span>
-                              ) : (
-                                <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-md bg-slate-200 text-slate-700 border border-slate-300">
-                                  EXPIRED
-                                </span>
-                              )}
+
+                            {grant.notes && (
+                              <p className="text-[11px] text-slate-600 bg-white/80 p-2 rounded-xl border border-slate-200/70">
+                                {grant.notes}
+                              </p>
+                            )}
+
+                            <div className="text-[10px] text-slate-500 flex items-center justify-between pt-1 border-t border-slate-200/60">
+                              <span>Ruattu: {grant.grantedBy || grant.granted_by}</span>
+                              <span>Tawp hun: {formatDateDDMMYYYY(expIso)}</span>
                             </div>
                           </div>
 
-                          {grant.notes && (
-                            <p className="text-[11px] text-slate-600 bg-white/70 p-2 rounded-xl border border-slate-200/60">
-                              {grant.notes}
-                            </p>
-                          )}
-
-                          <div className="text-[10px] text-slate-400 flex items-center justify-between pt-1 border-t border-slate-200/60">
-                            <span>Ruattu: {grant.granted_by}</span>
-                            <span>Tawp hun: {formatDateDDMMYYYY(grant.expires_at)}</span>
-                          </div>
-
-                          <div className="flex items-center justify-end gap-2 pt-1">
-                            {isActive && (
+                          {/* Action Buttons */}
+                          <div className="flex flex-wrap items-center justify-between gap-1.5 pt-2 border-t border-amber-200/60">
+                            <div className="flex items-center gap-1.5">
                               <button
                                 type="button"
-                                onClick={() => handleRevokeGrant(grant.id)}
-                                className="py-1.5 px-2.5 rounded-lg border border-rose-200 text-rose-700 hover:bg-rose-50 text-[11px] font-bold transition flex items-center gap-1"
+                                onClick={() => handleShareAuditorWhatsApp(grant)}
+                                className="py-1.5 px-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[10.5px] font-bold transition flex items-center gap-1 shadow-2xs cursor-pointer"
+                                title="Send Login Credentials via WhatsApp"
                               >
-                                <Trash2 className="w-3 h-3" />
-                                <span>Revoke</span>
+                                <span>📲 WhatsApp Invite</span>
                               </button>
-                            )}
-                            <button
-                              type="button"
-                              onClick={() => setIsAuditorPortalOpen(true)}
-                              className="py-1.5 px-3 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-bold transition flex items-center gap-1 shadow-2xs"
-                            >
-                              <ShieldCheck className="w-3 h-3" />
-                              <span>Portal Hawng</span>
-                            </button>
+                              <button
+                                type="button"
+                                onClick={() => handleCopyAuditorInvite(grant)}
+                                className="py-1.5 px-2 rounded-lg bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 text-[10.5px] font-bold transition flex items-center gap-1 cursor-pointer"
+                                title="Copy Login Info"
+                              >
+                                {copiedGrantId === grant.id ? (
+                                  <span className="text-emerald-700 font-black">✓ Copied</span>
+                                ) : (
+                                  <span>📋 Copy Info</span>
+                                )}
+                              </button>
+                            </div>
+
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => handleExtendAuditorGrant(grant, 24)}
+                                className="py-1.5 px-2 rounded-lg border border-amber-300 bg-amber-100/70 hover:bg-amber-200 text-amber-950 text-[10.5px] font-bold transition cursor-pointer"
+                                title="Extend access by 24 Hours"
+                              >
+                                +24h Pawhsei
+                              </button>
+                              {isActive && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleRevokeGrant(grant.id)}
+                                  className="py-1.5 px-2 rounded-lg border border-rose-200 text-rose-700 hover:bg-rose-50 text-[10.5px] font-bold transition flex items-center gap-1 cursor-pointer"
+                                  title="Revoke Auditor Access"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => setIsAuditorPortalOpen(true)}
+                                className="py-1.5 px-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-[10.5px] font-bold transition flex items-center gap-1 shadow-2xs cursor-pointer"
+                              >
+                                <ShieldCheck className="w-3 h-3" />
+                                <span>Portal</span>
+                              </button>
+                            </div>
                           </div>
                         </div>
                       );

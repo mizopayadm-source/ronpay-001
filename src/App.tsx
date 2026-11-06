@@ -52,7 +52,9 @@ import {
   saveAdminAuthState,
   mergeTransactions,
   wipeAllClientStorage,
-  findAllBrowserCachedTransactions
+  findAllBrowserCachedTransactions,
+  getActiveAuditorGrantsForUser,
+  isApprovedQRCreator
 } from './utils/storage';
 import {
   fetchTableData,
@@ -208,6 +210,8 @@ export default function App() {
   const [isDesktopView, setIsDesktopView] = useState<boolean>(false);
   const [language, setLanguage] = useState<Language>('mizo');
   const [notificationCount, setNotificationCount] = useState<number>(3);
+  const [creatorRegInitialMode, setCreatorRegInitialMode] = useState<'login' | 'register'>('login');
+  const [creatorRegInitialPhone, setCreatorRegInitialPhone] = useState<string>('');
 
   // App Core Data States
   const [campaigns, setCampaigns] = useState<Campaign[]>(() => getStoredCampaigns());
@@ -297,7 +301,26 @@ export default function App() {
   const [auditorPortalCampaign, setAuditorPortalCampaign] = useState<Campaign | null>(null);
 
   const handleOpenAuditorPortal = useCallback((targetCampaign?: Campaign | null) => {
-    const camp = targetCampaign || selectedCampaign || campaignsRef.current[0] || null;
+    if (targetCampaign) {
+      setAuditorPortalCampaign(targetCampaign);
+      setIsAuditorPortalOpen(true);
+      return;
+    }
+
+    const currentProf = getStoredCreatorProfile();
+    const activeGrants = getActiveAuditorGrantsForUser(currentProf?.phone);
+    let assignedCamp: Campaign | null = null;
+
+    if (activeGrants.length > 0) {
+      const targetId = currentProf?.activeCampaignId || activeGrants[0].campaignId || activeGrants[0].campaign_id;
+      assignedCamp = campaignsRef.current.find(c => c.id === targetId) ||
+                     campaignsRef.current.find(c => activeGrants.some(g => (g.campaignId || g.campaign_id) === c.id)) ||
+                     null;
+    } else if (currentProf?.activeCampaignId) {
+      assignedCamp = campaignsRef.current.find(c => c.id === currentProf.activeCampaignId) || null;
+    }
+
+    const camp = assignedCamp || selectedCampaign || campaignsRef.current[0] || null;
     setAuditorPortalCampaign(camp);
     setIsAuditorPortalOpen(true);
   }, [selectedCampaign]);
@@ -337,6 +360,7 @@ export default function App() {
     const freshCampaigns = getStoredCampaigns();
     campaignsRef.current = freshCampaigns;
     setCampaigns(freshCampaigns);
+    setAuditorPortalCampaign(prev => prev ? (freshCampaigns.find(c => c.id === prev.id) || prev) : null);
     setCreators(getStoredCreatorsList());
     setCreatorProfile(getStoredCreatorProfile());
     setPricingConfig(getStoredPricingConfig());
@@ -1168,9 +1192,9 @@ export default function App() {
 
   // Handlers for Navigation
   const handleNavigate = (screen: ScreenId, options: { replace?: boolean } = { replace: false }) => {
-    // Biometric Security Gate for Creator Studio
+    // Biometric & QR Creator Approval Security Gate for Creator Studio
     if (screen === 'create_qr') {
-      if (!creatorProfile.isApproved || !creatorProfile.phone) {
+      if (!isApprovedQRCreator(creatorProfile)) {
         handleNavigate('creator_reg', options);
         return;
       }
@@ -1745,9 +1769,10 @@ export default function App() {
               publicPoolStats={publicPoolStats}
               onStartScanner={handleStartScanner}
               onCreateQRClick={() => {
-                if (creatorProfile.isApproved && creatorProfile.phone) {
+                if (isApprovedQRCreator(creatorProfile)) {
                   handleNavigate('create_qr');
                 } else {
+                  setCreatorRegInitialMode('login');
                   handleNavigate('creator_reg');
                 }
               }}
@@ -1832,9 +1857,11 @@ export default function App() {
           )}
 
           {currentScreen === 'create_qr' && (
-            (!creatorProfile.isApproved || !creatorProfile.phone) ? (
+            !isApprovedQRCreator(creatorProfile) ? (
               <CreatorRegScreen
                 creatorProfile={creatorProfile}
+                initialMode={creatorRegInitialMode}
+                initialPhone={creatorRegInitialPhone}
                 onBack={() => handleNavigate('home')}
                 onSuccess={(profile, cat) => {
                   invalidateCacheOnAuthOrBoot('auth_login');
@@ -1914,6 +1941,8 @@ export default function App() {
           {currentScreen === 'creator_reg' && (
             <CreatorRegScreen
               creatorProfile={creatorProfile}
+              initialMode={creatorRegInitialMode}
+              initialPhone={creatorRegInitialPhone}
               onBack={() => handleNavigate('home')}
               onSuccess={(profile, cat) => {
                 invalidateCacheOnAuthOrBoot('auth_login');
@@ -2087,7 +2116,8 @@ export default function App() {
           <BottomNav
             currentScreen={currentScreen}
             onNavigate={(screen) => {
-              if (screen === 'create_qr' && (!creatorProfile.isApproved || !creatorProfile.phone)) {
+              if (screen === 'create_qr' && !isApprovedQRCreator(creatorProfile)) {
+                setCreatorRegInitialMode('login');
                 handleNavigate('creator_reg');
               } else {
                 handleNavigate(screen);
@@ -2410,13 +2440,32 @@ export default function App() {
           onClose={() => setIsUpgradeModalOpen(false)}
           creatorProfile={creatorProfile}
           pricingConfig={pricingConfig}
-          onUpgradeApproved={(newCat) => {
-            const updated = {
+          onRequestUpgrade={(type, category, docName, reason) => {
+            const updated: CreatorProfile = {
               ...creatorProfile,
-              allowedCategories: [...(creatorProfile.allowedCategories || []), newCat],
+              pendingUpgrade: {
+                type,
+                category,
+                authDocName: docName,
+                reason,
+                requestedAt: new Date().toISOString(),
+              },
             };
             handleUpdateCreator(updated);
+            recordAuditLog(
+              `Creator Category ${type === 'add' ? 'Add' : 'Remove'} Requested`,
+              `${creatorProfile.name} (${creatorProfile.phone}) requested to ${type} category: ${category}. Reason: ${reason || 'N/A'}`,
+              'creator',
+              creatorProfile.phone
+            );
             setIsUpgradeModalOpen(false);
+          }}
+          onCancelUpgradeRequest={() => {
+            const updated: CreatorProfile = {
+              ...creatorProfile,
+              pendingUpgrade: undefined,
+            };
+            handleUpdateCreator(updated);
           }}
         />
 
@@ -2511,9 +2560,21 @@ export default function App() {
           biometricEnabled={biometricEnabled}
           onToggleBiometric={handleToggleBiometric}
           initialMethod={loginModalInitialMethod}
+          onOpenRegister={(regPhone) => {
+            setCreatorRegInitialMode('register');
+            setCreatorRegInitialPhone(regPhone || '');
+            handleNavigate('creator_reg');
+          }}
           onLoginSuccess={(newProfile) => {
             setCreatorProfile(newProfile);
             setIsLoginModalOpen(false);
+            if (newProfile.role === 'AUDITOR') {
+              const targetCamp = campaignsRef.current.find(c => c.id === newProfile.activeCampaignId);
+              if (targetCamp) {
+                setAuditorPortalCampaign(targetCamp);
+                setIsAuditorPortalOpen(true);
+              }
+            }
           }}
         />
 
@@ -2530,6 +2591,8 @@ export default function App() {
         <AuditorPortalModal
           isOpen={isAuditorPortalOpen}
           campaign={auditorPortalCampaign || campaigns[0] || null}
+          campaigns={campaigns}
+          onSelectCampaign={(camp) => setAuditorPortalCampaign(camp)}
           creatorProfile={creatorProfile}
           onClose={() => setIsAuditorPortalOpen(false)}
           onRecordsUpdated={reloadLocalData}
