@@ -90,6 +90,12 @@ export const formatFirebasePhoneError = (err: any): string => {
   if (code === 'auth/quota-exceeded') {
     return '⚠️ Vawiina Firebase SMS OTP thawn theih zat (Daily Quota) a zo rih.';
   }
+  if (code === 'auth/api-key-not-valid' || code.includes('api-key-not-valid') || msg.includes('API key not valid')) {
+    return '⚠️ Google API Key Restriction Error (auth/api-key-not-valid): Google Cloud Console -> APIs & Services -> Credentials ah lut la, he API Key hi edit rawh:\n1. Application restrictions: "None" (emaw Website restriction ah he domain hi dah tel rawh)\n2. API restrictions: "Don\'t restrict key" (emaw "Identity Toolkit API" allow rawh).\nSave hnuah re-try rawh.';
+  }
+  if (code === 'auth/operation-not-allowed' || msg.includes('SMS unable to be sent until this region enabled') || msg.includes('OPERATION_NOT_ALLOWED')) {
+    return '⚠️ SMS Region Policy Error: Firebase Console -> Authentication -> Settings -> "SMS region policy" ah India (+91) hi allowlist/enable rawh. (Emaw Authentication -> Sign-in method -> Phone -> "Phone numbers for testing" ah test number dah la, SMS chawi ngai lovin a test theih nghal bawk).';
+  }
   if (code === 'auth/captcha-check-failed' || code === 'auth/network-request-failed') {
     return '⚠️ Network emaw reCAPTCHA verification a tlawlh. Internet connection enfiah la tum nawn leh rawh.';
   }
