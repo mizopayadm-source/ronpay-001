@@ -2392,36 +2392,42 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
 
             {/* Custom Date Range Picker inputs when 'custom' is active */}
             {cashBookDateFilter === 'custom' && (
-              <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-200/60 animate-fadeIn bg-indigo-50/40 p-2 rounded-xl">
-                <span className="text-[11px] font-bold text-slate-600 flex items-center gap-1">
-                  <Calendar className="w-3.5 h-3.5 text-indigo-600" /> Date Thlan Bik:
-                </span>
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <input
-                    type="date"
-                    value={cashBookFromDate}
-                    onChange={(e) => setCashBookFromDate(e.target.value)}
-                    className="bg-white border border-slate-300 rounded-lg px-2 py-1 text-xs text-slate-800 font-mono outline-none focus:border-indigo-500 shadow-2xs"
-                    title="From Date (Atanga)"
-                  />
-                  <span className="text-slate-400 text-xs font-bold">to</span>
-                  <input
-                    type="date"
-                    value={cashBookToDate}
-                    onChange={(e) => setCashBookToDate(e.target.value)}
-                    className="bg-white border border-slate-300 rounded-lg px-2 py-1 text-xs text-slate-800 font-mono outline-none focus:border-indigo-500 shadow-2xs"
-                    title="To Date (Thlenga)"
-                  />
+              <div className="w-full pt-2 border-t border-slate-200/60 animate-fadeIn bg-indigo-50/50 p-2.5 sm:p-3 rounded-2xl border border-indigo-200 space-y-2">
+                <div className="flex items-center justify-between text-xs font-bold text-slate-700">
+                  <span className="flex items-center gap-1.5 font-black text-indigo-950">
+                    <Calendar className="w-3.5 h-3.5 text-indigo-600" />
+                    <span>📅 Date Thlan Bik (Custom Range):</span>
+                  </span>
                   {(cashBookFromDate || cashBookToDate) && (
                     <button
                       type="button"
                       onClick={() => { setCashBookFromDate(''); setCashBookToDate(''); }}
-                      className="text-xs text-slate-500 hover:text-slate-800 font-bold px-2 py-1 bg-white border border-slate-200 rounded-lg cursor-pointer transition"
+                      className="text-[11px] text-rose-600 hover:text-rose-800 font-bold underline cursor-pointer"
                       title="Clear custom dates"
                     >
                       Clear
                     </button>
                   )}
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div className="bg-white border border-slate-300 rounded-xl px-2.5 py-1.5 flex items-center justify-between gap-2 shadow-2xs">
+                    <span className="text-[11px] font-bold text-slate-600 shrink-0">Atanga (From):</span>
+                    <input
+                      type="date"
+                      value={cashBookFromDate}
+                      onChange={(e) => setCashBookFromDate(e.target.value)}
+                      className="w-full text-xs font-bold text-slate-800 outline-none bg-transparent"
+                    />
+                  </div>
+                  <div className="bg-white border border-slate-300 rounded-xl px-2.5 py-1.5 flex items-center justify-between gap-2 shadow-2xs">
+                    <span className="text-[11px] font-bold text-slate-600 shrink-0">Thleng (To):</span>
+                    <input
+                      type="date"
+                      value={cashBookToDate}
+                      onChange={(e) => setCashBookToDate(e.target.value)}
+                      className="w-full text-xs font-bold text-slate-800 outline-none bg-transparent"
+                    />
+                  </div>
                 </div>
               </div>
             )}
