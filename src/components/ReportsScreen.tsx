@@ -226,7 +226,9 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
   }), [chartStartMonth, chartEndMonth]);
 
 
-  // Live Supabase SSOT Data Fetch & Subscription
+  const [memberSyncTick, setMemberSyncTick] = useState(0);
+
+  // Live Supabase SSOT Data Fetch & Subscription + Local Event Sync
   useEffect(() => {
     let isMounted = true;
 
@@ -257,6 +259,40 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
 
     fetchLiveTxs();
 
+    const handleLocalTxOrMemberUpdate = () => {
+      if (!isMounted) return;
+      setMemberSyncTick(v => v + 1);
+      const latestStored = getStoredTransactions();
+      if (Array.isArray(latestStored) && latestStored.length > 0) {
+        setServerTransactions(prev => {
+          if (!prev || prev.length === 0) return latestStored;
+          const map = new Map<string, Transaction>();
+          prev.forEach(t => {
+            if (t && t.id) map.set(String(t.id).toLowerCase().trim(), t);
+          });
+          latestStored.forEach(t => {
+            if (!t || !t.id) return;
+            const k = String(t.id).toLowerCase().trim();
+            const existing = map.get(k);
+            if (!existing) {
+              map.set(k, t);
+            } else {
+              const tTime = new Date((t as any).updatedAt || t.createdAt || t.timestamp || 0).getTime();
+              const eTime = new Date((existing as any).updatedAt || existing.createdAt || existing.timestamp || 0).getTime();
+              if (tTime >= eTime) {
+                map.set(k, { ...existing, ...t });
+              }
+            }
+          });
+          return Array.from(map.values());
+        });
+      }
+    };
+
+    window.addEventListener('ronpay_transactions_updated', handleLocalTxOrMemberUpdate);
+    window.addEventListener('ronpay_members_updated', handleLocalTxOrMemberUpdate);
+    window.addEventListener('ronpay-members-updated', handleLocalTxOrMemberUpdate);
+
     // Event-driven real-time update (replaces heavy 5-second polling to eliminate egress quota waste)
     const unsub = subscribeToTable('transactions', async () => {
       if (!isMounted) return;
@@ -270,6 +306,9 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
 
     return () => {
       isMounted = false;
+      window.removeEventListener('ronpay_transactions_updated', handleLocalTxOrMemberUpdate);
+      window.removeEventListener('ronpay_members_updated', handleLocalTxOrMemberUpdate);
+      window.removeEventListener('ronpay-members-updated', handleLocalTxOrMemberUpdate);
       if (unsub && typeof unsub.unsubscribe === 'function') {
         try {
           unsub.unsubscribe();
@@ -279,38 +318,74 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
   }, []);
 
   const effectiveTransactions = useMemo(() => {
-    // Authoritative Transactions: Match 100% with Home Screen ledger & Supabase SSOT
-    let baseList: Transaction[] = [];
+    // Authoritative Transactions: Merge serverTransactions, prop transactions, and getStoredTransactions by updatedAt
+    const mergedMap = new Map<string, Transaction>();
+    const addListToMap = (list: Transaction[] | null | undefined) => {
+      if (!Array.isArray(list)) return;
+      for (const t of list) {
+        if (!t || !t.id) continue;
+        const k = String(t.id).toLowerCase().trim();
+        const existing = mergedMap.get(k);
+        if (!existing) {
+          mergedMap.set(k, t);
+        } else {
+          const tTime = new Date((t as any).updatedAt || t.createdAt || t.timestamp || 0).getTime();
+          const eTime = new Date((existing as any).updatedAt || existing.createdAt || existing.timestamp || 0).getTime();
+          if (tTime >= eTime) {
+            mergedMap.set(k, { ...existing, ...t });
+          }
+        }
+      }
+    };
 
-    if (Array.isArray(serverTransactions) && serverTransactions.length > 0) {
-      baseList = [...serverTransactions];
-    } else if (Array.isArray(transactions) && transactions.length > 0) {
-      baseList = [...transactions];
-    } else {
-      const stored = getStoredTransactions();
-      if (Array.isArray(stored) && stored.length > 0) {
-        baseList = stored;
-      } else if (Array.isArray(INITIAL_TRANSACTIONS) && INITIAL_TRANSACTIONS.length > 0) {
-        baseList = [...INITIAL_TRANSACTIONS];
+    addListToMap(serverTransactions);
+    addListToMap(transactions);
+    addListToMap(getStoredTransactions());
+
+    let baseList = Array.from(mergedMap.values());
+    if (baseList.length === 0 && Array.isArray(INITIAL_TRANSACTIONS) && INITIAL_TRANSACTIONS.length > 0) {
+      baseList = [...INITIAL_TRANSACTIONS];
+    }
+
+    // Overlay latest Member Name and Bial Hming (Section) from Member Registry if memberId matches
+    const allMems = getMembers();
+    const memMap = new Map<string, MemberRecord>();
+    for (const m of allMems) {
+      if (m && m.id) {
+        const mid = m.id.toLowerCase().trim();
+        memMap.set(mid, m);
+        if (mid.startsWith('ebe-')) memMap.set('bcm-' + mid.slice(4), m);
+        if (mid.startsWith('bcm-')) memMap.set('ebe-' + mid.slice(4), m);
       }
     }
 
-    if (baseList.length === 0) {
-      const stored = getStoredTransactions();
-      baseList = (Array.isArray(stored) && stored.length > 0) 
-        ? stored 
-        : (Array.isArray(INITIAL_TRANSACTIONS) ? [...INITIAL_TRANSACTIONS] : []);
-    }
-
     const deletedIds = getDeletedTransactionIds();
-    return baseList.filter(t => {
-      if (!t || !t.id) return false;
-      const cleanId = String(t.id).toLowerCase().trim();
-      if (deletedIds.has(cleanId) || PERMANENTLY_PURGED_TX_IDS.has(cleanId)) return false;
-      // Exact parity with HomeScreen: Must be confirmed with positive amount
-      return isConfirmedTransaction(t) && Number(t.amount) > 0;
-    });
-  }, [transactions, serverTransactions]);
+    return baseList
+      .filter(t => {
+        if (!t || !t.id) return false;
+        const cleanId = String(t.id).toLowerCase().trim();
+        if (deletedIds.has(cleanId) || PERMANENTLY_PURGED_TX_IDS.has(cleanId)) return false;
+        return isConfirmedTransaction(t) && Number(t.amount) > 0;
+      })
+      .map(t => {
+        if (t.memberId) {
+          const mem = memMap.get(t.memberId.toLowerCase().trim());
+          if (mem) {
+            const memTime = new Date(mem.updatedAt || mem.createdAt || 0).getTime();
+            const txTime = new Date((t as any).updatedAt || t.createdAt || t.timestamp || 0).getTime();
+            if (memTime >= txTime || !t.donorVeng) {
+              return {
+                ...t,
+                donorName: mem.name || t.donorName,
+                donorVeng: mem.section || t.donorVeng,
+                section: mem.section || (t as any).section
+              };
+            }
+          }
+        }
+        return t;
+      });
+  }, [transactions, serverTransactions, memberSyncTick]);
 
   const userRole = getUserRole(creatorProfile);
   const isSuperAdmin = userRole === 'SUPER_ADMIN' || creatorProfile?.role === 'SUPER_ADMIN' || (typeof window !== 'undefined' && (localStorage.getItem('ronpay_admin_role') === 'SUPER_ADMIN' || sessionStorage.getItem('ronpay_admin_role') === 'SUPER_ADMIN'));

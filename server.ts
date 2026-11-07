@@ -5063,42 +5063,61 @@ async function syncFromSupabase(db: DatabaseSchema, force: boolean = false): Pro
         return true;
       });
 
-      const normalizedList = validRows.map(row => ({
-        id: row.id,
-        campaignId: row.campaign_id || row.campaignId || '',
-        campaignTitle: row.campaign_title || row.campaignTitle || '',
-        category: row.category || '',
-        donorName: row.donor_name || row.donorName || '',
-        donorPhone: row.donor_phone || row.donorPhone || '',
-        donorVeng: row.donor_veng || row.donorVeng || '',
-        memberId: row.member_id || row.memberId || '',
-        donorType: row.donor_type || row.donorType || 'member',
-        isAnonymous: row.is_anonymous ?? row.isAnonymous ?? false,
-        amount: Number(row.amount) || 0,
-        platformFee: Number(row.platform_fee ?? row.platformFee ?? 0),
-        totalAmount: Number(row.total_amount ?? row.totalAmount ?? row.amount ?? 0),
-        paymentMethod: row.payment_method || row.paymentMethod || 'cash',
-        status: row.status || 'completed',
-        remark: row.remark || '',
-        periodType: row.period_type || row.periodType || 'monthly',
-        periodMonth: row.period_month || row.periodMonth || '',
-        periodYear: row.period_year || row.periodYear || '',
-        periodLabel: row.period_label || row.periodLabel || '',
-        utr: row.utr || '',
-        referenceNo: row.reference_no || row.referenceNo || '',
-        timestamp: row.timestamp || row.created_at || new Date().toISOString(),
-        createdAt: row.created_at || row.timestamp || new Date().toISOString(),
-        updatedAt: row.updated_at || row.updatedAt || new Date().toISOString(),
-        metadata: row.metadata || {}
-      }));
+      const delTxSet = new Set((db.deletedTransactionIds || []).map((id: string) => String(id).toLowerCase().trim()));
+      const normalizedList = validRows
+        .filter(row => !delTxSet.has(String(row.id).toLowerCase().trim()))
+        .map(row => {
+          const meta = row.metadata || {};
+          const effectiveVeng = row.donor_veng || row.donorVeng || meta.donorVeng || meta.section || '';
+          return {
+            ...meta,
+            id: row.id,
+            campaignId: row.campaign_id || row.campaignId || '',
+            campaignTitle: row.campaign_title || row.campaignTitle || '',
+            category: row.category || '',
+            donorName: row.donor_name || row.donorName || meta.donorName || '',
+            donorPhone: row.donor_phone || row.donorPhone || meta.donorPhone || '',
+            donorVeng: effectiveVeng,
+            section: effectiveVeng || meta.section || '',
+            memberId: row.member_id || row.memberId || meta.memberId || '',
+            donorType: row.donor_type || row.donorType || 'member',
+            isAnonymous: row.is_anonymous ?? row.isAnonymous ?? false,
+            amount: Number(row.amount) || 0,
+            platformFee: Number(row.platform_fee ?? row.platformFee ?? 0),
+            totalAmount: Number(row.total_amount ?? row.totalAmount ?? row.amount ?? 0),
+            paymentMethod: row.payment_method || row.paymentMethod || 'cash',
+            status: row.status || 'completed',
+            remark: row.remark || '',
+            periodType: row.period_type || row.periodType || 'monthly',
+            periodMonth: row.period_month || row.periodMonth || '',
+            periodYear: row.period_year || row.periodYear || '',
+            periodLabel: row.period_label || row.periodLabel || '',
+            utr: row.utr || '',
+            referenceNo: row.reference_no || row.referenceNo || '',
+            subCategory: row.sub_category || row.subCategory || meta.subCategory || '',
+            subCategoryBreakdown: meta.subCategoryBreakdown || row.subCategoryBreakdown || undefined,
+            audit_mark: meta.audit_mark || row.audit_mark || undefined,
+            audit_remark: meta.audit_remark || row.audit_remark || undefined,
+            audited_by: meta.audited_by || row.audited_by || undefined,
+            audited_at: meta.audited_at || row.audited_at || undefined,
+            is_locked: Boolean(meta.is_locked ?? row.is_locked ?? false),
+            locked_by: meta.locked_by || row.locked_by || undefined,
+            locked_at: meta.locked_at || row.locked_at || undefined,
+            timestamp: row.timestamp || row.created_at || new Date().toISOString(),
+            createdAt: row.created_at || row.timestamp || new Date().toISOString(),
+            updatedAt: row.updated_at || row.updatedAt || new Date().toISOString(),
+            metadata: meta
+          };
+        });
 
-      normalizedList.sort((a: any, b: any) => {
+      const mergedTxs = mergeCollections(db.transactions || [], normalizedList, 'id', delTxSet);
+      mergedTxs.sort((a: any, b: any) => {
         const timeA = new Date(a.updatedAt || a.createdAt || a.timestamp || 0).getTime();
         const timeB = new Date(b.updatedAt || b.createdAt || b.timestamp || 0).getTime();
         return timeB - timeA;
       });
 
-      db.transactions = normalizedList;
+      db.transactions = mergedTxs;
     }
 
     // 2. Fetch campaigns from Supabase
@@ -5333,6 +5352,40 @@ app.post('/api/data/sync', (req: Request, res: Response) => {
     if (Array.isArray(body.members) && body.members.length > 0) {
       const delMemSet = new Set<string>((db.deletedMemberIds || []).map((id: string) => String(id).toLowerCase().trim()));
       db.members = mergeCollections(db.members || [], body.members, 'id', delMemSet);
+
+      // Cascade member name and section (Bial Hming) updates to matching transactions in db.transactions
+      for (const m of body.members) {
+        if (!m || !m.id) continue;
+        const cleanMid = String(m.id).toLowerCase().trim();
+        const oldMid = String(m.oldId || m._oldId || '').toLowerCase().trim();
+        const matchSet = new Set<string>([cleanMid]);
+        if (oldMid) matchSet.add(oldMid);
+        if (cleanMid.startsWith('ebe-')) matchSet.add('bcm-' + cleanMid.slice(4));
+        if (cleanMid.startsWith('bcm-')) matchSet.add('ebe-' + cleanMid.slice(4));
+
+        if (m.name || m.section) {
+          db.transactions = (db.transactions || []).map((t: any) => {
+            const tMid = String(t.memberId || '').toLowerCase().trim();
+            if (matchSet.has(tMid)) {
+              return {
+                ...t,
+                memberId: m.id,
+                donorName: m.name || t.donorName,
+                donorVeng: m.section || t.donorVeng,
+                section: m.section || t.section,
+                updatedAt: new Date().toISOString(),
+                metadata: {
+                  ...(t.metadata || {}),
+                  donorName: m.name || t.donorName,
+                  donorVeng: m.section || t.donorVeng,
+                  section: m.section || t.section
+                }
+              };
+            }
+            return t;
+          });
+        }
+      }
     }
     if (Array.isArray(body.transactions) && body.transactions.length > 0) {
       const delTxSet = new Set<string>((db.deletedTransactionIds || []).map((id: string) => String(id).toLowerCase().trim()));
@@ -5399,6 +5452,18 @@ app.post('/api/data/sync', (req: Request, res: Response) => {
     }
 
     saveDatabase(db);
+    if (
+      (Array.isArray(body.members) && body.members.length > 0) ||
+      (Array.isArray(body.transactions) && body.transactions.length > 0) ||
+      (Array.isArray(body.campaigns) && body.campaigns.length > 0) ||
+      (Array.isArray(body.expenses) && body.expenses.length > 0) ||
+      (Array.isArray(body.auditorGrants) && body.auditorGrants.length > 0) ||
+      (Array.isArray(body.deletedAuditorGrantIds) && body.deletedAuditorGrantIds.length > 0)
+    ) {
+      broadcastServerEvent('state_updated', {
+        timestamp: db.lastUpdated
+      });
+    }
     res.json({
       success: true,
       message: 'Synchronized successfully with RonPay server database',
@@ -6078,7 +6143,41 @@ const handleUpsertMemberRequest = (req: Request, res: Response) => {
           }).catch(() => {});
         }
       }).catch((e: any) => console.warn('[Server Supabase Member Note]:', e?.message));
+
+      // Also cascade updated member name & section (donor_veng) to Supabase transactions table
+      if (member.name || member.section) {
+        const txPatchPayload: Record<string, any> = {
+          updated_at: new Date().toISOString()
+        };
+        if (member.name) txPatchPayload.donor_name = member.name;
+        if (member.section) txPatchPayload.donor_veng = member.section;
+        fetch(`${sbUrl}/rest/v1/transactions?member_id=eq.${encodeURIComponent(member.id)}`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': sbKey,
+            'Authorization': `Bearer ${sbKey}`
+          },
+          body: JSON.stringify(txPatchPayload)
+        }).catch(() => {});
+        if (oldId && oldId !== cleanId) {
+          fetch(`${sbUrl}/rest/v1/transactions?member_id=eq.${encodeURIComponent(oldId)}`, {
+            method: 'PATCH',
+            headers: {
+              'Content-Type': 'application/json',
+              'apikey': sbKey,
+              'Authorization': `Bearer ${sbKey}`
+            },
+            body: JSON.stringify({ ...txPatchPayload, member_id: member.id })
+          }).catch(() => {});
+        }
+      }
     }
+
+    broadcastServerEvent('members_updated', {
+      memberId: member.id,
+      timestamp: db.lastUpdated
+    });
 
     res.json({ success: true, member, data: db });
   } catch (err: any) {
@@ -6547,6 +6646,74 @@ app.post('/api/transactions/batch', (req: Request, res: Response) => {
       const delSet = new Set<string>((db.deletedTransactionIds || []).map((id: string) => String(id).toLowerCase().trim()));
       db.transactions = reconcileAndDeduplicateTransactions(db.transactions, delSet);
       saveDatabase(db);
+
+      // Push batch updated transactions to Supabase so donor_name / donor_veng / subCategoryBreakdown / audit_mark persist in cloud
+      const sbConfig = (db as any).supabaseConfig || {};
+      const sbUrl = sbConfig.url || process.env.VITE_SUPABASE_URL || 'https://aqrplcmpealgruduwnhw.supabase.co';
+      const sbKey = sbConfig.anonKey || process.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable__zS5fiKvBI5u6HYgour64g_g_tJj5WL';
+      if (sbUrl && sbKey) {
+        const sbRows = validTxs.map((tx: any) => ({
+          id: tx.id,
+          campaign_id: tx.campaignId || tx.campaign_id || 'cmp-default',
+          campaign_title: tx.campaignTitle || tx.campaign_title || 'RonPay Community Cause',
+          category: tx.category || 'kumtluang',
+          donor_name: tx.donorName || tx.donor_name || (tx.isAnonymous ? 'Anonymous' : 'Valued Donor'),
+          donor_phone: tx.donorPhone || tx.donor_phone || null,
+          donor_veng: tx.donorVeng || tx.section || null,
+          member_id: tx.memberId || tx.member_id || null,
+          sub_id: tx.subId || tx.sub_id || null,
+          donor_type: tx.donorType || tx.donor_type || 'member',
+          group_name: tx.groupName || tx.group_name || null,
+          is_anonymous: Boolean(tx.isAnonymous),
+          amount: Number(tx.amount) || 0,
+          platform_fee: Number(tx.platformFee) || 0,
+          total_amount: Number(tx.totalAmount) || Number(tx.amount) || 0,
+          payment_method: tx.paymentMethod || tx.payment_method || 'cash',
+          status: tx.status || 'completed',
+          remark: tx.remark || null,
+          period_type: tx.periodType || tx.period_type || 'monthly',
+          period_month: tx.periodMonth || tx.period_month || null,
+          period_year: tx.periodYear || tx.period_year || null,
+          period_label: tx.periodLabel || tx.period_label || null,
+          utr: tx.utr || null,
+          reference_no: tx.referenceNo || tx.reference_no || null,
+          timestamp: tx.timestamp || new Date().toISOString(),
+          created_at: tx.createdAt || tx.timestamp || new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          metadata: {
+            ...(tx.metadata || {}),
+            donorName: tx.donorName,
+            donorVeng: tx.donorVeng || tx.section,
+            section: tx.section || tx.donorVeng,
+            subCategory: tx.subCategory,
+            subCategoryBreakdown: tx.subCategoryBreakdown,
+            audit_mark: tx.audit_mark,
+            audit_remark: tx.audit_remark,
+            audited_by: tx.audited_by,
+            audited_at: tx.audited_at,
+            is_locked: tx.is_locked,
+            locked_by: tx.locked_by,
+            locked_at: tx.locked_at
+          }
+        }));
+
+        fetch(`${sbUrl}/rest/v1/transactions?on_conflict=id`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': sbKey,
+            'Authorization': `Bearer ${sbKey}`,
+            'Prefer': 'resolution=merge-duplicates'
+          },
+          body: JSON.stringify(sbRows)
+        }).catch((e: any) => console.warn('[Server Supabase Batch Sync Note]:', e?.message));
+      }
+
+      broadcastServerEvent('transactions_updated', {
+        count: (db.transactions || []).length,
+        timestamp: db.lastUpdated
+      });
+
       return res.json({ success: true, count: validTxs.length });
     }
     res.json({ success: true, count: 0 });

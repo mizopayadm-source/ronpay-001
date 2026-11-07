@@ -1340,9 +1340,17 @@ export const saveStoredTransactions = (transactions: Transaction[], skipServerPu
                   if (deletedIdsSet.has(k) || PERMANENTLY_PURGED_TX_IDS.has(k)) {
                     continue;
                   }
-                  if (!localMap.has(k)) {
+                  const existingLocal = localMap.get(k);
+                  if (!existingLocal) {
                     localMap.set(k, st);
                     hasNewFromOtherWindow = true;
+                  } else {
+                    const localTime = new Date((existingLocal as any).updatedAt || existingLocal.createdAt || existingLocal.timestamp || 0).getTime();
+                    const serverTime = new Date((st as any).updatedAt || st.createdAt || st.timestamp || 0).getTime();
+                    if (serverTime > localTime) {
+                      localMap.set(k, { ...existingLocal, ...st });
+                      hasNewFromOtherWindow = true;
+                    }
                   }
                 }
               }
@@ -3675,7 +3683,11 @@ export const addOrUpdateMember = async (member: MemberRecord, oldId?: string): P
     return mClean === targetId || mClean === cleanNewId || samePhone;
   });
 
+  let previousName = '';
+  let previousSection = '';
   if (idx >= 0) {
+    previousName = (allList[idx].name || '').trim().toLowerCase();
+    previousSection = (allList[idx].section || '').trim().toLowerCase();
     allList[idx] = { ...allList[idx], ...stamped };
   } else {
     allList.unshift(stamped);
@@ -3708,29 +3720,55 @@ export const addOrUpdateMember = async (member: MemberRecord, oldId?: string): P
     body: JSON.stringify({ members: [{ ...stamped, oldId, _oldId: oldId }] })
   }).catch(() => {});
 
-  // 3. Propagate updated member name / section to local transactions
+  // 3. Propagate updated member name / section to local transactions, backend, and Supabase
   try {
     const txs = getStoredTransactions();
-    let txUpdated = false;
+    const changedTxs: Transaction[] = [];
     const matchId = (oldId || stamped.id).trim().toLowerCase();
     const altMatchId = matchId.startsWith('ebe-') ? 'bcm-' + matchId.slice(4) : (matchId.startsWith('bcm-') ? 'ebe-' + matchId.slice(4) : matchId);
-    const updatedTxs = txs.map(t => {
+    const targetCampId = (stamped.campaignId || '').trim().toLowerCase();
+    const nowIso = new Date().toISOString();
+
+    txs.forEach(t => {
+      if (!t || !t.id) return;
       const tMid = (t.memberId || '').trim().toLowerCase();
-      if (tMid === matchId || tMid === altMatchId) {
-        txUpdated = true;
-        return {
+      const tCamp = (t.campaignId || '').trim().toLowerCase();
+      const tName = (t.donorName || '').trim().toLowerCase();
+      const tPhone = (t.donorPhone || '').replace(/\D/g, '').slice(-10);
+
+      const isIdMatch = Boolean(matchId && (tMid === matchId || tMid === cleanNewId || tMid === altMatchId));
+      const isSameCampNameMatch = Boolean(
+        !tMid &&
+        targetCampId &&
+        tCamp === targetCampId &&
+        previousName &&
+        tName === previousName
+      );
+      const isSameCampPhoneMatch = Boolean(
+        !tMid &&
+        targetCampId &&
+        tCamp === targetCampId &&
+        cleanPhone.length >= 10 &&
+        tPhone === cleanPhone &&
+        (!previousName || tName === previousName)
+      );
+
+      if (isIdMatch || isSameCampNameMatch || isSameCampPhoneMatch) {
+        const updatedTx: Transaction = {
           ...t,
-          memberId: stamped.id,
+          memberId: stamped.id || t.memberId,
           donorName: stamped.name || t.donorName,
-          donorVeng: stamped.section || t.donorVeng,
-          section: stamped.section || t.section,
-          updatedAt: new Date().toISOString()
-        };
+          donorVeng: stamped.section !== undefined ? stamped.section : t.donorVeng,
+          section: stamped.section !== undefined ? stamped.section : (t as any).section,
+          isSynced: false,
+          updatedAt: nowIso
+        } as Transaction;
+        changedTxs.push(updatedTx);
       }
-      return t;
     });
-    if (txUpdated) {
-      saveStoredTransactions(updatedTxs, false);
+
+    if (changedTxs.length > 0) {
+      saveMultipleTransactions(changedTxs);
     }
   } catch (txPropErr) {
     console.warn('Transaction member info propagation note:', txPropErr);
@@ -3740,7 +3778,7 @@ export const addOrUpdateMember = async (member: MemberRecord, oldId?: string): P
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('ronpay-members-updated', { detail: allList }));
     window.dispatchEvent(new CustomEvent('ronpay_members_updated', { detail: allList }));
-    window.dispatchEvent(new CustomEvent('ronpay_state_sync_event', { detail: { type: 'member_updated', member: stamped } }));
+    window.dispatchEvent(new CustomEvent('ronpay_state_sync_event', { detail: { type: 'member_updated', member: stamped, previousName, previousSection } }));
     broadcastTabSync('members', allList);
   }
 
@@ -4550,6 +4588,11 @@ export const saveMultipleTransactions = (txs: Transaction[]): void => {
     txMap.set(String(tx.id).toLowerCase().trim(), tx);
     recordUserPaidTxId(tx.id);
     syncTransactionToFirestore(tx).catch(() => {});
+    import('../services/supabaseService')
+      .then(({ insertSupabaseTransaction }) => {
+        insertSupabaseTransaction(tx).catch(() => {});
+      })
+      .catch(() => {});
   });
 
   const updated = Array.from(txMap.values());

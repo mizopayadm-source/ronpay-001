@@ -17,10 +17,16 @@ import {
   Info,
   Flag,
   MessageSquareWarning,
-  FolderKanban
+  FolderKanban,
+  BookOpen,
+  Calendar,
+  RefreshCw,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
-import { Campaign, CreatorProfile } from '../types';
+import { Campaign, CreatorProfile, KumtluangExpense } from '../types';
 import { 
+  getStoredCampaigns,
   getStoredTransactions, 
   getStoredExpenses, 
   lockCampaignAuditPeriod, 
@@ -31,13 +37,19 @@ import {
   saveCampaign,
   markRecordAuditVerification,
   unlockSingleRecord,
-  saveStoredAuditorGrants,
   formatRemainingAuditTimeMizo,
   getMembers,
-  syncAuditorGrantsAcrossCloud
+  syncAuditorGrantsAcrossCloud,
+  saveMultipleTransactions,
+  saveStoredExpenses,
+  isTransactionForCampaign,
+  isConfirmedTransaction
 } from '../utils/storage';
+import { syncAllWithServer, RONPAY_SYNC_EVENT } from '../utils/syncEngine';
+import { fetchOpeningBalanceFromSupabase, fetchTableData } from '../services/SupabaseSync';
+import { fetchExpensesFromFirestore } from '../services/firestoreSync';
 import { formatDateDDMMYYYY } from '../utils/date';
-import { printHtmlSafely } from '../utils/export';
+import { printHtmlSafely, getTransactionHead } from '../utils/export';
 
 interface AuditorPortalModalProps {
   isOpen: boolean;
@@ -66,22 +78,67 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
   onClose,
   onRecordsUpdated
 }) => {
-  const [activeTab, setActiveTab] = useState<'overview' | 'reconcile' | 'transactions' | 'expenses' | 'lock_action' | 'certificate'>('overview');
+  const [activeTab, setActiveTab] = useState<'cashbook' | 'overview' | 'reconcile' | 'transactions' | 'expenses' | 'lock_action' | 'certificate'>('cashbook');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [filterLockStatus, setFilterLockStatus] = useState<'all' | 'locked' | 'unlocked' | 'verified' | 'flagged' | 'unchecked'>('all');
 
-  // Local refresh tick
-  const [tick, setTick] = useState<number>(0);
+  // Cash Book (Receipts & Payments) Date Range & Audit Status Filter state
+  const [cbPreset, setCbPreset] = useState<'all' | 'this_month' | 'last_month' | 'today' | 'custom'>('all');
+  const [cbFromDate, setCbFromDate] = useState<string>('');
+  const [cbToDate, setCbToDate] = useState<string>('');
+  const [cbAuditFilter, setCbAuditFilter] = useState<'all' | 'audited' | 'unaudited' | 'flagged'>('all');
+  const [cbViewMode, setCbViewMode] = useState<'ledger' | 'chronological'>('ledger');
+  const [cbReceiptsMode, setCbReceiptsMode] = useState<'detailed' | 'head_wise'>('detailed');
+  const [expandedHeads, setExpandedHeads] = useState<Record<string, boolean>>({});
+  const [cbFullHeight, setCbFullHeight] = useState<boolean>(false);
+  const [mobileLedgerPane, setMobileLedgerPane] = useState<'receipts' | 'payments' | 'both'>('receipts');
 
-  // Sync latest auditor grants from both Server & Supabase when portal opens
+  // Local refresh tick & live sync states
+  const [tick, setTick] = useState<number>(0);
+  const [isSyncingPortal, setIsSyncingPortal] = useState<boolean>(false);
+  const [liveOpeningBalance, setLiveOpeningBalance] = useState<number | null>(null);
+
+  const handleSyncPortalData = async () => {
+    setIsSyncingPortal(true);
+    try {
+      await Promise.allSettled([
+        syncAuditorGrantsAcrossCloud(),
+        syncAllWithServer(true),
+        campaign?.id
+          ? fetchOpeningBalanceFromSupabase(campaign.id).then(val => {
+              if (typeof val === 'number' && !isNaN(val)) {
+                setLiveOpeningBalance(val);
+              }
+            })
+          : Promise.resolve(),
+        fetchTableData<KumtluangExpense>('expenses').then(fresh => {
+          if (Array.isArray(fresh) && fresh.length > 0) {
+            saveStoredExpenses(fresh, true);
+          }
+        }),
+        fetchExpensesFromFirestore(true)
+      ]);
+      setTick(t => t + 1);
+      if (onRecordsUpdated) onRecordsUpdated();
+    } catch {
+      // Ignore network errors cleanly
+    } finally {
+      setIsSyncingPortal(false);
+    }
+  };
+
+  // Sync latest auditor grants, transactions, expenses, and opening balance from Server & Supabase when portal opens
   useEffect(() => {
     if (!isOpen) return;
-    syncAuditorGrantsAcrossCloud()
-      .then(() => {
-        setTick(t => t + 1);
-      })
-      .catch(() => {});
-  }, [isOpen]);
+    setLiveOpeningBalance(null);
+    handleSyncPortalData();
+
+    const onSyncEvent = () => setTick(t => t + 1);
+    window.addEventListener(RONPAY_SYNC_EVENT, onSyncEvent);
+    return () => {
+      window.removeEventListener(RONPAY_SYNC_EVENT, onSyncEvent);
+    };
+  }, [isOpen, campaign?.id]);
 
   // Check access & remaining hours
   const accessInfo = useMemo(() => {
@@ -104,15 +161,27 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
     return isAdmin || isCreator || Boolean(accessInfo?.hasAccess) || creatorProfile?.role === 'AUDITOR' || hasAnyActiveGrant;
   }, [isAdmin, isCreator, accessInfo, creatorProfile]);
 
-  // Accessible campaigns for Multi-Bawm Switcher
+  // Accessible campaigns for Multi-Bawm Switcher (merges prop campaigns + stored campaigns so no Bawm is missing)
   const accessibleCampaigns = useMemo(() => {
-    if (!campaigns || campaigns.length === 0) return campaign ? [campaign] : [];
-    if (isAdmin) return campaigns;
+    const stored = getStoredCampaigns();
+    const map = new Map<string, Campaign>();
+    stored.forEach(c => {
+      if (c && c.id) map.set(c.id, c);
+    });
+    (campaigns || []).forEach(c => {
+      if (c && c.id) map.set(c.id, c);
+    });
+    if (campaign && campaign.id) {
+      map.set(campaign.id, campaign);
+    }
+    const mergedList = Array.from(map.values());
+    if (mergedList.length === 0) return campaign ? [campaign] : [];
+    if (isAdmin) return mergedList;
     const phone = creatorProfile?.phone || creatorProfile?.phoneNumber || '';
     const activeGrants = getActiveAuditorGrantsForUser(phone);
-    const grantCampIds = new Set(activeGrants.map(g => g.campaignId || g.campaign_id));
-    const filtered = campaigns.filter(
-      c => grantCampIds.has(c.id) || isCampaignCreator(c, creatorProfile || null) || (campaign && c.id === campaign.id)
+    const grantCampIds = new Set(activeGrants.map(g => String(g.campaignId || g.campaign_id || '').trim()));
+    const filtered = mergedList.filter(
+      c => grantCampIds.has(String(c.id).trim()) || isCampaignCreator(c, creatorProfile || null) || (campaign && c.id === campaign.id)
     );
     return filtered.length > 0 ? filtered : (campaign ? [campaign] : []);
   }, [campaigns, campaign, isAdmin, creatorProfile, tick]);
@@ -258,12 +327,19 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
   const checkedCount = useMemo(() => Object.values(checklist).filter(Boolean).length, [checklist]);
   const checklistPercent = useMemo(() => Math.round((checkedCount / 5) * 100), [checkedCount]);
 
-  // Load transactions and expenses (case-insensitive campaign ID matching)
+  // Effective Opening Balance (from live Supabase fetch or campaign object)
+  const effectiveOpeningBalance = useMemo(() => {
+    if (liveOpeningBalance !== null && !isNaN(liveOpeningBalance)) {
+      return liveOpeningBalance;
+    }
+    return Number(campaign?.openingBalance) || 0;
+  }, [liveOpeningBalance, campaign?.openingBalance]);
+
+  // Load transactions using isTransactionForCampaign & isConfirmedTransaction so 100% of Bawm records match HomeScreen/ReportsScreen/CashBook
   const allTransactions = useMemo(() => {
     if (!campaign) return [];
-    const targetId = String(campaign.id || '').trim().toLowerCase();
     const all = getStoredTransactions();
-    return all.filter(t => String(t.campaignId || (t as any).campaign_id || '').trim().toLowerCase() === targetId);
+    return all.filter(t => t && isTransactionForCampaign(t, campaign) && isConfirmedTransaction(t));
   }, [campaign, tick]);
 
   const allExpenses = useMemo(() => {
@@ -282,9 +358,10 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
     const sumTx = (list: typeof verifiedTx) => list.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
     const sumExp = (list: typeof allExpenses) => list.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
 
+    const openingBalance = effectiveOpeningBalance;
     const totalInflow = sumTx(verifiedTx);
     const totalOutflow = sumExp(allExpenses);
-    const netBalance = totalInflow - totalOutflow;
+    const netBalance = openingBalance + totalInflow - totalOutflow;
 
     const lockedTxList = verifiedTx.filter(t => t.is_locked);
     const unlockedTxList = verifiedTx.filter(t => !t.is_locked);
@@ -299,6 +376,7 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
     const uncheckedExpList = allExpenses.filter(e => !e.audit_mark);
 
     return {
+      openingBalance,
       totalInflow,
       totalOutflow,
       netBalance,
@@ -331,7 +409,7 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
       totalAuditFlagged: auditFlaggedTxList.length + auditFlaggedExpList.length,
       totalUnchecked: uncheckedTxList.length + uncheckedExpList.length
     };
-  }, [allTransactions, allExpenses]);
+  }, [allTransactions, allExpenses, effectiveOpeningBalance]);
 
   // Cross-Check & Reconciliation Analytics (Bank/UPI vs Cash, Member Roll, Section-wise, Collector-wise, Anomaly Scanner)
   const crossCheckData = useMemo(() => {
@@ -589,6 +667,565 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
     });
   }, [allExpenses, filterLockStatus, searchQuery]);
 
+  // Unified Cash Book (Receipts & Payments) with Date Range & Audited/Unaudited Distinction
+  const cashBookAuditData = useMemo(() => {
+    const now = new Date();
+    const toDateStr = (d: Date) => {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    };
+
+    let effFrom = '';
+    let effTo = '';
+    let rangeLabel = 'Hun Chhung Zawng (All Time)';
+
+    if (cbPreset === 'today') {
+      effFrom = toDateStr(now);
+      effTo = effFrom;
+      rangeLabel = `Vawiin (${formatDateDDMMYYYY(effFrom)})`;
+    } else if (cbPreset === 'this_month') {
+      const first = new Date(now.getFullYear(), now.getMonth(), 1);
+      const last = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+      effFrom = toDateStr(first);
+      effTo = toDateStr(last);
+      rangeLabel = `Kumin Thla (${formatDateDDMMYYYY(effFrom)} – ${formatDateDDMMYYYY(effTo)})`;
+    } else if (cbPreset === 'last_month') {
+      const first = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const last = new Date(now.getFullYear(), now.getMonth(), 0);
+      effFrom = toDateStr(first);
+      effTo = toDateStr(last);
+      rangeLabel = `Thla Hmasa (${formatDateDDMMYYYY(effFrom)} – ${formatDateDDMMYYYY(effTo)})`;
+    } else if (cbPreset === 'custom') {
+      effFrom = cbFromDate.trim();
+      effTo = cbToDate.trim();
+      if (effFrom && effTo) {
+        rangeLabel = `${formatDateDDMMYYYY(effFrom)} – ${formatDateDDMMYYYY(effTo)}`;
+      } else if (effFrom) {
+        rangeLabel = `${formatDateDDMMYYYY(effFrom)} aṭanga Vawiin`;
+      } else if (effTo) {
+        rangeLabel = `${formatDateDDMMYYYY(effTo)} thleng`;
+      } else {
+        rangeLabel = 'Custom Date Range';
+      }
+    }
+
+    const validStatuses = new Set(['completed', 'confirmed', 'success', 'verified', 'paid', 'approved']);
+    const validTxs = allTransactions.filter(t => {
+      const st = String(t.status || '').toLowerCase().trim();
+      return !st || validStatuses.has(st) || (st !== 'failed' && st !== 'rejected' && st !== 'cancelled');
+    });
+
+    const getTxIsoDate = (t: any): string => {
+      const raw = String(t.timestamp || t.date || t.createdAt || '').trim();
+      if (raw.length >= 10 && /^\d{4}-\d{2}-\d{2}/.test(raw)) return raw.slice(0, 10);
+      const d = new Date(raw);
+      if (!isNaN(d.getTime())) return toDateStr(d);
+      return '';
+    };
+
+    const getExpIsoDate = (e: any): string => {
+      const raw = String(e.spentDate || e.date || e.createdAt || '').trim();
+      if (raw.length >= 10 && /^\d{4}-\d{2}-\d{2}/.test(raw)) return raw.slice(0, 10);
+      const d = new Date(raw);
+      if (!isNaN(d.getTime())) return toDateStr(d);
+      return '';
+    };
+
+    // Compute Opening Balance (B/F) prior to effFrom
+    const baseOpening = effectiveOpeningBalance;
+    let priorReceipts = 0;
+    let priorPayments = 0;
+
+    if (effFrom) {
+      validTxs.forEach(t => {
+        const d = getTxIsoDate(t);
+        if (d && d < effFrom) {
+          priorReceipts += Number(t.amount) || 0;
+        }
+      });
+      allExpenses.forEach(e => {
+        const d = getExpIsoDate(e);
+        if (d && d < effFrom) {
+          priorPayments += Number(e.amount) || 0;
+        }
+      });
+    }
+
+    const openingBalance = baseOpening + priorReceipts - priorPayments;
+
+    const isDateInRange = (isoDate: string) => {
+      if (!effFrom && !effTo) return true;
+      if (!isoDate) return !effFrom && !effTo;
+      if (effFrom && isoDate < effFrom) return false;
+      if (effTo && isoDate > effTo) return false;
+      return true;
+    };
+
+    const inRangeTxs = validTxs.filter(t => isDateInRange(getTxIsoDate(t)));
+    const inRangeExps = allExpenses.filter(e => isDateInRange(getExpIsoDate(e)));
+
+    type AuditCashBookItem = {
+      id: string;
+      recordType: 'transaction' | 'expense';
+      entryType: 'INFLOW' | 'OUTFLOW';
+      isoDate: string;
+      displayDate: string;
+      timestampMs: number;
+      voucherOrRef: string;
+      headName: string;
+      particulars: string;
+      subDetail: string;
+      sectionOrHead: string;
+      paymentMode: string;
+      amount: number;
+      audit_mark?: 'verified' | 'flagged' | null;
+      audit_remark?: string;
+      audited_by?: string;
+      is_locked?: boolean;
+      auditCategory: 'audited' | 'unaudited' | 'flagged';
+      runningBalance: number;
+    };
+
+    const rawEntries: AuditCashBookItem[] = [];
+
+    inRangeTxs.forEach(t => {
+      const iso = getTxIsoDate(t);
+      const isAudited = t.audit_mark === 'verified' || Boolean(t.is_locked);
+      const isFlagged = t.audit_mark === 'flagged';
+      const auditCategory: 'audited' | 'unaudited' | 'flagged' = isFlagged
+        ? 'flagged'
+        : isAudited
+        ? 'audited'
+        : 'unaudited';
+
+      const headName = getTransactionHead(t, campaign) || t.subCategory || 'Thawhlawm / Sum Lut';
+      const secText = t.donorVeng || (t as any).section || '';
+      const periodText = t.periodLabel ? ` • ${t.periodLabel}` : '';
+      rawEntries.push({
+        id: t.id,
+        recordType: 'transaction',
+        entryType: 'INFLOW',
+        isoDate: iso,
+        displayDate: formatDateDDMMYYYY(t.timestamp || t.date || iso),
+        timestampMs: new Date(t.timestamp || t.date || iso || 0).getTime(),
+        voucherOrRef: t.utr || t.referenceNo || t.id.slice(-8).toUpperCase(),
+        headName,
+        particulars: `To ${t.donorName || 'Anonymous Donor'}`,
+        subDetail: `🏷️ ${headName}${secText ? ` • Bial: ${secText}` : ''}${periodText}`,
+        sectionOrHead: secText || headName,
+        paymentMode: String(t.paymentMethod || 'UPI').toUpperCase(),
+        amount: Number(t.amount) || 0,
+        audit_mark: t.audit_mark,
+        audit_remark: (t as any).audit_remark || t.audit_query,
+        audited_by: (t as any).audited_by || t.audit_marked_by,
+        is_locked: Boolean(t.is_locked),
+        auditCategory,
+        runningBalance: 0
+      });
+    });
+
+    inRangeExps.forEach(e => {
+      const iso = getExpIsoDate(e);
+      const isAudited = e.audit_mark === 'verified' || Boolean(e.is_locked);
+      const isFlagged = e.audit_mark === 'flagged';
+      const auditCategory: 'audited' | 'unaudited' | 'flagged' = isFlagged
+        ? 'flagged'
+        : isAudited
+        ? 'audited'
+        : 'unaudited';
+
+      const payee = e.paidTo || e.payeeName || (e as any).payee || 'Vendor';
+      const head = e.head || e.expenseHead || 'Senso';
+      rawEntries.push({
+        id: e.id,
+        recordType: 'expense',
+        entryType: 'OUTFLOW',
+        isoDate: iso,
+        displayDate: formatDateDDMMYYYY(e.spentDate || e.date || e.createdAt || iso),
+        timestampMs: new Date(e.spentDate || e.date || e.createdAt || iso || 0).getTime(),
+        voucherOrRef: e.voucherNo || e.id.slice(-8).toUpperCase(),
+        headName: head,
+        particulars: `By ${head} (${payee})`,
+        subDetail: `${e.purpose || e.description || head} • Mode: ${String(e.paymentMode || 'CASH').toUpperCase()}`,
+        sectionOrHead: head,
+        paymentMode: String(e.paymentMode || 'CASH').toUpperCase(),
+        amount: Number(e.amount) || 0,
+        audit_mark: e.audit_mark,
+        audit_remark: (e as any).audit_remark || e.audit_query,
+        audited_by: (e as any).audited_by || e.audit_marked_by,
+        is_locked: Boolean(e.is_locked),
+        auditCategory,
+        runningBalance: 0
+      });
+    });
+
+    // Sort chronologically (oldest to newest) to compute accurate Running Balance
+    rawEntries.sort((a, b) => {
+      if (a.isoDate !== b.isoDate) return a.isoDate.localeCompare(b.isoDate);
+      return a.timestampMs - b.timestampMs;
+    });
+
+    let running = openingBalance;
+    rawEntries.forEach(item => {
+      if (item.entryType === 'INFLOW') {
+        running += item.amount;
+      } else {
+        running -= item.amount;
+      }
+      item.runningBalance = running;
+    });
+
+    const periodReceipts = rawEntries.filter(i => i.entryType === 'INFLOW');
+    const periodPayments = rawEntries.filter(i => i.entryType === 'OUTFLOW');
+
+    const periodReceiptsTotal = periodReceipts.reduce((s, i) => s + i.amount, 0);
+    const periodPaymentsTotal = periodPayments.reduce((s, i) => s + i.amount, 0);
+    const closingBalance = openingBalance + periodReceiptsTotal - periodPaymentsTotal;
+
+    const auditedItems = rawEntries.filter(i => i.auditCategory === 'audited');
+    const unauditedItems = rawEntries.filter(i => i.auditCategory === 'unaudited');
+    const flaggedItems = rawEntries.filter(i => i.auditCategory === 'flagged');
+
+    const auditedReceiptsAmt = auditedItems.filter(i => i.entryType === 'INFLOW').reduce((s, i) => s + i.amount, 0);
+    const auditedPaymentsAmt = auditedItems.filter(i => i.entryType === 'OUTFLOW').reduce((s, i) => s + i.amount, 0);
+    const unauditedReceiptsAmt = unauditedItems.filter(i => i.entryType === 'INFLOW').reduce((s, i) => s + i.amount, 0);
+    const unauditedPaymentsAmt = unauditedItems.filter(i => i.entryType === 'OUTFLOW').reduce((s, i) => s + i.amount, 0);
+
+    const matchesFilterAndSearch = (item: AuditCashBookItem) => {
+      if (cbAuditFilter === 'audited' && item.auditCategory !== 'audited') return false;
+      if (cbAuditFilter === 'unaudited' && item.auditCategory !== 'unaudited') return false;
+      if (cbAuditFilter === 'flagged' && item.auditCategory !== 'flagged') return false;
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        return (
+          item.particulars.toLowerCase().includes(q) ||
+          item.subDetail.toLowerCase().includes(q) ||
+          item.headName.toLowerCase().includes(q) ||
+          item.voucherOrRef.toLowerCase().includes(q) ||
+          item.id.toLowerCase().includes(q)
+        );
+      }
+      return true;
+    };
+
+    const filteredChronological = rawEntries.filter(matchesFilterAndSearch);
+    const filteredReceipts = periodReceipts.filter(matchesFilterAndSearch);
+    const filteredPayments = periodPayments.filter(matchesFilterAndSearch);
+
+    // Group filteredReceipts by Account Head for Head-wise Ledger Summary + Drill-down
+    const headGroupsMap = new Map<string, {
+      headName: string;
+      totalAmount: number;
+      count: number;
+      auditedCount: number;
+      unauditedCount: number;
+      flaggedCount: number;
+      latestDisplayDate: string;
+      items: AuditCashBookItem[];
+    }>();
+
+    filteredReceipts.forEach(r => {
+      const key = r.headName || 'General Receipts';
+      const grp = headGroupsMap.get(key) || {
+        headName: key,
+        totalAmount: 0,
+        count: 0,
+        auditedCount: 0,
+        unauditedCount: 0,
+        flaggedCount: 0,
+        latestDisplayDate: r.displayDate,
+        items: []
+      };
+      grp.totalAmount += r.amount;
+      grp.count += 1;
+      if (r.auditCategory === 'audited') grp.auditedCount += 1;
+      else if (r.auditCategory === 'flagged') grp.flaggedCount += 1;
+      else grp.unauditedCount += 1;
+      grp.latestDisplayDate = r.displayDate;
+      grp.items.push(r);
+      headGroupsMap.set(key, grp);
+    });
+
+    const receiptHeadGroups = Array.from(headGroupsMap.values()).sort((a, b) => b.totalAmount - a.totalAmount);
+
+    return {
+      effFrom,
+      effTo,
+      rangeLabel,
+      openingBalance,
+      closingBalance,
+      periodReceiptsTotal,
+      periodPaymentsTotal,
+      totalEntriesCount: rawEntries.length,
+      auditedCount: auditedItems.length,
+      unauditedCount: unauditedItems.length,
+      flaggedCount: flaggedItems.length,
+      auditedReceiptsAmt,
+      auditedPaymentsAmt,
+      unauditedReceiptsAmt,
+      unauditedPaymentsAmt,
+      inRangeTxs,
+      inRangeExps,
+      filteredChronological,
+      filteredReceipts,
+      filteredPayments,
+      receiptHeadGroups
+    };
+  }, [allTransactions, allExpenses, campaign, cbPreset, cbFromDate, cbToDate, cbAuditFilter, searchQuery, effectiveOpeningBalance]);
+
+  // Verify all unaudited Receipts & Payments within the currently selected Cash Book date range
+  const handleVerifySelectedRange = () => {
+    if (!canAudit) return;
+    let verifiedCnt = 0;
+    cashBookAuditData.inRangeTxs.forEach(t => {
+      if (t.audit_mark !== 'verified') {
+        markRecordAuditVerification(
+          t.id,
+          'transaction',
+          'verified',
+          auditorName || creatorProfile?.name || 'Auditor',
+          ''
+        );
+        verifiedCnt++;
+      }
+    });
+    cashBookAuditData.inRangeExps.forEach(e => {
+      if (e.audit_mark !== 'verified') {
+        markRecordAuditVerification(
+          e.id,
+          'expense',
+          'verified',
+          auditorName || creatorProfile?.name || 'Auditor',
+          ''
+        );
+        verifiedCnt++;
+      }
+    });
+    if (verifiedCnt > 0) {
+      setTick(t => t + 1);
+      setLockToast(`✅ Selected Range (${cashBookAuditData.rangeLabel}) chhunga record ${verifiedCnt} chu '✓ Audit Chin (Verified)' tiin chhinchhiah vek a ni e!`);
+      if (onRecordsUpdated) onRecordsUpdated();
+      setTimeout(() => setLockToast(null), 4000);
+    } else {
+      setLockToast(`ℹ️ He range chhunga record zawng zawng hi Audit Chin (Verified) vek a ni tawh e.`);
+      setTimeout(() => setLockToast(null), 3000);
+    }
+  };
+
+  // Sign & Lock all Receipts & Payments within the currently selected Cash Book date range
+  const handleLockSelectedRange = () => {
+    if (!canAudit || !campaign) return;
+    const nowIso = new Date().toISOString();
+    const who = auditorName.trim() || creatorProfile?.name || 'Auditor';
+    const txIdsInRange = new Set(cashBookAuditData.inRangeTxs.map(t => String(t.id).toLowerCase().trim()));
+    const expIdsInRange = new Set(cashBookAuditData.inRangeExps.map(e => String(e.id).toLowerCase().trim()));
+
+    const allStoredTxs = getStoredTransactions();
+    const changedTxs: any[] = [];
+    allStoredTxs.forEach(t => {
+      if (t && t.id && txIdsInRange.has(String(t.id).toLowerCase().trim())) {
+        const updated = {
+          ...t,
+          audit_mark: 'verified' as const,
+          audited_by: who,
+          audited_at: nowIso,
+          is_locked: true,
+          locked_by: who,
+          locked_at: nowIso,
+          isSynced: false,
+          updatedAt: nowIso
+        };
+        changedTxs.push(updated);
+      }
+    });
+    if (changedTxs.length > 0) {
+      saveMultipleTransactions(changedTxs);
+    }
+
+    const allStoredExps = getStoredExpenses();
+    let expChanged = false;
+    const updatedExps = allStoredExps.map(e => {
+      if (e && e.id && expIdsInRange.has(String(e.id).toLowerCase().trim())) {
+        expChanged = true;
+        return {
+          ...e,
+          audit_mark: 'verified' as const,
+          audited_by: who,
+          audited_at: nowIso,
+          is_locked: true,
+          locked_by: who,
+          locked_at: nowIso,
+          updatedAt: nowIso
+        };
+      }
+      return e;
+    });
+    if (expChanged) {
+      saveStoredExpenses(updatedExps);
+    }
+
+    const periodStr = cashBookAuditData.effFrom || cashBookAuditData.effTo
+      ? cashBookAuditData.rangeLabel
+      : auditPeriod;
+    setAuditPeriod(periodStr);
+
+    saveCampaign({
+      ...campaign,
+      lastAuditedAt: nowIso,
+      lastAuditedBy: who,
+      lastAuditPeriod: periodStr,
+      lastAuditNotes: auditNotes || `Cash Book (${periodStr}) verified and locked.`
+    });
+
+    setTick(t => t + 1);
+    setLockToast(`🔒 Cash Book Range (${periodStr}) chhunga Receipts (${changedTxs.length}) leh Payments (${expIdsInRange.size}) chu Audit & Lock fel vek a ni e!`);
+    if (onRecordsUpdated) onRecordsUpdated();
+    setTimeout(() => setLockToast(null), 4500);
+  };
+
+  // Print Official Audited Cash Book (Receipts & Payments) for Selected Range
+  const handlePrintAuditedCashBook = () => {
+    const receiptsRowsHtml = cashBookAuditData.filteredReceipts.map(r => `
+      <tr>
+        <td>${r.displayDate}</td>
+        <td>${r.voucherOrRef}</td>
+        <td>
+          <strong>${r.particulars}</strong><br/>
+          <span style="font-size:10px;color:#64748b;">${r.subDetail} (${r.paymentMode})</span>
+        </td>
+        <td style="text-align:center;">
+          <span style="font-size:9px;font-weight:800;padding:2px 6px;border-radius:4px;background:${r.auditCategory === 'audited' ? '#dcfce7' : r.auditCategory === 'flagged' ? '#fee2e2' : '#fef3c7'};color:${r.auditCategory === 'audited' ? '#166534' : r.auditCategory === 'flagged' ? '#991b1b' : '#92400e'};">
+            ${r.auditCategory === 'audited' ? '✓ AUDIT CHIN' : r.auditCategory === 'flagged' ? '⚠️ QUERY' : '⏳ LA AUDIT LOH'}
+          </span>
+        </td>
+        <td style="text-align:right;font-weight:700;color:#065f46;">₹${r.amount.toLocaleString('en-IN')}</td>
+      </tr>
+    `).join('');
+
+    const paymentsRowsHtml = cashBookAuditData.filteredPayments.map(p => `
+      <tr>
+        <td>${p.displayDate}</td>
+        <td>${p.voucherOrRef}</td>
+        <td>
+          <strong>${p.particulars}</strong><br/>
+          <span style="font-size:10px;color:#64748b;">${p.subDetail} (${p.paymentMode})</span>
+        </td>
+        <td style="text-align:center;">
+          <span style="font-size:9px;font-weight:800;padding:2px 6px;border-radius:4px;background:${p.auditCategory === 'audited' ? '#dcfce7' : p.auditCategory === 'flagged' ? '#fee2e2' : '#fef3c7'};color:${p.auditCategory === 'audited' ? '#166534' : p.auditCategory === 'flagged' ? '#991b1b' : '#92400e'};">
+            ${p.auditCategory === 'audited' ? '✓ AUDIT CHIN' : p.auditCategory === 'flagged' ? '⚠️ QUERY' : '⏳ LA AUDIT LOH'}
+          </span>
+        </td>
+        <td style="text-align:right;font-weight:700;color:#9f1239;">₹${p.amount.toLocaleString('en-IN')}</td>
+      </tr>
+    `).join('');
+
+    const totalSideBalance = cashBookAuditData.openingBalance + cashBookAuditData.periodReceiptsTotal;
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <title>Audited Cash Book - ${campaign?.title || ''}</title>
+        <style>
+          @page { size: A4 landscape; margin: 12mm; }
+          body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #0f172a; margin: 0; padding: 10px; font-size: 11px; }
+          .header { text-align: center; border-bottom: 2px solid #0f172a; padding-bottom: 10px; margin-bottom: 14px; }
+          .title { font-size: 18px; font-weight: 900; margin: 0; text-transform: uppercase; }
+          .sub { font-size: 12px; color: #475569; margin: 4px 0 0 0; font-weight: 600; }
+          .summary-bar { display: flex; justify-content: space-between; gap: 10px; margin-bottom: 12px; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 8px 12px; }
+          .ledger-grid { display: flex; gap: 12px; align-items: stretch; }
+          .side { flex: 1; border: 1.5px solid #0f172a; border-radius: 6px; overflow: hidden; display: flex; flex-direction: column; justify-content: space-between; }
+          .side-head { padding: 6px 10px; font-weight: 900; font-size: 11px; text-transform: uppercase; border-bottom: 1.5px solid #0f172a; display: flex; justify-content: space-between; }
+          .dr-head { background: #ecfdf5; color: #065f46; }
+          .cr-head { background: #fff1f2; color: #9f1239; }
+          table { width: 100%; border-collapse: collapse; font-size: 10.5px; }
+          th, td { border-bottom: 1px solid #e2e8f0; padding: 5px 6px; text-align: left; vertical-align: top; }
+          th { background: #f1f5f9; font-size: 9.5px; text-transform: uppercase; font-weight: 800; color: #334155; }
+          .total-row { background: #f8fafc; border-top: 2px solid #0f172a; font-weight: 900; font-size: 11.5px; padding: 8px 10px; display: flex; justify-content: space-between; }
+          .sig-row { margin-top: 28px; display: flex; justify-content: space-between; align-items: flex-end; }
+          .sig-box { width: 220px; border-top: 1px solid #0f172a; padding-top: 6px; text-align: center; font-size: 11px; }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1 class="title">${campaign?.title || ''} — CASH BOOK (RECEIPTS &amp; PAYMENTS)</h1>
+          <p class="sub">Period / Range: ${cashBookAuditData.rangeLabel} • Audit Status: ✓ Audit Chin (${cashBookAuditData.auditedCount}) | ⏳ La Audit Loh (${cashBookAuditData.unauditedCount})</p>
+        </div>
+        <div class="summary-bar">
+          <div><strong>Opening Balance (B/F):</strong> ₹${cashBookAuditData.openingBalance.toLocaleString('en-IN')}</div>
+          <div><strong>Total Receipts (Sum Lut):</strong> +₹${cashBookAuditData.periodReceiptsTotal.toLocaleString('en-IN')}</div>
+          <div><strong>Total Payments (Sum Chhuak):</strong> -₹${cashBookAuditData.periodPaymentsTotal.toLocaleString('en-IN')}</div>
+          <div><strong>Closing Balance (C/D):</strong> ₹${cashBookAuditData.closingBalance.toLocaleString('en-IN')}</div>
+        </div>
+        <div class="ledger-grid">
+          <div class="side">
+            <div>
+              <div class="side-head dr-head"><span>Dr. RECEIPTS (SUM LUT / THAWHLAWM)</span><span>Amount (₹)</span></div>
+              <table>
+                <thead>
+                  <tr><th>Date</th><th>Ref/UTR</th><th>Particulars</th><th>Audit</th><th style="text-align:right;">Amount</th></tr>
+                </thead>
+                <tbody>
+                  <tr style="background:#f0fdf4;">
+                    <td>${cashBookAuditData.effFrom ? formatDateDDMMYYYY(cashBookAuditData.effFrom) : 'Opening'}</td>
+                    <td>B/F</td>
+                    <td><strong>To Balance b/d (Opening Balance)</strong></td>
+                    <td style="text-align:center;">—</td>
+                    <td style="text-align:right;font-weight:800;">₹${cashBookAuditData.openingBalance.toLocaleString('en-IN')}</td>
+                  </tr>
+                  ${receiptsRowsHtml || '<tr><td colspan="5" style="text-align:center;color:#94a3b8;padding:14px;">He hun chhung hian Sum Lut a awm lo</td></tr>'}
+                </tbody>
+              </table>
+            </div>
+            <div class="total-row">
+              <span>TOTAL RECEIPTS (incl. Opening B/F)</span>
+              <span>₹${totalSideBalance.toLocaleString('en-IN')}</span>
+            </div>
+          </div>
+          <div class="side">
+            <div>
+              <div class="side-head cr-head"><span>Cr. PAYMENTS (SUM CHHUAK / SENSO)</span><span>Amount (₹)</span></div>
+              <table>
+                <thead>
+                  <tr><th>Date</th><th>Voucher</th><th>Particulars</th><th>Audit</th><th style="text-align:right;">Amount</th></tr>
+                </thead>
+                <tbody>
+                  ${paymentsRowsHtml || '<tr><td colspan="5" style="text-align:center;color:#94a3b8;padding:14px;">He hun chhung hian Sum Chhuak (Payment) a awm lo</td></tr>'}
+                  <tr style="background:#eef2ff;">
+                    <td>${cashBookAuditData.effTo ? formatDateDDMMYYYY(cashBookAuditData.effTo) : 'Closing'}</td>
+                    <td>C/D</td>
+                    <td><strong>By Balance c/d (Closing Balance / Sum Bang)</strong></td>
+                    <td style="text-align:center;">✓</td>
+                    <td style="text-align:right;font-weight:800;color:#1e40af;">₹${cashBookAuditData.closingBalance.toLocaleString('en-IN')}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="total-row">
+              <span>TOTAL PAYMENTS (incl. Closing C/D)</span>
+              <span>₹${totalSideBalance.toLocaleString('en-IN')}</span>
+            </div>
+          </div>
+        </div>
+        <div class="sig-row">
+          <div class="sig-box">
+            <strong>Treasurer / Bawm Vawngtu</strong><br/>
+            <span style="color:#64748b;font-size:10px;">${(campaign as any)?.createdByName || campaign?.createdBy || 'Treasurer'}</span>
+          </div>
+          <div class="sig-box">
+            <strong>${auditorName}</strong><br/>
+            <span style="color:#64748b;font-size:10px;">Sum Endiktu (Auditor) • Ph: ${auditorPhone || 'N/A'}</span>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+    printHtmlSafely(html);
+  };
+
   if (!isOpen || !campaign) return null;
 
   // Handle Sign & Lock Action
@@ -708,53 +1345,53 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 overflow-y-auto animate-fade-in">
+    <div className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-0 sm:p-2.5 overflow-y-auto animate-fade-in">
       <div 
-        className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-4xl overflow-hidden my-auto flex flex-col max-h-[92vh]"
+        className="bg-white rounded-none sm:rounded-3xl shadow-2xl border-0 sm:border border-slate-200 w-full sm:w-[98vw] max-w-7xl overflow-hidden flex flex-col h-full sm:h-auto sm:max-h-[96vh]"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-4 sm:p-5 flex items-center justify-between gap-3 shrink-0">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="w-11 h-11 rounded-2xl bg-indigo-500/20 border border-indigo-400/30 flex items-center justify-center shadow-inner shrink-0">
-              <ShieldCheck className="w-6 h-6 text-indigo-300" />
+        <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-3 sm:p-4 flex items-center justify-between gap-2.5 shrink-0">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-2xl bg-indigo-500/20 border border-indigo-400/30 flex items-center justify-center shadow-inner shrink-0">
+              <ShieldCheck className="w-5 h-5 sm:w-6 sm:h-6 text-indigo-300" />
             </div>
             <div className="min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <h3 className="font-black text-base sm:text-xl tracking-tight">
+              <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                <h3 className="font-black text-sm sm:text-lg tracking-tight">
                   Online Financial Audit Portal
                 </h3>
                 {accessInfo?.hasAccess && !isAdmin && (
                   <span
                     title={accessInfo.grant?.expiresAt ? `Permit tawp hun: ${formatDateDDMMYYYY(accessInfo.grant.expiresAt)}` : 'Auditor Permit Active'}
-                    className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 flex items-center gap-1"
+                    className="text-[9.5px] sm:text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 flex items-center gap-1"
                   >
                     <Clock className="w-3 h-3" />
                     <span>Permit: {accessInfo.remainingLabel || formatRemainingAuditTimeMizo(accessInfo.grant?.expiresAt)}</span>
                   </span>
                 )}
                 {isAdmin && (
-                  <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-400/30">
+                  <span className="text-[9.5px] sm:text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-400/30">
                     Admin Full Access
                   </span>
                 )}
                 {!canAudit && (
-                  <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-400/30">
+                  <span className="text-[9.5px] sm:text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-400/30">
                     View-Only Mode
                   </span>
                 )}
               </div>
-              <div className="flex items-center gap-2 mt-1 flex-wrap">
+              <div className="flex items-center gap-1.5 sm:gap-2 mt-0.5 flex-wrap">
                 {accessibleCampaigns.length > 1 && onSelectCampaign ? (
-                  <div className="flex items-center gap-1.5 bg-white/10 border border-white/15 rounded-xl px-2.5 py-1">
-                    <FolderKanban className="w-3.5 h-3.5 text-indigo-300 shrink-0" />
+                  <div className="flex items-center gap-1 bg-white/10 border border-white/15 rounded-xl px-2 py-0.5">
+                    <FolderKanban className="w-3 h-3 text-indigo-300 shrink-0" />
                     <select
                       value={campaign.id}
                       onChange={e => {
                         const found = accessibleCampaigns.find(c => c.id === e.target.value);
                         if (found) onSelectCampaign(found);
                       }}
-                      className="bg-transparent text-xs font-bold text-white focus:outline-none cursor-pointer pr-2"
+                      className="bg-transparent text-[11px] font-bold text-white focus:outline-none cursor-pointer pr-1"
                     >
                       {accessibleCampaigns.map(c => (
                         <option key={c.id} value={c.id} className="text-slate-900 font-bold">
@@ -764,29 +1401,44 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                     </select>
                   </div>
                 ) : (
-                  <p className="text-xs text-indigo-200/80 font-medium truncate">
+                  <p className="text-[11px] sm:text-xs text-indigo-200/80 font-medium truncate">
                     {campaign.title} • {campaign.category.toUpperCase()}
                   </p>
                 )}
+                <span className="text-[10px] sm:text-[11px] text-indigo-300/90 font-semibold truncate">
+                  • Receipts: {stats.txCount} | Vouchers: {stats.expCount} | Closing Bal: ₹{stats.netBalance.toLocaleString('en-IN')}
+                </span>
               </div>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-full hover:bg-white/10 text-white/80 transition shrink-0"
-            aria-label="Close"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={handleSyncPortalData}
+              disabled={isSyncingPortal}
+              title="Server leh Cloud aṭangin record thar ber sync rawh"
+              className="px-2.5 sm:px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-white text-xs font-bold flex items-center gap-1.5 transition cursor-pointer disabled:opacity-50"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isSyncingPortal ? 'animate-spin text-emerald-300' : 'text-indigo-200'}`} />
+              <span className="hidden sm:inline">{isSyncingPortal ? 'Syncing...' : 'Sync Data'}</span>
+            </button>
+            <button
+              onClick={onClose}
+              className="p-1.5 rounded-full hover:bg-white/10 text-white/80 transition shrink-0 cursor-pointer"
+              aria-label="Close"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Access / Expiry Banner if View-Only */}
         {!canAudit && (
-          <div className="bg-amber-50 border-b border-amber-200 px-5 py-2.5 text-amber-900 text-xs flex items-center justify-between gap-2 shrink-0">
+          <div className="bg-amber-50 border-b border-amber-200 px-3 sm:px-5 py-2 text-amber-900 text-xs flex items-center justify-between gap-2 shrink-0">
             <div className="flex items-center gap-2">
               <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
               <span>
-                <strong>View-Only Access:</strong> He Bawm-ah hian active Auditor phalna (time-bound grant) i nei rih lo a, a nih loh leh a hun a tawp tawh. Record i thlir thei a, mahse Lock/Verify turin Bawm neitu (Creator) hnenah phalna dil belh rawh.
+                <strong>View-Only Access:</strong> He Bawm-ah hian active Auditor phalna (time-bound grant) i nei rih lo a. Record i thlir thei a, mahse Lock/Verify turin Bawm neitu hnenah phalna dil rawh.
               </span>
             </div>
           </div>
@@ -794,90 +1446,978 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
 
         {/* Toast */}
         {lockToast && (
-          <div className="bg-emerald-50 border-b border-emerald-200 p-3 px-5 text-emerald-800 text-xs font-bold flex items-center gap-2 animate-fadeIn shrink-0">
+          <div className="bg-emerald-50 border-b border-emerald-200 p-2.5 px-4 text-emerald-800 text-xs font-bold flex items-center gap-2 animate-fadeIn shrink-0">
             <CheckCircle2 className="w-4 h-4 text-emerald-600" />
             <span>{lockToast}</span>
           </div>
         )}
 
-        {/* Tab Navigation */}
-        <div className="bg-slate-100 border-b border-slate-200 px-4 flex items-center gap-1 overflow-x-auto shrink-0">
+        {/* Tab Navigation — 1-row horizontal scroll on mobile, wrap on desktop */}
+        <div className="bg-slate-100 border-b border-slate-200 px-2 sm:px-4 py-1.5 flex items-center gap-1.5 overflow-x-auto no-scrollbar whitespace-nowrap shrink-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <button
+            type="button"
+            onClick={() => setActiveTab('cashbook')}
+            className={`py-1.5 sm:py-2 px-2.5 sm:px-3 rounded-xl text-[11px] sm:text-xs font-black border transition whitespace-nowrap shrink-0 flex items-center gap-1.5 cursor-pointer ${
+              activeTab === 'cashbook'
+                ? 'border-indigo-600 text-white bg-indigo-600 shadow-2xs'
+                : 'border-indigo-200 text-indigo-800 hover:bg-indigo-100 bg-indigo-50/80'
+            }`}
+          >
+            <BookOpen className="w-3.5 h-3.5 shrink-0" />
+            <span className="hidden sm:inline">📖 Cash Book (Receipts &amp; Payments)</span>
+            <span className="inline sm:hidden">📖 Cash Book</span>
+          </button>
           <button
             type="button"
             onClick={() => setActiveTab('overview')}
-            className={`py-3 px-3.5 text-xs font-bold border-b-2 transition whitespace-nowrap flex items-center gap-1.5 ${
+            className={`py-1.5 sm:py-2 px-2.5 sm:px-3 rounded-xl text-[11px] sm:text-xs font-bold border transition whitespace-nowrap shrink-0 flex items-center gap-1.5 cursor-pointer ${
               activeTab === 'overview'
-                ? 'border-indigo-600 text-indigo-700 bg-white'
-                : 'border-transparent text-slate-600 hover:text-slate-900'
+                ? 'border-slate-900 text-white bg-slate-900 shadow-2xs'
+                : 'border-slate-200 text-slate-700 hover:bg-white bg-white/70'
             }`}
           >
-            <Banknote className="w-4 h-4" />
-            <span>Accounts Overview</span>
+            <Banknote className="w-3.5 h-3.5 shrink-0" />
+            <span className="hidden sm:inline">Accounts Overview</span>
+            <span className="inline sm:hidden">Overview</span>
           </button>
           <button
             type="button"
             onClick={() => setActiveTab('reconcile')}
-            className={`py-3 px-3.5 text-xs font-bold border-b-2 transition whitespace-nowrap flex items-center gap-1.5 ${
+            className={`py-1.5 sm:py-2 px-2.5 sm:px-3 rounded-xl text-[11px] sm:text-xs font-bold border transition whitespace-nowrap shrink-0 flex items-center gap-1.5 cursor-pointer ${
               activeTab === 'reconcile'
-                ? 'border-emerald-600 text-emerald-800 bg-white'
-                : 'border-transparent text-emerald-700 hover:text-emerald-900 bg-emerald-50/50'
+                ? 'border-emerald-600 text-white bg-emerald-600 shadow-2xs'
+                : 'border-emerald-200 text-emerald-800 hover:bg-emerald-100 bg-emerald-50/70'
             }`}
           >
-            <ShieldCheck className="w-4 h-4 text-emerald-600" />
-            <span>🔍 Cross-Check &amp; Enfiahna</span>
+            <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
+            <span className="hidden sm:inline">🔍 Cross-Check &amp; Enfiahna</span>
+            <span className="inline sm:hidden">🔍 Cross-Check</span>
           </button>
           <button
             type="button"
             onClick={() => setActiveTab('transactions')}
-            className={`py-3 px-3.5 text-xs font-bold border-b-2 transition whitespace-nowrap flex items-center gap-1.5 ${
+            className={`py-1.5 sm:py-2 px-2.5 sm:px-3 rounded-xl text-[11px] sm:text-xs font-bold border transition whitespace-nowrap shrink-0 flex items-center gap-1.5 cursor-pointer ${
               activeTab === 'transactions'
-                ? 'border-indigo-600 text-indigo-700 bg-white'
-                : 'border-transparent text-slate-600 hover:text-slate-900'
+                ? 'border-emerald-700 text-white bg-emerald-700 shadow-2xs'
+                : 'border-slate-200 text-slate-700 hover:bg-white bg-white/70'
             }`}
           >
-            <TrendingUp className="w-4 h-4" />
-            <span>Inflow / Thawhlawm ({stats.txCount})</span>
+            <TrendingUp className="w-3.5 h-3.5 shrink-0" />
+            <span className="hidden sm:inline">Inflow / Thawhlawm ({stats.txCount})</span>
+            <span className="inline sm:hidden">Inflow ({stats.txCount})</span>
           </button>
           <button
             type="button"
             onClick={() => setActiveTab('expenses')}
-            className={`py-3 px-3.5 text-xs font-bold border-b-2 transition whitespace-nowrap flex items-center gap-1.5 ${
+            className={`py-1.5 sm:py-2 px-2.5 sm:px-3 rounded-xl text-[11px] sm:text-xs font-bold border transition whitespace-nowrap shrink-0 flex items-center gap-1.5 cursor-pointer ${
               activeTab === 'expenses'
-                ? 'border-indigo-600 text-indigo-700 bg-white'
-                : 'border-transparent text-slate-600 hover:text-slate-900'
+                ? 'border-rose-700 text-white bg-rose-700 shadow-2xs'
+                : 'border-slate-200 text-slate-700 hover:bg-white bg-white/70'
             }`}
           >
-            <TrendingDown className="w-4 h-4" />
-            <span>Outflow / Senso ({stats.expCount})</span>
+            <TrendingDown className="w-3.5 h-3.5 shrink-0" />
+            <span className="hidden sm:inline">Outflow / Senso ({stats.expCount})</span>
+            <span className="inline sm:hidden">Outflow ({stats.expCount})</span>
           </button>
           <button
             type="button"
             onClick={() => setActiveTab('lock_action')}
-            className={`py-3 px-3.5 text-xs font-bold border-b-2 transition whitespace-nowrap flex items-center gap-1.5 ${
+            className={`py-1.5 sm:py-2 px-2.5 sm:px-3 rounded-xl text-[11px] sm:text-xs font-bold border transition whitespace-nowrap shrink-0 flex items-center gap-1.5 cursor-pointer ${
               activeTab === 'lock_action'
-                ? 'border-indigo-600 text-indigo-700 bg-white'
-                : 'border-transparent text-slate-600 hover:text-slate-900'
+                ? 'border-amber-600 text-white bg-amber-600 shadow-2xs'
+                : 'border-amber-200 text-amber-900 hover:bg-amber-100 bg-amber-50/70'
             }`}
           >
-            <Lock className="w-4 h-4 text-amber-600" />
-            <span>Sign & Lock Period</span>
+            <Lock className="w-3.5 h-3.5 shrink-0" />
+            <span className="hidden sm:inline">Sign &amp; Lock Period</span>
+            <span className="inline sm:hidden">Sign &amp; Lock</span>
           </button>
           <button
             type="button"
             onClick={() => setActiveTab('certificate')}
-            className={`py-3 px-3.5 text-xs font-bold border-b-2 transition whitespace-nowrap flex items-center gap-1.5 ${
+            className={`py-1.5 sm:py-2 px-2.5 sm:px-3 rounded-xl text-[11px] sm:text-xs font-bold border transition whitespace-nowrap shrink-0 flex items-center gap-1.5 cursor-pointer ${
               activeTab === 'certificate'
-                ? 'border-indigo-600 text-indigo-700 bg-white'
-                : 'border-transparent text-slate-600 hover:text-slate-900'
+                ? 'border-purple-700 text-white bg-purple-700 shadow-2xs'
+                : 'border-purple-200 text-purple-900 hover:bg-purple-100 bg-purple-50/70'
             }`}
           >
-            <Award className="w-4 h-4 text-purple-600" />
-            <span>Audit Certificate</span>
+            <Award className="w-3.5 h-3.5 shrink-0" />
+            <span className="hidden sm:inline">Audit Certificate</span>
+            <span className="inline sm:hidden">Certificate</span>
           </button>
         </div>
 
         {/* Body */}
-        <div className="p-4 sm:p-6 overflow-y-auto space-y-5 flex-1">
+        <div className="p-2 sm:p-4 overflow-y-auto space-y-3.5 sm:space-y-5 flex-1">
+          {/* TAB: CASH BOOK (RECEIPTS & PAYMENTS) - PRIMARY AUDITOR VIEW */}
+          {activeTab === 'cashbook' && (
+            <div className="space-y-3 sm:space-y-4">
+              {/* Top Control Bar: Date Range Selector + View Toggle + Print */}
+              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-2.5 sm:p-4 space-y-2.5 sm:space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3">
+                  <div>
+                    <h4 className="font-black text-slate-900 text-xs sm:text-base flex items-center gap-1.5 sm:gap-2">
+                      <BookOpen className="w-4 h-4 text-indigo-600 shrink-0" />
+                      <span>CASH BOOK (RECEIPTS &amp; PAYMENTS) — AUDIT CHHAWP CHHUAHNA</span>
+                    </h4>
+                    <p className="text-[10px] sm:text-[11px] text-slate-600">
+                      Hun chhung (Range) thlang la, Sum Lut (Receipts) leh Sum Chhuak (Payments) te sawi buai ngai lovin Cash Book aṭang hian Audit nghal rawh.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                    <div className="inline-flex rounded-xl bg-white border border-slate-300 p-0.5">
+                      <button
+                        type="button"
+                        onClick={() => setCbViewMode('ledger')}
+                        className={`px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-lg text-[10px] sm:text-[11px] font-black transition cursor-pointer ${
+                          cbViewMode === 'ledger'
+                            ? 'bg-indigo-600 text-white shadow-2xs'
+                            : 'text-slate-700 hover:bg-slate-100'
+                        }`}
+                      >
+                        📖 Dr. Receipts / Cr. Payments
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setCbViewMode('chronological')}
+                        className={`px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-lg text-[10px] sm:text-[11px] font-black transition cursor-pointer ${
+                          cbViewMode === 'chronological'
+                            ? 'bg-indigo-600 text-white shadow-2xs'
+                            : 'text-slate-700 hover:bg-slate-100'
+                        }`}
+                      >
+                        📋 Chronological (Running Bal)
+                      </button>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setCbFullHeight(f => !f)}
+                      className={`px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-xl text-[10px] sm:text-[11px] font-bold border transition cursor-pointer ${
+                        cbFullHeight
+                          ? 'bg-indigo-50 text-indigo-800 border-indigo-300'
+                          : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'
+                      }`}
+                    >
+                      {cbFullHeight ? '↕️ Compact' : '↕️ Expand'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handlePrintAuditedCashBook}
+                      className="px-2.5 sm:px-3 py-1 sm:py-1.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-[10px] sm:text-[11px] rounded-xl flex items-center gap-1 cursor-pointer"
+                    >
+                      <Printer className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                      <span>Print</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Date Range Presets + Custom Date Inputs */}
+                <div className="flex items-center gap-1.5 pt-2 border-t border-slate-200/80 overflow-x-auto no-scrollbar whitespace-nowrap sm:flex-wrap [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                  <span className="text-[10.5px] sm:text-[11px] font-extrabold text-slate-700 flex items-center gap-1 shrink-0">
+                    <Calendar className="w-3.5 h-3.5 text-indigo-600" />
+                    <span>Hun:</span>
+                  </span>
+                  {[
+                    { id: 'all', label: 'A Zavai (All)' },
+                    { id: 'this_month', label: 'Kumin Thla' },
+                    { id: 'last_month', label: 'Thla Hmasa' },
+                    { id: 'today', label: 'Vawiin' },
+                    { id: 'custom', label: '📅 Custom Range' }
+                  ].map(p => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => setCbPreset(p.id as any)}
+                      className={`px-2 sm:px-2.5 py-1 rounded-lg text-[10.5px] sm:text-[11px] font-bold border transition whitespace-nowrap shrink-0 cursor-pointer ${
+                        cbPreset === p.id
+                          ? 'bg-indigo-600 text-white border-indigo-600'
+                          : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'
+                      }`}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+
+                  {cbPreset === 'custom' && (
+                    <div className="flex items-center gap-1.5 flex-wrap bg-white px-2 py-1 rounded-xl border border-indigo-200 shrink-0">
+                      <label className="text-[10px] font-bold text-slate-600 flex items-center gap-1">
+                        <span>From:</span>
+                        <input
+                          type="date"
+                          value={cbFromDate}
+                          onChange={e => setCbFromDate(e.target.value)}
+                          className="text-xs font-bold text-slate-900 border border-slate-300 rounded-lg px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                        />
+                      </label>
+                      <label className="text-[10px] font-bold text-slate-600 flex items-center gap-1">
+                        <span>To:</span>
+                        <input
+                          type="date"
+                          value={cbToDate}
+                          onChange={e => setCbToDate(e.target.value)}
+                          className="text-xs font-bold text-slate-900 border border-slate-300 rounded-lg px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                        />
+                      </label>
+                    </div>
+                  )}
+                </div>
+
+                {/* Audit Chin vs La Audit Loh Filter Bar + Search + Batch Range Actions */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-2 border-t border-slate-200/80">
+                  <div className="flex items-center gap-1 sm:gap-1.5 overflow-x-auto no-scrollbar whitespace-nowrap [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                    <button
+                      type="button"
+                      onClick={() => setCbAuditFilter('all')}
+                      className={`px-2 sm:px-2.5 py-1 rounded-lg text-[10px] sm:text-[11px] font-black border transition shrink-0 cursor-pointer ${
+                        cbAuditFilter === 'all'
+                          ? 'bg-slate-900 text-white border-slate-900'
+                          : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'
+                      }`}
+                    >
+                      Zavai ({cashBookAuditData.totalEntriesCount})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCbAuditFilter('audited')}
+                      className={`px-2 sm:px-2.5 py-1 rounded-lg text-[10px] sm:text-[11px] font-black border transition shrink-0 cursor-pointer ${
+                        cbAuditFilter === 'audited'
+                          ? 'bg-emerald-600 text-white border-emerald-600'
+                          : 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100'
+                      }`}
+                    >
+                      ✓ Audit ({cashBookAuditData.auditedCount})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCbAuditFilter('unaudited')}
+                      className={`px-2 sm:px-2.5 py-1 rounded-lg text-[10px] sm:text-[11px] font-black border transition shrink-0 cursor-pointer ${
+                        cbAuditFilter === 'unaudited'
+                          ? 'bg-amber-600 text-white border-amber-600'
+                          : 'bg-amber-50 text-amber-900 border-amber-300 hover:bg-amber-100'
+                      }`}
+                    >
+                      ⏳ Loh ({cashBookAuditData.unauditedCount})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCbAuditFilter('flagged')}
+                      className={`px-2 sm:px-2.5 py-1 rounded-lg text-[10px] sm:text-[11px] font-black border transition shrink-0 cursor-pointer ${
+                        cbAuditFilter === 'flagged'
+                          ? 'bg-rose-600 text-white border-rose-600'
+                          : 'bg-rose-50 text-rose-800 border-rose-300 hover:bg-rose-100'
+                      }`}
+                    >
+                      ⚠️ Query ({cashBookAuditData.flaggedCount})
+                    </button>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                    <div className="relative flex-1 sm:flex-initial min-w-[160px]">
+                      <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        value={searchQuery}
+                        onChange={e => setSearchQuery(e.target.value)}
+                        placeholder="Hming, Head, UTR..."
+                        className="w-full pl-8 pr-3 py-1 bg-white border border-slate-300 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      />
+                    </div>
+                    {canAudit && cashBookAuditData.unauditedCount > 0 && (
+                      <button
+                        type="button"
+                        onClick={handleVerifySelectedRange}
+                        className="px-2.5 sm:px-3 py-1 sm:py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[10px] sm:text-[11px] rounded-xl shadow-2xs cursor-pointer flex items-center gap-1"
+                      >
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        <span>✓ Audit Vek ({cashBookAuditData.unauditedCount})</span>
+                      </button>
+                    )}
+                    {canAudit && cashBookAuditData.totalEntriesCount > 0 && (
+                      <button
+                        type="button"
+                        onClick={handleLockSelectedRange}
+                        className="px-2.5 sm:px-3 py-1 sm:py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-black text-[10px] sm:text-[11px] rounded-xl shadow-2xs cursor-pointer flex items-center gap-1"
+                      >
+                        <Lock className="w-3.5 h-3.5" />
+                        <span>🔒 Lock</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* 4-Card Cash Book Summary Strip (Opening B/F, Receipts, Payments, Closing C/D) */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-2.5 sm:p-3">
+                  <span className="text-[9.5px] sm:text-[10px] font-black uppercase text-slate-500 block truncate">Opening (B/F)</span>
+                  <span className="text-sm sm:text-base font-black text-slate-900 tabular-nums">
+                    ₹{cashBookAuditData.openingBalance.toLocaleString('en-IN')}
+                  </span>
+                  <span className="text-[9.5px] text-slate-500 block mt-0.5 truncate">
+                    {cashBookAuditData.effFrom ? `${formatDateDDMMYYYY(cashBookAuditData.effFrom)} hma` : 'Bawm B/F'}
+                  </span>
+                </div>
+
+                <div className="bg-emerald-50/70 border border-emerald-200 rounded-2xl p-2.5 sm:p-3">
+                  <span className="text-[9.5px] sm:text-[10px] font-black uppercase text-emerald-800 block truncate">Dr. Receipts (Lut)</span>
+                  <span className="text-sm sm:text-base font-black text-emerald-700 tabular-nums">
+                    +₹{cashBookAuditData.periodReceiptsTotal.toLocaleString('en-IN')}
+                  </span>
+                  <div className="flex justify-between text-[9px] sm:text-[10px] font-bold mt-0.5">
+                    <span className="text-emerald-800">✓ ₹{cashBookAuditData.auditedReceiptsAmt.toLocaleString('en-IN')}</span>
+                    <span className="text-amber-800">⏳ ₹{cashBookAuditData.unauditedReceiptsAmt.toLocaleString('en-IN')}</span>
+                  </div>
+                </div>
+
+                <div className="bg-rose-50/70 border border-rose-200 rounded-2xl p-2.5 sm:p-3">
+                  <span className="text-[9.5px] sm:text-[10px] font-black uppercase text-rose-800 block truncate">Cr. Payments (Chhuak)</span>
+                  <span className="text-sm sm:text-base font-black text-rose-700 tabular-nums">
+                    -₹{cashBookAuditData.periodPaymentsTotal.toLocaleString('en-IN')}
+                  </span>
+                  <div className="flex justify-between text-[9px] sm:text-[10px] font-bold mt-0.5">
+                    <span className="text-emerald-800">✓ ₹{cashBookAuditData.auditedPaymentsAmt.toLocaleString('en-IN')}</span>
+                    <span className="text-amber-800">⏳ ₹{cashBookAuditData.unauditedPaymentsAmt.toLocaleString('en-IN')}</span>
+                  </div>
+                </div>
+
+                <div className="bg-indigo-50/80 border border-indigo-200 rounded-2xl p-2.5 sm:p-3">
+                  <span className="text-[9.5px] sm:text-[10px] font-black uppercase text-indigo-800 block truncate">Closing Bal (C/D)</span>
+                  <span className="text-sm sm:text-base font-black text-indigo-950 tabular-nums">
+                    ₹{cashBookAuditData.closingBalance.toLocaleString('en-IN')}
+                  </span>
+                  <span className="text-[9.5px] font-bold text-indigo-700 block mt-0.5 truncate">
+                    ✓ {cashBookAuditData.auditedCount} | ⏳ {cashBookAuditData.unauditedCount}
+                  </span>
+                </div>
+              </div>
+
+              {/* Flag Query Inline Modal inside Cash Book if triggered */}
+              {flaggingRecordId && (
+                <div className="bg-rose-50 border-2 border-rose-300 rounded-2xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                  <div className="flex-1 space-y-1">
+                    <div className="text-xs font-black text-rose-900 flex items-center gap-1.5">
+                      <MessageSquareWarning className="w-4 h-4 text-rose-600" />
+                      <span>Auditor Query / Thil Fiah Duh Ziaktu (ID: {flaggingRecordId}):</span>
+                    </div>
+                    <input
+                      type="text"
+                      value={flagQueryText}
+                      onChange={e => setFlagQueryText(e.target.value)}
+                      placeholder="Entirnan: Receipt / Voucher no. a inmil lo, enfiah nawn rawh..."
+                      className="w-full px-3 py-1.5 rounded-xl border border-rose-300 bg-white text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-rose-500"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => handleMarkItem(flaggingRecordType, flaggingRecordId, null, 'flagged', flagQueryText || 'Enfiah ngai / Query awm')}
+                      className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-black text-xs rounded-xl cursor-pointer"
+                    >
+                      ⚠️ Save Query
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFlaggingRecordId(null);
+                        setFlagQueryText('');
+                      }}
+                      className="px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 font-bold text-xs rounded-xl border border-slate-300 cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* VIEW MODE 1: TRADITIONAL TWO-COLUMN CASH BOOK (Dr. RECEIPTS | Cr. PAYMENTS) */}
+              {cbViewMode === 'ledger' ? (
+                <div className="space-y-3">
+                  {/* Mobile Screen Pane Selector (Receipts vs Payments vs Both) */}
+                  <div className="xl:hidden flex items-center bg-slate-100 p-1 rounded-xl border border-slate-300 text-xs font-black gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setMobileLedgerPane('receipts')}
+                      className={`flex-1 py-1.5 px-2 rounded-lg text-center transition flex items-center justify-center gap-1 cursor-pointer ${
+                        mobileLedgerPane === 'receipts'
+                          ? 'bg-emerald-700 text-white shadow-2xs'
+                          : 'text-slate-700 hover:bg-white'
+                      }`}
+                    >
+                      <TrendingUp className="w-3.5 h-3.5 text-emerald-300 shrink-0" />
+                      <span className="truncate">Dr. Receipts ({cashBookAuditData.filteredReceipts.length})</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setMobileLedgerPane('payments')}
+                      className={`flex-1 py-1.5 px-2 rounded-lg text-center transition flex items-center justify-center gap-1 cursor-pointer ${
+                        mobileLedgerPane === 'payments'
+                          ? 'bg-rose-700 text-white shadow-2xs'
+                          : 'text-slate-700 hover:bg-white'
+                      }`}
+                    >
+                      <TrendingDown className="w-3.5 h-3.5 text-rose-300 shrink-0" />
+                      <span className="truncate">Cr. Payments ({cashBookAuditData.filteredPayments.length})</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setMobileLedgerPane('both')}
+                      className={`py-1.5 px-2.5 rounded-lg text-center transition cursor-pointer ${
+                        mobileLedgerPane === 'both'
+                          ? 'bg-indigo-600 text-white shadow-2xs'
+                          : 'text-slate-700 hover:bg-white'
+                      }`}
+                    >
+                      <span>Pahnihin</span>
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 items-stretch">
+                    {/* LEFT SIDE: Dr. RECEIPTS (SUM LUT) */}
+                    <div className={`bg-white border-2 border-emerald-700/80 rounded-2xl overflow-hidden flex-col justify-between shadow-2xs ${
+                      mobileLedgerPane === 'payments' ? 'hidden xl:flex' : 'flex'
+                    }`}>
+                      <div>
+                        <div className="bg-emerald-900 text-white px-3 sm:px-3.5 py-2 sm:py-2.5 flex items-center justify-between gap-2 flex-wrap">
+                          <div className="font-black text-xs sm:text-sm tracking-wide flex items-center gap-1.5">
+                            <TrendingUp className="w-4 h-4 text-emerald-300 shrink-0" />
+                            <span>Dr. RECEIPTS (SUM LUT / THAWHLAWM)</span>
+                            <span className="text-[11px] font-bold text-emerald-200">
+                              ({cashBookAuditData.filteredReceipts.length})
+                            </span>
+                          </div>
+                        <div className="inline-flex rounded-lg bg-emerald-950/80 p-0.5 border border-emerald-700">
+                          <button
+                            type="button"
+                            onClick={() => setCbReceiptsMode('detailed')}
+                            className={`px-2 py-0.5 rounded-md text-[10px] font-black transition cursor-pointer ${
+                              cbReceiptsMode === 'detailed'
+                                ? 'bg-emerald-500 text-slate-950'
+                                : 'text-emerald-200 hover:text-white'
+                            }`}
+                          >
+                            📋 Mi Mal Tin
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setCbReceiptsMode('head_wise')}
+                            className={`px-2 py-0.5 rounded-md text-[10px] font-black transition cursor-pointer ${
+                              cbReceiptsMode === 'head_wise'
+                                ? 'bg-emerald-500 text-slate-950'
+                                : 'text-emerald-200 hover:text-white'
+                            }`}
+                          >
+                            📂 Head-wise ({cashBookAuditData.receiptHeadGroups.length})
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className={`overflow-x-auto ${cbFullHeight ? '' : 'max-h-[58vh] overflow-y-auto'}`}>
+                        <table className="w-full text-left border-collapse text-xs">
+                          <thead className="sticky top-0 z-10 bg-emerald-50 border-b border-emerald-200 text-[10px] font-black uppercase text-emerald-950">
+                            <tr>
+                              <th className="p-2">Date &amp; Ref</th>
+                              <th className="p-2">Particulars (Sum Lut)</th>
+                              <th className="p-2 text-center">Audit</th>
+                              <th className="p-2 text-right">Amount (₹)</th>
+                              {canAudit && <th className="p-2 text-center">Action</th>}
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                            {/* Opening Balance B/F Row */}
+                            <tr className="bg-emerald-50/40 font-bold">
+                              <td className="p-2 whitespace-nowrap text-[11px] text-slate-600">
+                                <div>{cashBookAuditData.effFrom ? formatDateDDMMYYYY(cashBookAuditData.effFrom) : 'Opening'}</div>
+                                <div className="text-[9.5px] font-mono text-slate-400">B/F</div>
+                              </td>
+                              <td className="p-2 text-slate-900">
+                                <div className="font-black">To Balance b/d (Opening Balance)</div>
+                                <div className="text-[10px] text-slate-500">Hun hma sum bang rawn kai chhuak</div>
+                              </td>
+                              <td className="p-2 text-center">
+                                <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-slate-200 text-slate-700">
+                                  OPENING
+                                </span>
+                              </td>
+                              <td className="p-2 text-right font-black text-slate-900 whitespace-nowrap tabular-nums">
+                                ₹{cashBookAuditData.openingBalance.toLocaleString('en-IN')}
+                              </td>
+                              {canAudit && <td className="p-2 text-center text-slate-400">—</td>}
+                            </tr>
+
+                            {cashBookAuditData.filteredReceipts.length === 0 ? (
+                              <tr>
+                                <td colSpan={canAudit ? 5 : 4} className="p-6 text-center text-slate-400 font-semibold">
+                                  He filter/range chhungah hian Receipts (Sum Lut) a awm rih lo.
+                                </td>
+                              </tr>
+                            ) : cbReceiptsMode === 'head_wise' ? (
+                              cashBookAuditData.receiptHeadGroups.map(grp => {
+                                const isExpanded = Boolean(expandedHeads[grp.headName]);
+                                const allHeadAudited = grp.unauditedCount === 0 && grp.flaggedCount === 0;
+                                return (
+                                  <React.Fragment key={grp.headName}>
+                                    <tr
+                                      className="bg-emerald-50/60 hover:bg-emerald-100/60 transition cursor-pointer font-bold"
+                                      onClick={() => setExpandedHeads(prev => ({ ...prev, [grp.headName]: !prev[grp.headName] }))}
+                                    >
+                                      <td className="p-2 whitespace-nowrap align-top">
+                                        <div className="font-bold text-slate-800 text-[11px]">{grp.latestDisplayDate}</div>
+                                        <div className="text-[9.5px] font-mono text-emerald-700">{grp.count} receipts</div>
+                                      </td>
+                                      <td className="p-2 align-top">
+                                        <div className="font-black text-slate-900 flex items-center gap-1">
+                                          {isExpanded ? <ChevronUp className="w-3.5 h-3.5 text-emerald-700 shrink-0" /> : <ChevronDown className="w-3.5 h-3.5 text-emerald-700 shrink-0" />}
+                                          <span>To {grp.headName}</span>
+                                        </div>
+                                        <div className="text-[10px] text-slate-600">
+                                          ✓ Audit: {grp.auditedCount} • ⏳ La Audit Loh: {grp.unauditedCount} (Click to {isExpanded ? 'collapse' : 'expand'})
+                                        </div>
+                                      </td>
+                                      <td className="p-2 text-center align-top whitespace-nowrap">
+                                        {allHeadAudited ? (
+                                          <span className="inline-flex items-center gap-1 text-[9px] font-black px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                            <span>✓ AUDIT CHIN</span>
+                                          </span>
+                                        ) : (
+                                          <span className="inline-flex items-center gap-1 text-[9px] font-black px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300">
+                                            <span>⏳ {grp.unauditedCount} LEFT</span>
+                                          </span>
+                                        )}
+                                      </td>
+                                      <td className="p-2 text-right font-black text-emerald-800 align-top whitespace-nowrap tabular-nums">
+                                        ₹{grp.totalAmount.toLocaleString('en-IN')}
+                                      </td>
+                                      {canAudit && (
+                                        <td className="p-2 text-center align-top whitespace-nowrap" onClick={e => e.stopPropagation()}>
+                                          {grp.unauditedCount > 0 ? (
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                grp.items.forEach(item => {
+                                                  if (item.audit_mark !== 'verified') {
+                                                    markRecordAuditVerification(
+                                                      item.id,
+                                                      'transaction',
+                                                      'verified',
+                                                      auditorName || creatorProfile?.name || 'Auditor',
+                                                      ''
+                                                    );
+                                                  }
+                                                });
+                                                setTick(t => t + 1);
+                                                if (onRecordsUpdated) onRecordsUpdated();
+                                              }}
+                                              className="px-2 py-1 rounded-lg text-[10px] font-black bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer"
+                                            >
+                                              ✓ Audit Head
+                                            </button>
+                                          ) : (
+                                            <span className="text-[10px] font-black text-emerald-700">✓ Checked</span>
+                                          )}
+                                        </td>
+                                      )}
+                                    </tr>
+                                    {isExpanded && grp.items.map(r => (
+                                      <tr key={r.id} className="bg-white hover:bg-slate-50 text-[11px]">
+                                        <td className="p-2 pl-4 whitespace-nowrap align-top text-slate-600">
+                                          <div>{r.displayDate}</div>
+                                          <div className="text-[9px] font-mono text-slate-400">{r.voucherOrRef}</div>
+                                        </td>
+                                        <td className="p-2 align-top">
+                                          <div className="font-bold text-slate-800">{r.particulars}</div>
+                                          <div className="text-[10px] text-slate-500">{r.subDetail} ({r.paymentMode})</div>
+                                        </td>
+                                        <td className="p-2 text-center align-top whitespace-nowrap">
+                                          {r.auditCategory === 'audited' ? (
+                                            <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800">✓ Chin</span>
+                                          ) : r.auditCategory === 'flagged' ? (
+                                            <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-rose-100 text-rose-800">⚠️ Query</span>
+                                          ) : (
+                                            <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-amber-100 text-amber-900">⏳ Loh</span>
+                                          )}
+                                        </td>
+                                        <td className="p-2 text-right font-bold text-emerald-700 align-top whitespace-nowrap tabular-nums">
+                                          ₹{r.amount.toLocaleString('en-IN')}
+                                        </td>
+                                        {canAudit && (
+                                          <td className="p-2 text-center align-top whitespace-nowrap">
+                                            <button
+                                              type="button"
+                                              onClick={() => handleMarkItem('transaction', r.id, r.audit_mark, 'verified')}
+                                              className={`px-1.5 py-0.5 rounded text-[9.5px] font-black border cursor-pointer ${
+                                                r.audit_mark === 'verified'
+                                                  ? 'bg-emerald-600 text-white border-emerald-600'
+                                                  : 'bg-white text-emerald-700 border-emerald-300'
+                                              }`}
+                                            >
+                                              ✓ Dik
+                                            </button>
+                                          </td>
+                                        )}
+                                      </tr>
+                                    ))}
+                                  </React.Fragment>
+                                );
+                              })
+                            ) : (
+                              cashBookAuditData.filteredReceipts.map(r => (
+                                <tr
+                                  key={r.id}
+                                  className={`hover:bg-slate-50 transition ${
+                                    r.auditCategory === 'audited'
+                                      ? 'bg-emerald-50/20'
+                                      : r.auditCategory === 'flagged'
+                                      ? 'bg-rose-50/30'
+                                      : ''
+                                  }`}
+                                >
+                                  <td className="p-2 whitespace-nowrap align-top">
+                                    <div className="font-bold text-slate-800 text-[11px]">{r.displayDate}</div>
+                                    <div className="text-[9.5px] font-mono text-slate-500">{r.voucherOrRef}</div>
+                                  </td>
+                                  <td className="p-2 align-top">
+                                    <div className="font-extrabold text-slate-900">{r.particulars}</div>
+                                    <div className="text-[10.5px] text-slate-500">{r.subDetail} • {r.paymentMode}</div>
+                                    {r.audit_remark && (
+                                      <div className="mt-1 text-[10px] font-bold text-rose-700 bg-rose-50 border border-rose-200 rounded px-1.5 py-0.5 inline-block">
+                                        ⚠️ Query: {r.audit_remark}
+                                      </div>
+                                    )}
+                                  </td>
+                                  <td className="p-2 text-center align-top whitespace-nowrap">
+                                    {r.auditCategory === 'audited' ? (
+                                      <span className="inline-flex items-center gap-1 text-[9px] font-black px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                        {r.is_locked ? <Lock className="w-2.5 h-2.5" /> : <CheckCircle2 className="w-2.5 h-2.5" />}
+                                        <span>✓ AUDIT CHIN</span>
+                                      </span>
+                                    ) : r.auditCategory === 'flagged' ? (
+                                      <span className="inline-flex items-center gap-1 text-[9px] font-black px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-300">
+                                        <span>⚠️ QUERY AWM</span>
+                                      </span>
+                                    ) : (
+                                      <span className="inline-flex items-center gap-1 text-[9px] font-black px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300">
+                                        <span>⏳ LA AUDIT LOH</span>
+                                      </span>
+                                    )}
+                                  </td>
+                                  <td className="p-2 text-right font-black text-emerald-700 align-top whitespace-nowrap tabular-nums">
+                                    ₹{r.amount.toLocaleString('en-IN')}
+                                  </td>
+                                  {canAudit && (
+                                    <td className="p-2 text-center align-top whitespace-nowrap">
+                                      <div className="inline-flex items-center gap-1">
+                                        <button
+                                          type="button"
+                                          onClick={() => handleMarkItem('transaction', r.id, r.audit_mark, 'verified')}
+                                          title="Audit / Dik tiin chhinchhiah rawh"
+                                          className={`px-2 py-1 rounded-lg text-[10px] font-black border cursor-pointer transition ${
+                                            r.audit_mark === 'verified'
+                                              ? 'bg-emerald-600 text-white border-emerald-600'
+                                              : 'bg-white text-emerald-700 border-emerald-300 hover:bg-emerald-50'
+                                          }`}
+                                        >
+                                          ✓ Dik
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setFlaggingRecordType('transaction');
+                                            setFlaggingRecordId(r.id);
+                                            setFlagQueryText(r.audit_remark || '');
+                                          }}
+                                          title="Query / Enfiah ngai"
+                                          className={`px-1.5 py-1 rounded-lg text-[10px] font-black border cursor-pointer transition ${
+                                            r.audit_mark === 'flagged'
+                                              ? 'bg-rose-600 text-white border-rose-600'
+                                              : 'bg-white text-rose-700 border-rose-200 hover:bg-rose-50'
+                                          }`}
+                                        >
+                                          ⚠️
+                                        </button>
+                                      </div>
+                                    </td>
+                                  )}
+                                </tr>
+                              ))
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                    {/* Dr. Side Balanced Footer */}
+                    <div className="bg-emerald-950 text-white px-4 py-3 flex items-center justify-between border-t-2 border-emerald-800 text-xs">
+                      <span className="font-black uppercase tracking-wide">
+                        Total Receipts (Opening + Sum Lut)
+                      </span>
+                      <span className="text-sm sm:text-base font-black text-emerald-300 tabular-nums">
+                        ₹{(cashBookAuditData.openingBalance + cashBookAuditData.periodReceiptsTotal).toLocaleString('en-IN')}
+                      </span>
+                    </div>
+                  </div>
+
+                    {/* RIGHT SIDE: Cr. PAYMENTS (SUM CHHUAK / SENSO) */}
+                    <div className={`bg-white border-2 border-rose-700/80 rounded-2xl overflow-hidden flex-col justify-between shadow-2xs ${
+                      mobileLedgerPane === 'receipts' ? 'hidden xl:flex' : 'flex'
+                    }`}>
+                      <div>
+                        <div className="bg-rose-900 text-white px-3 sm:px-3.5 py-2 sm:py-2.5 flex items-center justify-between">
+                          <div className="font-black text-xs sm:text-sm tracking-wide flex items-center gap-1.5">
+                            <TrendingDown className="w-4 h-4 text-rose-300 shrink-0" />
+                            <span>Cr. PAYMENTS (SUM CHHUAK / SENSO)</span>
+                          </div>
+                          <span className="text-[11px] font-bold text-rose-200">
+                            {cashBookAuditData.filteredPayments.length} vouchers
+                          </span>
+                        </div>
+
+                      <div className={`overflow-x-auto ${cbFullHeight ? '' : 'max-h-[58vh] overflow-y-auto'}`}>
+                        <table className="w-full text-left border-collapse text-xs">
+                          <thead className="sticky top-0 z-10 bg-rose-50 border-b border-rose-200 text-[10px] font-black uppercase text-rose-950">
+                            <tr>
+                              <th className="p-2">Date &amp; Voucher</th>
+                              <th className="p-2">Particulars (Sum Chhuak)</th>
+                              <th className="p-2 text-center">Audit</th>
+                              <th className="p-2 text-right">Amount (₹)</th>
+                              {canAudit && <th className="p-2 text-center">Action</th>}
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                            {cashBookAuditData.filteredPayments.length === 0 ? (
+                              <tr>
+                                <td colSpan={canAudit ? 5 : 4} className="p-6 text-center text-slate-400 font-semibold">
+                                  He filter/range chhungah hian Payments (Sum Chhuak) a awm rih lo.
+                                </td>
+                              </tr>
+                            ) : (
+                              cashBookAuditData.filteredPayments.map(p => (
+                                <tr
+                                  key={p.id}
+                                  className={`hover:bg-slate-50 transition ${
+                                    p.auditCategory === 'audited'
+                                      ? 'bg-emerald-50/20'
+                                      : p.auditCategory === 'flagged'
+                                      ? 'bg-rose-50/30'
+                                      : ''
+                                  }`}
+                                >
+                                  <td className="p-2 whitespace-nowrap align-top">
+                                    <div className="font-bold text-slate-800 text-[11px]">{p.displayDate}</div>
+                                    <div className="text-[9.5px] font-mono text-slate-500">{p.voucherOrRef}</div>
+                                  </td>
+                                  <td className="p-2 align-top">
+                                    <div className="font-extrabold text-slate-900">{p.particulars}</div>
+                                    <div className="text-[10.5px] text-slate-500">{p.subDetail}</div>
+                                    {p.audit_remark && (
+                                      <div className="mt-1 text-[10px] font-bold text-rose-700 bg-rose-50 border border-rose-200 rounded px-1.5 py-0.5 inline-block">
+                                        ⚠️ Query: {p.audit_remark}
+                                      </div>
+                                    )}
+                                  </td>
+                                  <td className="p-2 text-center align-top whitespace-nowrap">
+                                    {p.auditCategory === 'audited' ? (
+                                      <span className="inline-flex items-center gap-1 text-[9px] font-black px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                        {p.is_locked ? <Lock className="w-2.5 h-2.5" /> : <CheckCircle2 className="w-2.5 h-2.5" />}
+                                        <span>✓ AUDIT CHIN</span>
+                                      </span>
+                                    ) : p.auditCategory === 'flagged' ? (
+                                      <span className="inline-flex items-center gap-1 text-[9px] font-black px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-300">
+                                        <span>⚠️ QUERY AWM</span>
+                                      </span>
+                                    ) : (
+                                      <span className="inline-flex items-center gap-1 text-[9px] font-black px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300">
+                                        <span>⏳ LA AUDIT LOH</span>
+                                      </span>
+                                    )}
+                                  </td>
+                                  <td className="p-2 text-right font-black text-rose-700 align-top whitespace-nowrap tabular-nums">
+                                    ₹{p.amount.toLocaleString('en-IN')}
+                                  </td>
+                                  {canAudit && (
+                                    <td className="p-2 text-center align-top whitespace-nowrap">
+                                      <div className="inline-flex items-center gap-1">
+                                        <button
+                                          type="button"
+                                          onClick={() => handleMarkItem('expense', p.id, p.audit_mark, 'verified')}
+                                          title="Audit / Dik tiin chhinchhiah rawh"
+                                          className={`px-2 py-1 rounded-lg text-[10px] font-black border cursor-pointer transition ${
+                                            p.audit_mark === 'verified'
+                                              ? 'bg-emerald-600 text-white border-emerald-600'
+                                              : 'bg-white text-emerald-700 border-emerald-300 hover:bg-emerald-50'
+                                          }`}
+                                        >
+                                          ✓ Dik
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setFlaggingRecordType('expense');
+                                            setFlaggingRecordId(p.id);
+                                            setFlagQueryText(p.audit_remark || '');
+                                          }}
+                                          title="Query / Enfiah ngai"
+                                          className={`px-1.5 py-1 rounded-lg text-[10px] font-black border cursor-pointer transition ${
+                                            p.audit_mark === 'flagged'
+                                              ? 'bg-rose-600 text-white border-rose-600'
+                                              : 'bg-white text-rose-700 border-rose-200 hover:bg-rose-50'
+                                          }`}
+                                        >
+                                          ⚠️
+                                        </button>
+                                      </div>
+                                    </td>
+                                  )}
+                                </tr>
+                              ))
+                            )}
+
+                            {/* Closing Balance C/D Row */}
+                            <tr className="bg-indigo-50/70 font-bold border-t border-indigo-200">
+                              <td className="p-2 whitespace-nowrap text-[11px] text-indigo-900">
+                                <div>{cashBookAuditData.effTo ? formatDateDDMMYYYY(cashBookAuditData.effTo) : 'Closing'}</div>
+                                <div className="text-[9.5px] font-mono text-indigo-600">C/D</div>
+                              </td>
+                              <td className="p-2 text-indigo-950">
+                                <div className="font-black">By Balance c/d (Closing Balance / Sum Bang)</div>
+                                <div className="text-[10px] text-indigo-700">Receipts Total ₹{cashBookAuditData.periodReceiptsTotal.toLocaleString('en-IN')} − Payments ₹{cashBookAuditData.periodPaymentsTotal.toLocaleString('en-IN')}</div>
+                              </td>
+                              <td className="p-2 text-center">
+                                <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-indigo-200 text-indigo-900">
+                                  CLOSING
+                                </span>
+                              </td>
+                              <td className="p-2 text-right font-black text-indigo-900 whitespace-nowrap tabular-nums">
+                                ₹{cashBookAuditData.closingBalance.toLocaleString('en-IN')}
+                              </td>
+                              {canAudit && <td className="p-2 text-center text-slate-400">—</td>}
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                    {/* Cr. Side Balanced Footer */}
+                    <div className="bg-rose-950 text-white px-4 py-3 flex items-center justify-between border-t-2 border-rose-800 text-xs">
+                      <span className="font-black uppercase tracking-wide">
+                        Total Payments + Closing Balance
+                      </span>
+                      <span className="text-sm sm:text-base font-black text-rose-300 tabular-nums">
+                        ₹{(cashBookAuditData.openingBalance + cashBookAuditData.periodReceiptsTotal).toLocaleString('en-IN')}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              ) : (
+                /* VIEW MODE 2: CHRONOLOGICAL SINGLE CASH BOOK WITH RUNNING BALANCE */
+                <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-2xs">
+                  <div className="bg-slate-900 text-white px-4 py-3 flex items-center justify-between">
+                    <span className="font-black text-xs sm:text-sm">
+                      📋 CHRONOLOGICAL CASH BOOK (RECEIPTS, PAYMENTS &amp; RUNNING BALANCE)
+                    </span>
+                    <span className="text-[11px] font-bold text-indigo-200">
+                      {cashBookAuditData.filteredChronological.length} entries
+                    </span>
+                  </div>
+                  <div className={`overflow-x-auto ${cbFullHeight ? '' : 'max-h-[60vh] overflow-y-auto'}`}>
+                    <table className="w-full text-left border-collapse text-xs">
+                      <thead className="sticky top-0 z-10 bg-slate-100 border-b border-slate-200 text-[10px] font-black uppercase text-slate-700">
+                        <tr>
+                          <th className="p-2.5">Date &amp; Ref</th>
+                          <th className="p-2.5">Particulars</th>
+                          <th className="p-2.5 text-center">Audit Status</th>
+                          <th className="p-2.5 text-right text-emerald-800">Receipts (+₹)</th>
+                          <th className="p-2.5 text-right text-rose-800">Payments (-₹)</th>
+                          <th className="p-2.5 text-right text-indigo-900">Balance (₹)</th>
+                          {canAudit && <th className="p-2.5 text-center">Audit Action</th>}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        <tr className="bg-slate-50 font-bold">
+                          <td className="p-2.5 text-[11px]">{cashBookAuditData.effFrom ? formatDateDDMMYYYY(cashBookAuditData.effFrom) : 'Opening'}</td>
+                          <td className="p-2.5 font-black text-slate-800">Opening Balance (B/F)</td>
+                          <td className="p-2.5 text-center">—</td>
+                          <td className="p-2.5 text-right">—</td>
+                          <td className="p-2.5 text-right">—</td>
+                          <td className="p-2.5 text-right font-black text-slate-900 tabular-nums">₹{cashBookAuditData.openingBalance.toLocaleString('en-IN')}</td>
+                          {canAudit && <td className="p-2.5 text-center">—</td>}
+                        </tr>
+                        {cashBookAuditData.filteredChronological.map(item => (
+                          <tr key={`${item.recordType}_${item.id}`} className="hover:bg-slate-50">
+                            <td className="p-2.5 whitespace-nowrap">
+                              <div className="font-bold text-slate-800 text-[11px]">{item.displayDate}</div>
+                              <div className="text-[9.5px] font-mono text-slate-500">{item.voucherOrRef}</div>
+                            </td>
+                            <td className="p-2.5">
+                              <div className="font-extrabold text-slate-900">{item.particulars}</div>
+                              <div className="text-[10.5px] text-slate-500">{item.subDetail}</div>
+                            </td>
+                            <td className="p-2.5 text-center whitespace-nowrap">
+                              {item.auditCategory === 'audited' ? (
+                                <span className="inline-flex items-center gap-1 text-[9.5px] font-black px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                  <span>✓ AUDIT CHIN</span>
+                                </span>
+                              ) : item.auditCategory === 'flagged' ? (
+                                <span className="inline-flex items-center gap-1 text-[9.5px] font-black px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-300">
+                                  <span>⚠️ QUERY AWM</span>
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 text-[9.5px] font-black px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300">
+                                  <span>⏳ LA AUDIT LOH</span>
+                                </span>
+                              )}
+                            </td>
+                            <td className="p-2.5 text-right font-black text-emerald-700 whitespace-nowrap tabular-nums">
+                              {item.entryType === 'INFLOW' ? `+₹${item.amount.toLocaleString('en-IN')}` : '—'}
+                            </td>
+                            <td className="p-2.5 text-right font-black text-rose-700 whitespace-nowrap tabular-nums">
+                              {item.entryType === 'OUTFLOW' ? `-₹${item.amount.toLocaleString('en-IN')}` : '—'}
+                            </td>
+                            <td className="p-2.5 text-right font-black text-indigo-950 whitespace-nowrap tabular-nums">
+                              ₹{item.runningBalance.toLocaleString('en-IN')}
+                            </td>
+                            {canAudit && (
+                              <td className="p-2.5 text-center whitespace-nowrap">
+                                <div className="inline-flex items-center gap-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleMarkItem(item.recordType, item.id, item.audit_mark, 'verified')}
+                                    className={`px-2 py-1 rounded-lg text-[10px] font-black border cursor-pointer ${
+                                      item.audit_mark === 'verified'
+                                        ? 'bg-emerald-600 text-white border-emerald-600'
+                                        : 'bg-white text-emerald-700 border-emerald-300 hover:bg-emerald-50'
+                                    }`}
+                                  >
+                                    ✓ Dik
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setFlaggingRecordType(item.recordType);
+                                      setFlaggingRecordId(item.id);
+                                      setFlagQueryText(item.audit_remark || '');
+                                    }}
+                                    className={`px-1.5 py-1 rounded-lg text-[10px] font-black border cursor-pointer ${
+                                      item.audit_mark === 'flagged'
+                                        ? 'bg-rose-600 text-white border-rose-600'
+                                        : 'bg-white text-rose-700 border-rose-200 hover:bg-rose-50'
+                                    }`}
+                                  >
+                                    ⚠️
+                                  </button>
+                                </div>
+                              </td>
+                            )}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* TAB: OVERVIEW */}
           {activeTab === 'overview' && (
             <div className="space-y-6">
@@ -888,7 +2428,7 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                     <TrendingUp className="w-4 h-4 text-emerald-600" />
                     <span>Total Inflow (Sum Lut Zawng Zawng)</span>
                   </div>
-                  <div className="text-xl sm:text-2xl font-black text-emerald-950">
+                  <div className="text-xl sm:text-2xl font-black text-emerald-950 tabular-nums">
                     ₹{stats.totalInflow.toLocaleString('en-IN')}
                   </div>
                   <div className="pt-1 border-t border-emerald-200/70 space-y-1 text-[11px]">
@@ -912,7 +2452,7 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                     <TrendingDown className="w-4 h-4 text-rose-600" />
                     <span>Total Outflow (Sum Chhuak / Senso)</span>
                   </div>
-                  <div className="text-xl sm:text-2xl font-black text-rose-950">
+                  <div className="text-xl sm:text-2xl font-black text-rose-950 tabular-nums">
                     ₹{stats.totalOutflow.toLocaleString('en-IN')}
                   </div>
                   <div className="pt-1 border-t border-rose-200/70 space-y-1 text-[11px]">
@@ -936,17 +2476,17 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                     <Banknote className="w-4 h-4 text-indigo-600" />
                     <span>Net Closing Balance (Sum Bang)</span>
                   </div>
-                  <div className="text-xl sm:text-2xl font-black text-indigo-950">
+                  <div className="text-xl sm:text-2xl font-black text-indigo-950 tabular-nums">
                     ₹{stats.netBalance.toLocaleString('en-IN')}
                   </div>
                   <div className="pt-1 border-t border-indigo-200/70 space-y-1 text-[11px]">
+                    <div className="flex justify-between text-slate-700 font-bold">
+                      <span>Opening Balance (B/F):</span>
+                      <span>₹{stats.openingBalance.toLocaleString('en-IN')}</span>
+                    </div>
                     <div className="flex justify-between text-emerald-800 font-bold">
                       <span>✓ Verified Net Balance:</span>
-                      <span>₹{(stats.verifiedInflowAmount - stats.verifiedOutflowAmount).toLocaleString('en-IN')}</span>
-                    </div>
-                    <div className="flex justify-between text-amber-800 font-bold">
-                      <span>🔒 Locked Balance:</span>
-                      <span>₹{(stats.lockedInflowAmount - stats.lockedOutflowAmount).toLocaleString('en-IN')}</span>
+                      <span>₹{(stats.openingBalance + stats.verifiedInflowAmount - stats.verifiedOutflowAmount).toLocaleString('en-IN')}</span>
                     </div>
                     <div className="flex justify-between text-indigo-700 font-semibold">
                       <span>Total Records:</span>
@@ -980,6 +2520,22 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200 font-medium">
+                      {stats.openingBalance > 0 && (
+                        <tr className="bg-slate-50/80">
+                          <td className="p-3 font-extrabold text-slate-800">
+                            0. Opening Balance (Brought Forward)
+                          </td>
+                          <td className="p-3 text-right font-black text-slate-900">
+                            ₹{stats.openingBalance.toLocaleString('en-IN')}
+                          </td>
+                          <td className="p-3 text-right bg-emerald-50/40 font-black text-emerald-700">
+                            ₹{stats.openingBalance.toLocaleString('en-IN')}
+                          </td>
+                          <td className="p-3 text-right bg-rose-50/40 text-slate-400">—</td>
+                          <td className="p-3 text-right text-slate-400">—</td>
+                          <td className="p-3 text-right bg-amber-50/40 text-slate-500">B/F</td>
+                        </tr>
+                      )}
                       <tr className="hover:bg-slate-50/80">
                         <td className="p-3 font-extrabold text-emerald-900">
                           1. Inflow (Thawhlawm / Sum Lut)
@@ -1032,13 +2588,13 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                       </tr>
                       <tr className="bg-indigo-50/60 font-black border-t-2 border-indigo-200">
                         <td className="p-3 text-indigo-950">
-                          3. Net Closing Balance (Lut - Chhuak)
+                          3. Net Closing Balance (Opening + Lut - Chhuak)
                         </td>
                         <td className="p-3 text-right text-indigo-950">
                           ₹{stats.netBalance.toLocaleString('en-IN')}
                         </td>
                         <td className="p-3 text-right text-emerald-800">
-                          ₹{(stats.verifiedInflowAmount - stats.verifiedOutflowAmount).toLocaleString('en-IN')}
+                          ₹{(stats.openingBalance + stats.verifiedInflowAmount - stats.verifiedOutflowAmount).toLocaleString('en-IN')}
                         </td>
                         <td className="p-3 text-right text-rose-800">
                           ₹{(stats.flaggedInflowAmount + stats.flaggedOutflowAmount).toLocaleString('en-IN')} (Queries)

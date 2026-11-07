@@ -60,7 +60,9 @@ import {
   isConfirmedTransaction,
   isTransactionForCampaign,
   saveCampaign,
-  safeApiFetch
+  safeApiFetch,
+  markRecordAuditVerification,
+  checkAuditorAccessForCampaign
 } from '../utils/storage';
 import { supabase } from '../lib/supabase';
 import { syncAllLocalExpensesToFirestore, fetchExpensesFromFirestore } from '../services/firestoreSync';
@@ -246,10 +248,12 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
   // Cash Book search, filter & view mode
   const [cashBookSearch, setCashBookSearch] = useState<string>('');
   const [cashBookTypeFilter, setCashBookTypeFilter] = useState<'all' | 'receipt' | 'payment'>('all');
+  const [cashBookAuditFilter, setCashBookAuditFilter] = useState<'all' | 'audited' | 'unaudited' | 'flagged'>('all');
   const [cashBookDateFilter, setCashBookDateFilter] = useState<'all' | 'this_month' | 'last_month' | 'today' | 'custom'>('all');
   const [cashBookFromDate, setCashBookFromDate] = useState<string>('');
   const [cashBookToDate, setCashBookToDate] = useState<string>('');
-  const [cashBookViewMode, setCashBookViewMode] = useState<'responsive' | 'table' | 'ledger'>('responsive');
+  const [cashBookViewMode, setCashBookViewMode] = useState<'responsive' | 'table' | 'ledger'>('ledger');
+  const [auditRefreshTick, setAuditRefreshTick] = useState<number>(0);
 
   // Cash Book Receipts Head-wise Aggregation & Subsidiary Ledger states
   const [ledgerReceiptsMode, setLedgerReceiptsMode] = useState<'head_wise' | 'detailed'>('head_wise');
@@ -817,13 +821,93 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
   // On-screen period data with dynamic B/F automatically adapting
   const onScreenPeriodData = useMemo(() => {
     return getDynamicPeriodLedgerData(onScreenEffectiveFromDate, onScreenEffectiveToDate);
-  }, [onScreenEffectiveFromDate, onScreenEffectiveToDate, transactions, expenseList, campaign, openingBalance]);
+  }, [onScreenEffectiveFromDate, onScreenEffectiveToDate, transactions, expenseList, campaign, openingBalance, auditRefreshTick]);
 
-  // Filtered Cash Book Entries for quick search & type filtering
+  // Helper to determine Audit Status of a CashBookItem
+  const getItemAuditCategory = (item: CashBookItem): 'audited' | 'unaudited' | 'flagged' => {
+    const raw = item.rawObject as any;
+    if (!raw) return 'unaudited';
+    if (raw.audit_mark === 'flagged') return 'flagged';
+    if (raw.audit_mark === 'verified' || Boolean(raw.is_locked)) return 'audited';
+    return 'unaudited';
+  };
+
+  // Counts for Audit Chin vs La Audit Loh in the current date range
+  const cashBookAuditCounts = useMemo(() => {
+    let audited = 0;
+    let unaudited = 0;
+    let flagged = 0;
+    let auditedReceiptsAmt = 0;
+    let auditedPaymentsAmt = 0;
+    let unauditedReceiptsAmt = 0;
+    let unauditedPaymentsAmt = 0;
+
+    onScreenPeriodData.periodEntries.forEach(item => {
+      const cat = getItemAuditCategory(item);
+      if (cat === 'audited') {
+        audited++;
+        auditedReceiptsAmt += item.receiptAmount || 0;
+        auditedPaymentsAmt += item.paymentAmount || 0;
+      } else if (cat === 'flagged') {
+        flagged++;
+      } else {
+        unaudited++;
+        unauditedReceiptsAmt += item.receiptAmount || 0;
+        unauditedPaymentsAmt += item.paymentAmount || 0;
+      }
+    });
+
+    return {
+      audited,
+      unaudited,
+      flagged,
+      auditedReceiptsAmt,
+      auditedPaymentsAmt,
+      unauditedReceiptsAmt,
+      unauditedPaymentsAmt
+    };
+  }, [onScreenPeriodData.periodEntries]);
+
+  const canUserAuditCashBook = useMemo(() => {
+    const role = String(creatorProfile?.role || '').toUpperCase().trim();
+    if (role === 'SUPER_ADMIN' || role === 'ADMIN' || role === 'CREATOR' || role === 'AUDITOR' || creatorProfile?.isAdmin) {
+      return true;
+    }
+    const phone = creatorProfile?.phone || (creatorProfile as any)?.phoneNumber || '';
+    if (!phone || !campaign?.id) return false;
+    const access = checkAuditorAccessForCampaign(phone, campaign.id);
+    return Boolean(access?.hasAccess);
+  }, [creatorProfile, campaign?.id]);
+
+  const handleToggleCashBookItemAudit = (item: CashBookItem) => {
+    if (!canUserAuditCashBook) return;
+    const raw = item.rawObject as any;
+    const currentMark = raw?.audit_mark;
+    const nextMark = currentMark === 'verified' ? undefined : 'verified';
+    const targetType = item.type === 'receipt' ? 'transaction' : 'expense';
+    const ok = markRecordAuditVerification(
+      item.id,
+      targetType,
+      nextMark,
+      creatorProfile?.name || 'Auditor',
+      ''
+    );
+    if (ok) {
+      if (raw) raw.audit_mark = nextMark;
+      setExpenseList(getStoredExpenses(campaign.id));
+      setAuditRefreshTick(t => t + 1);
+    }
+  };
+
+  // Filtered Cash Book Entries for quick search, type & audit status filtering
   const filteredCashBookEntries = useMemo(() => {
     return onScreenPeriodData.periodEntries.filter(item => {
       if (cashBookTypeFilter !== 'all' && item.type !== cashBookTypeFilter) {
         return false;
+      }
+      if (cashBookAuditFilter !== 'all') {
+        const cat = getItemAuditCategory(item);
+        if (cat !== cashBookAuditFilter) return false;
       }
       if (cashBookSearch) {
         const q = cashBookSearch.toLowerCase().trim();
@@ -837,7 +921,7 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
       }
       return true;
     });
-  }, [onScreenPeriodData.periodEntries, cashBookSearch, cashBookTypeFilter]);
+  }, [onScreenPeriodData.periodEntries, cashBookSearch, cashBookTypeFilter, cashBookAuditFilter]);
 
   // Head-wise Aggregated Receipts for Clean Ledger & Subsidiary Drill-down
   const aggregatedReceiptGroups = useMemo(() => {
@@ -2234,6 +2318,62 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
               </div>
             </div>
 
+            {/* Third Row: Audit Chin vs La Audit Loh Filter Bar */}
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-1.5 border-t border-slate-200/60">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-[10px] font-black uppercase text-slate-500 mr-1">Audit Thliarna:</span>
+                <button
+                  type="button"
+                  onClick={() => setCashBookAuditFilter('all')}
+                  className={`px-2.5 py-1 rounded-xl text-[11px] font-bold transition cursor-pointer ${
+                    cashBookAuditFilter === 'all'
+                      ? 'bg-slate-800 text-white shadow-2xs'
+                      : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+                  }`}
+                >
+                  Zavai ({onScreenPeriodData.periodEntries.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCashBookAuditFilter('audited')}
+                  className={`px-2.5 py-1 rounded-xl text-[11px] font-black transition cursor-pointer ${
+                    cashBookAuditFilter === 'audited'
+                      ? 'bg-emerald-600 text-white shadow-2xs'
+                      : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200'
+                  }`}
+                >
+                  ✓ Audit Chin ({cashBookAuditCounts.audited})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCashBookAuditFilter('unaudited')}
+                  className={`px-2.5 py-1 rounded-xl text-[11px] font-black transition cursor-pointer ${
+                    cashBookAuditFilter === 'unaudited'
+                      ? 'bg-amber-600 text-white shadow-2xs'
+                      : 'bg-amber-50 text-amber-900 hover:bg-amber-100 border border-amber-200'
+                  }`}
+                >
+                  ⏳ La Audit Loh ({cashBookAuditCounts.unaudited})
+                </button>
+                {cashBookAuditCounts.flagged > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setCashBookAuditFilter('flagged')}
+                    className={`px-2.5 py-1 rounded-xl text-[11px] font-black transition cursor-pointer ${
+                      cashBookAuditFilter === 'flagged'
+                        ? 'bg-rose-600 text-white shadow-2xs'
+                        : 'bg-rose-50 text-rose-800 hover:bg-rose-100 border border-rose-200'
+                    }`}
+                  >
+                    ⚠️ Query Awm ({cashBookAuditCounts.flagged})
+                  </button>
+                )}
+              </div>
+              <div className="text-[10.5px] font-bold text-slate-500">
+                ✓ Audit ChinLut: <strong className="text-emerald-700">₹{cashBookAuditCounts.auditedReceiptsAmt.toLocaleString('en-IN')}</strong> • ⏳ La Audit Loh: <strong className="text-amber-700">₹{cashBookAuditCounts.unauditedReceiptsAmt.toLocaleString('en-IN')}</strong>
+              </div>
+            </div>
+
             {/* Custom Date Range Picker inputs when 'custom' is active */}
             {cashBookDateFilter === 'custom' && (
               <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-200/60 animate-fadeIn bg-indigo-50/40 p-2 rounded-xl">
@@ -2328,13 +2468,42 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
                         <span className="text-[10px] font-mono text-slate-500 font-bold bg-slate-100 px-1.5 py-0.2 rounded">
                           {item.refNo}
                         </span>
+                        {(() => {
+                          const cat = getItemAuditCategory(item);
+                          return cat === 'audited' ? (
+                            <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
+                              ✓ AUDIT CHIN
+                            </span>
+                          ) : cat === 'flagged' ? (
+                            <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-300">
+                              ⚠️ QUERY
+                            </span>
+                          ) : (
+                            <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300">
+                              ⏳ LA AUDIT LOH
+                            </span>
+                          );
+                        })()}
                       </div>
-                      <div className="text-right">
+                      <div className="flex items-center gap-2 text-right">
                         <span className={`text-xs sm:text-sm font-black ${
                           item.type === 'receipt' ? 'text-emerald-700' : 'text-rose-600'
                         }`}>
                           {item.type === 'receipt' ? `+₹${item.receiptAmount.toLocaleString('en-IN')}` : `-₹${item.paymentAmount.toLocaleString('en-IN')}`}
                         </span>
+                        {canUserAuditCashBook && (
+                          <button
+                            type="button"
+                            onClick={() => handleToggleCashBookItemAudit(item)}
+                            className={`px-2 py-0.5 rounded-lg text-[10px] font-black border cursor-pointer ${
+                              getItemAuditCategory(item) === 'audited'
+                                ? 'bg-emerald-600 text-white border-emerald-600'
+                                : 'bg-white text-emerald-700 border-emerald-300 hover:bg-emerald-50'
+                            }`}
+                          >
+                            ✓ Audit
+                          </button>
+                        )}
                       </div>
                     </div>
 
@@ -2363,48 +2532,79 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
                       <th className="p-2.5">Type</th>
                       <th className="p-2.5">Voucher / Ref</th>
                       <th className="p-2.5">Particulars / Narration</th>
+                      <th className="p-2.5 text-center">Audit Status</th>
                       <th className="p-2.5 text-right">Receipt (₹)</th>
                       <th className="p-2.5 text-right">Payment (₹)</th>
                       <th className="p-2.5 text-right">Balance (₹)</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 bg-white">
-                    {filteredCashBookEntries.map((item) => (
-                      <tr key={`${item.type}-${item.id}`} className="hover:bg-slate-50 transition">
-                        <td className="p-2.5 font-mono text-[10.5px] text-slate-600 whitespace-nowrap">
-                          {formatDateDDMMYYYY(item.date)}
-                        </td>
-                        <td className="p-2.5">
-                          <span className={`text-[9px] px-1.5 py-0.5 rounded font-black uppercase ${
-                            item.type === 'receipt' 
-                              ? 'bg-emerald-100 text-emerald-800' 
-                              : 'bg-rose-100 text-rose-800'
-                          }`}>
-                            {item.type === 'receipt' ? 'Receipt' : 'Payment'}
-                          </span>
-                        </td>
-                        <td className="p-2.5 font-mono font-bold text-[10px] text-slate-600 whitespace-nowrap">
-                          {item.refNo}
-                        </td>
-                        <td className="p-2.5 max-w-xs">
-                          <div className="font-semibold text-slate-800 text-[11px] truncate">
-                            {item.particulars}
-                          </div>
-                          <div className="text-[9.5px] text-slate-400">
-                            {item.head}
-                          </div>
-                        </td>
-                        <td className="p-2.5 text-right font-black text-emerald-700 whitespace-nowrap">
-                          {item.receiptAmount > 0 ? `₹${item.receiptAmount.toLocaleString('en-IN')}` : '--'}
-                        </td>
-                        <td className="p-2.5 text-right font-black text-rose-600 whitespace-nowrap">
-                          {item.paymentAmount > 0 ? `₹${item.paymentAmount.toLocaleString('en-IN')}` : '--'}
-                        </td>
-                        <td className="p-2.5 text-right font-black text-indigo-950 whitespace-nowrap">
-                          ₹{item.runningBalance.toLocaleString('en-IN')}
-                        </td>
-                      </tr>
-                    ))}
+                    {filteredCashBookEntries.map((item) => {
+                      const auditCat = getItemAuditCategory(item);
+                      return (
+                        <tr key={`${item.type}-${item.id}`} className="hover:bg-slate-50 transition">
+                          <td className="p-2.5 font-mono text-[10.5px] text-slate-600 whitespace-nowrap">
+                            {formatDateDDMMYYYY(item.date)}
+                          </td>
+                          <td className="p-2.5">
+                            <span className={`text-[9px] px-1.5 py-0.5 rounded font-black uppercase ${
+                              item.type === 'receipt' 
+                                ? 'bg-emerald-100 text-emerald-800' 
+                                : 'bg-rose-100 text-rose-800'
+                            }`}>
+                              {item.type === 'receipt' ? 'Receipt' : 'Payment'}
+                            </span>
+                          </td>
+                          <td className="p-2.5 font-mono font-bold text-[10px] text-slate-600 whitespace-nowrap">
+                            {item.refNo}
+                          </td>
+                          <td className="p-2.5 max-w-xs">
+                            <div className="font-semibold text-slate-800 text-[11px] truncate">
+                              {item.particulars}
+                            </div>
+                            <div className="text-[9.5px] text-slate-400">
+                              {item.head}
+                            </div>
+                          </td>
+                          <td className="p-2.5 text-center whitespace-nowrap">
+                            <div className="inline-flex items-center gap-1">
+                              {auditCat === 'audited' ? (
+                                <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                  ✓ AUDIT CHIN
+                                </span>
+                              ) : auditCat === 'flagged' ? (
+                                <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-300">
+                                  ⚠️ QUERY
+                                </span>
+                              ) : (
+                                <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300">
+                                  ⏳ LA AUDIT LOH
+                                </span>
+                              )}
+                              {canUserAuditCashBook && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleCashBookItemAudit(item)}
+                                  className="px-1.5 py-0.5 rounded text-[9.5px] font-black border border-emerald-300 text-emerald-700 hover:bg-emerald-50 cursor-pointer"
+                                  title="Audit / Dik tiin chhinchhiah rawh"
+                                >
+                                  ✓
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                          <td className="p-2.5 text-right font-black text-emerald-700 whitespace-nowrap">
+                            {item.receiptAmount > 0 ? `₹${item.receiptAmount.toLocaleString('en-IN')}` : '--'}
+                          </td>
+                          <td className="p-2.5 text-right font-black text-rose-600 whitespace-nowrap">
+                            {item.paymentAmount > 0 ? `₹${item.paymentAmount.toLocaleString('en-IN')}` : '--'}
+                          </td>
+                          <td className="p-2.5 text-right font-black text-indigo-950 whitespace-nowrap">
+                            ₹{item.runningBalance.toLocaleString('en-IN')}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -2443,7 +2643,9 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
                         particulars: 'To Opening Balance (B/F) - Cash in Hand / Bank',
                         refNo: 'B/F',
                         head: 'Opening Balance',
-                        amount: onScreenPeriodData.openingBF
+                        amount: onScreenPeriodData.openingBF,
+                        auditCat: undefined as 'audited' | 'unaudited' | 'flagged' | undefined,
+                        rawItem: undefined as CashBookItem | undefined
                       }] : []),
                       ...filteredCashBookEntries
                         .filter(e => e.type === 'receipt')
@@ -2453,7 +2655,9 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
                           particulars: `To ${e.particulars}`,
                           refNo: e.refNo || '--',
                           head: e.head,
-                          amount: e.receiptAmount
+                          amount: e.receiptAmount,
+                          auditCat: getItemAuditCategory(e),
+                          rawItem: e
                         }))
                     ];
 
@@ -2466,14 +2670,18 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
                           particulars: `By ${e.particulars}`,
                           refNo: e.refNo || '--',
                           head: e.head,
-                          amount: e.paymentAmount
+                          amount: e.paymentAmount,
+                          auditCat: getItemAuditCategory(e),
+                          rawItem: e
                         })),
                       {
                         date: onScreenEffectiveToDate ? formatDateDDMMYYYY(onScreenEffectiveToDate) : 'Closing',
                         particulars: 'By Closing Balance (C/D) - Cash in Hand / Bank',
                         refNo: 'C/D',
                         head: 'Closing Cash',
-                        amount: onScreenPeriodData.closingCD
+                        amount: onScreenPeriodData.closingCD,
+                        auditCat: undefined as 'audited' | 'unaudited' | 'flagged' | undefined,
+                        rawItem: undefined as CashBookItem | undefined
                       }
                     ];
 
@@ -2520,7 +2728,36 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
                                 <td className="p-2 text-slate-800 text-[11px] border-r border-slate-200">
                                   {dr ? (
                                     <div>
-                                      <div className="font-bold text-slate-900">{dr.particulars}</div>
+                                      <div className="font-bold text-slate-900 flex items-center justify-between gap-1.5 flex-wrap">
+                                        <span>{dr.particulars}</span>
+                                        {dr.auditCat && (
+                                          <span className="inline-flex items-center gap-1">
+                                            {dr.auditCat === 'audited' ? (
+                                              <span className="text-[8.5px] font-black px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                                ✓ AUDIT CHIN
+                                              </span>
+                                            ) : dr.auditCat === 'flagged' ? (
+                                              <span className="text-[8.5px] font-black px-1.5 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-300">
+                                                ⚠️ QUERY
+                                              </span>
+                                            ) : (
+                                              <span className="text-[8.5px] font-black px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300">
+                                                ⏳ LA AUDIT LOH
+                                              </span>
+                                            )}
+                                            {canUserAuditCashBook && dr.rawItem && (
+                                              <button
+                                                type="button"
+                                                onClick={() => handleToggleCashBookItemAudit(dr.rawItem!)}
+                                                className="px-1 py-0.2 rounded text-[8.5px] font-black border border-emerald-400 text-emerald-700 hover:bg-emerald-50 cursor-pointer"
+                                                title="Audit / Dik tiin chhinchhiah rawh"
+                                              >
+                                                ✓
+                                              </button>
+                                            )}
+                                          </span>
+                                        )}
+                                      </div>
                                       {dr.head && (
                                         <div className="text-[9.5px] text-indigo-600 font-medium">🏷️ {dr.head}</div>
                                       )}
@@ -2544,7 +2781,36 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
                                 <td className="p-2 text-slate-800 text-[11px] border-r border-slate-200">
                                   {cr ? (
                                     <div>
-                                      <div className="font-bold text-slate-900">{cr.particulars}</div>
+                                      <div className="font-bold text-slate-900 flex items-center justify-between gap-1.5 flex-wrap">
+                                        <span>{cr.particulars}</span>
+                                        {cr.auditCat && (
+                                          <span className="inline-flex items-center gap-1">
+                                            {cr.auditCat === 'audited' ? (
+                                              <span className="text-[8.5px] font-black px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                                ✓ AUDIT CHIN
+                                              </span>
+                                            ) : cr.auditCat === 'flagged' ? (
+                                              <span className="text-[8.5px] font-black px-1.5 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-300">
+                                                ⚠️ QUERY
+                                              </span>
+                                            ) : (
+                                              <span className="text-[8.5px] font-black px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300">
+                                                ⏳ LA AUDIT LOH
+                                              </span>
+                                            )}
+                                            {canUserAuditCashBook && cr.rawItem && (
+                                              <button
+                                                type="button"
+                                                onClick={() => handleToggleCashBookItemAudit(cr.rawItem!)}
+                                                className="px-1 py-0.2 rounded text-[8.5px] font-black border border-emerald-400 text-emerald-700 hover:bg-emerald-50 cursor-pointer"
+                                                title="Audit / Dik tiin chhinchhiah rawh"
+                                              >
+                                                ✓
+                                              </button>
+                                            )}
+                                          </span>
+                                        )}
+                                      </div>
                                       {cr.head && (
                                         <div className="text-[9.5px] text-rose-600 font-medium">🏷️ {cr.head}</div>
                                       )}

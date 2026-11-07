@@ -20,7 +20,7 @@ import {
 import { Transaction, Campaign, MemberRecord, BawmCategory } from '../types';
 import { ALL_MONTH_NAMES_FULL, ALL_MONTH_NAMES_SHORT, getTransactionMonthInfo, getMonthIndex } from '../utils/monthHelper';
 import { formatDateDDMMYYYY } from '../utils/date';
-import { getMembers, saveMembers } from '../utils/storage';
+import { getMembers, saveMembers, addOrUpdateMember } from '../utils/storage';
 
 interface EditablePaymentEntry {
   tempId: string;
@@ -379,39 +379,39 @@ export const DonorPaymentsEditorModal: React.FC<DonorPaymentsEditorModalProps> =
       return;
     }
 
-    // 1. If this donor is a registered member, propagate profile updates to members list immediately
-    if (trimmedMemberId || memberRecord) {
-      try {
-        const allMembers = getMembers();
-        const targetMid = (trimmedMemberId || memberRecord?.id || '').toLowerCase().trim();
-        let memberUpdated = false;
-        const updatedMembers = allMembers.map(m => {
-          if (m && m.id && m.id.toLowerCase().trim() === targetMid) {
-            memberUpdated = true;
-            return {
-              ...m,
-              name: trimmedDonorName || m.name,
-              fullPhone: trimmedPhone || m.fullPhone,
-              phoneLast4: trimmedPhone ? trimmedPhone.slice(-4) : m.phoneLast4,
-              section: trimmedSection || m.section,
-              updatedAt: new Date().toISOString()
-            };
-          }
-          return m;
-        });
+    // 1. If this donor is a registered member (by ID or by Name in this campaign), propagate profile updates to members list, server & Supabase immediately
+    try {
+      const allMembers = getMembers();
+      const targetMid = (trimmedMemberId || memberRecord?.id || '').toLowerCase().trim();
+      const oldDonorLower = (donorName || '').toLowerCase().trim();
+      const targetCampId = (currentCampaign?.id || activeCampaignId || transactions[0]?.campaignId || '').toLowerCase().trim();
 
-        if (memberUpdated) {
-          saveMembers(updatedMembers);
-          const changed = updatedMembers.find(m => m && m.id && m.id.toLowerCase().trim() === targetMid);
-          if (changed) {
-            import('../services/supabaseService').then(({ updateSupabaseMember }) => {
-              updateSupabaseMember(changed).catch(() => {});
-            }).catch(() => {});
-          }
+      const matchedMem = allMembers.find(m => {
+        if (!m || !m.id) return false;
+        const mId = m.id.toLowerCase().trim();
+        if (targetMid && mId === targetMid) return true;
+        const mCamp = (m.campaignId || '').toLowerCase().trim();
+        if (!targetMid && targetCampId && mCamp === targetCampId && oldDonorLower && (m.name || '').toLowerCase().trim() === oldDonorLower) {
+          return true;
         }
-      } catch (err) {
-        console.warn('Could not update member record in storage:', err);
+        return false;
+      });
+
+      if (matchedMem) {
+        const updatedMem: MemberRecord = {
+          ...matchedMem,
+          id: trimmedMemberId || matchedMem.id,
+          name: trimmedDonorName || matchedMem.name,
+          fullPhone: trimmedPhone || matchedMem.fullPhone,
+          phone: trimmedPhone || matchedMem.phone,
+          phoneLast4: trimmedPhone ? trimmedPhone.slice(-4) : matchedMem.phoneLast4,
+          section: trimmedSection || matchedMem.section,
+          updatedAt: new Date().toISOString()
+        };
+        addOrUpdateMember(updatedMem, matchedMem.id).catch(() => {});
       }
+    } catch (err) {
+      console.warn('Could not update member record in storage:', err);
     }
 
     const nowIso = new Date().toISOString();
