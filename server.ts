@@ -4466,34 +4466,53 @@ function autoHealDatabase(db: DatabaseSchema): boolean {
 
   const deletedMemberSet = new Set((db.deletedMemberIds || []).map(id => String(id).toLowerCase().trim()));
 
-  for (const t of (db.transactions || [])) {
-    if (t && t.memberId && String(t.memberId).trim()) {
-      let mid = String(t.memberId).trim();
-      if (mid.split('-').length > 2) {
-        mid = mid.split('-').slice(0, 2).join('-');
+  // Remove any deleted members from memMap
+  for (const [k] of memMap.entries()) {
+    if (deletedMemberSet.has(k)) {
+      memMap.delete(k);
+      changed = true;
+    } else {
+      for (const delId of deletedMemberSet) {
+        if (k.startsWith(delId + '-')) {
+          memMap.delete(k);
+          changed = true;
+          break;
+        }
       }
-      const k = mid.toLowerCase();
-      // DO NOT resurrect deleted or purged members
-      if (deletedMemberSet.has(k) || k === 'bmpshl-9000' || k === 'bmpshl-9001' || k === 'bmpshl-1253') {
-        continue;
-      }
-      if (!memMap.has(k)) {
-        const orgCode = mid.split('-')[0] || '';
-        const phoneLast4 = t.donorPhone ? String(t.donorPhone).slice(-4) : (mid.split('-')[1] || '');
-        memMap.set(k, {
-          id: mid,
-          campaignId: t.campaignId || '',
-          name: t.donorName || `Member ${mid}`,
-          orgCode: orgCode.toUpperCase(),
-          phoneLast4: phoneLast4,
-          fullPhone: (t.donorPhone && String(t.donorPhone).length >= 10) ? String(t.donorPhone) : '',
-          section: t.donorVeng || 'Section A',
-          isFamilyHead: true,
-          dependents: [],
-          createdAt: t.timestamp || new Date().toISOString(),
-          status: 'paid'
-        });
-        changed = true;
+    }
+  }
+
+  // Only seed members from transactions as emergency fallback if memMap is completely empty
+  if (memMap.size === 0 && (db.transactions || []).length > 0) {
+    for (const t of (db.transactions || [])) {
+      if (t && t.memberId && String(t.memberId).trim()) {
+        let mid = String(t.memberId).trim();
+        if (mid.split('-').length > 2) {
+          mid = mid.split('-').slice(0, 2).join('-');
+        }
+        const k = mid.toLowerCase();
+        // DO NOT resurrect deleted or purged members
+        if (deletedMemberSet.has(k) || k === 'bmpshl-9000' || k === 'bmpshl-9001' || k === 'bmpshl-1253') {
+          continue;
+        }
+        if (!memMap.has(k)) {
+          const orgCode = mid.split('-')[0] || '';
+          const phoneLast4 = t.donorPhone ? String(t.donorPhone).slice(-4) : (mid.split('-')[1] || '');
+          memMap.set(k, {
+            id: mid,
+            campaignId: t.campaignId || '',
+            name: t.donorName || `Member ${mid}`,
+            orgCode: orgCode.toUpperCase(),
+            phoneLast4: phoneLast4,
+            fullPhone: (t.donorPhone && String(t.donorPhone).length >= 10) ? String(t.donorPhone) : '',
+            section: t.donorVeng || 'Section A',
+            isFamilyHead: true,
+            dependents: [],
+            createdAt: t.timestamp || new Date().toISOString(),
+            status: 'paid'
+          });
+          changed = true;
+        }
       }
     }
   }
@@ -6063,22 +6082,42 @@ const handleUpsertMemberRequest = (req: Request, res: Response) => {
     }
 
     // Propagate section or name changes to matching transactions in db.transactions
+    const touchedTxIds: string[] = [];
     if (member.section || member.name) {
       const matchSet = new Set<string>([cleanId]);
       if (oldId) matchSet.add(oldId);
       if (cleanId.startsWith('ebe-')) matchSet.add('bcm-' + cleanId.slice(4));
       if (cleanId.startsWith('bcm-')) matchSet.add('ebe-' + cleanId.slice(4));
+      const cleanPhone = (member.fullPhone || member.phone || '').replace(/\D/g, '').slice(-10);
+      const prevName = String(req.body.previousName || req.body.previousNameInput || '').trim().toLowerCase();
+      const prevSection = String(req.body.previousSection || req.body.previousSectionInput || '').trim().toLowerCase();
 
       db.transactions = (db.transactions || []).map((t: any) => {
         const tMid = String(t.memberId || '').toLowerCase().trim();
-        if (matchSet.has(tMid)) {
+        const tPhone = String(t.donorPhone || '').replace(/\D/g, '').slice(-10);
+        const tName = String(t.donorName || '').trim().toLowerCase();
+        const tVeng = String(t.donorVeng || t.section || '').trim().toLowerCase();
+
+        const isExactId = matchSet.has(tMid);
+        const isSubId = tMid.startsWith(cleanId + '-') || (oldId && tMid.startsWith(oldId + '-'));
+        const isPhoneMatch = Boolean(cleanPhone && cleanPhone.length === 10 && tPhone === cleanPhone);
+        const isNameMatch = Boolean(prevName && tName === prevName && (!prevSection || tVeng === prevSection || !tVeng));
+
+        if (isExactId || isSubId || isPhoneMatch || isNameMatch) {
+          touchedTxIds.push(t.id);
           return {
             ...t,
             memberId: member.id,
             donorName: member.name || t.donorName,
             donorVeng: member.section || t.donorVeng,
             section: member.section || t.section,
-            updatedAt: new Date().toISOString()
+            updatedAt: new Date().toISOString(),
+            metadata: {
+              ...(t.metadata || {}),
+              donorName: member.name || t.donorName,
+              donorVeng: member.section || t.donorVeng,
+              section: member.section || t.section
+            }
           };
         }
         return t;
@@ -6151,7 +6190,8 @@ const handleUpsertMemberRequest = (req: Request, res: Response) => {
         };
         if (member.name) txPatchPayload.donor_name = member.name;
         if (member.section) txPatchPayload.donor_veng = member.section;
-        fetch(`${sbUrl}/rest/v1/transactions?member_id=eq.${encodeURIComponent(member.id)}`, {
+
+        fetch(`${sbUrl}/rest/v1/transactions?member_id=ilike.${encodeURIComponent(cleanId)}`, {
           method: 'PATCH',
           headers: {
             'Content-Type': 'application/json',
@@ -6160,8 +6200,32 @@ const handleUpsertMemberRequest = (req: Request, res: Response) => {
           },
           body: JSON.stringify(txPatchPayload)
         }).catch(() => {});
+
+        fetch(`${sbUrl}/rest/v1/transactions?member_id=ilike.${encodeURIComponent(cleanId + '-%')}`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': sbKey,
+            'Authorization': `Bearer ${sbKey}`
+          },
+          body: JSON.stringify(txPatchPayload)
+        }).catch(() => {});
+
         if (oldId && oldId !== cleanId) {
-          fetch(`${sbUrl}/rest/v1/transactions?member_id=eq.${encodeURIComponent(oldId)}`, {
+          fetch(`${sbUrl}/rest/v1/transactions?member_id=ilike.${encodeURIComponent(oldId)}`, {
+            method: 'PATCH',
+            headers: {
+              'Content-Type': 'application/json',
+              'apikey': sbKey,
+              'Authorization': `Bearer ${sbKey}`
+            },
+            body: JSON.stringify({ ...txPatchPayload, member_id: member.id })
+          }).catch(() => {});
+        }
+
+        // Direct patch for all touched transactions in this update
+        for (const tId of touchedTxIds.slice(0, 50)) {
+          fetch(`${sbUrl}/rest/v1/transactions?id=eq.${encodeURIComponent(tId)}`, {
             method: 'PATCH',
             headers: {
               'Content-Type': 'application/json',
@@ -6200,9 +6264,40 @@ app.delete('/api/members/:id', (req: Request, res: Response) => {
     const { id } = req.params;
     const db = getDatabase();
     const cleanId = String(id).toLowerCase().trim();
-    db.members = (db.members || []).filter(m => String(m.id).toLowerCase().trim() !== cleanId);
+    db.members = (db.members || []).filter(m => {
+      const mid = String(m.id || '').toLowerCase().trim();
+      return mid !== cleanId && !mid.startsWith(cleanId + '-');
+    });
     db.deletedMemberIds = Array.from(new Set([...(db.deletedMemberIds || []), cleanId]));
     saveDatabase(db);
+
+    // Synchronously forward member deletion to Supabase cloud
+    const sbConfig = (db as any).supabaseConfig || {};
+    const sbUrl = sbConfig.url || process.env.VITE_SUPABASE_URL || 'https://aqrplcmpealgruduwnhw.supabase.co';
+    const sbKey = sbConfig.anonKey || process.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable__zS5fiKvBI5u6HYgour64g_g_tJj5WL';
+    if (sbUrl && sbKey) {
+      fetch(`${sbUrl}/rest/v1/members?id=ilike.${encodeURIComponent(cleanId)}`, {
+        method: 'DELETE',
+        headers: {
+          'apikey': sbKey,
+          'Authorization': `Bearer ${sbKey}`
+        }
+      }).catch((e: any) => console.warn('[Server Supabase Delete Member Error]:', e?.message));
+
+      fetch(`${sbUrl}/rest/v1/members?id=ilike.${encodeURIComponent(cleanId + '-%')}`, {
+        method: 'DELETE',
+        headers: {
+          'apikey': sbKey,
+          'Authorization': `Bearer ${sbKey}`
+        }
+      }).catch(() => {});
+    }
+
+    broadcastServerEvent('members_updated', {
+      deletedMemberId: cleanId,
+      timestamp: db.lastUpdated
+    });
+
     res.json({ success: true, message: `Member ${id} deleted` });
   } catch (err: any) {
     res.status(500).json({ success: false, message: err.message });

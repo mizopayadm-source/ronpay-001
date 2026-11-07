@@ -1405,8 +1405,12 @@ export async function updateSupabaseMember(member: MemberRecord, oldId?: string)
 
     // Propagate member name & section update to Supabase transactions
     try {
-      const matchIds = [member.id];
-      if (oldId && oldId !== member.id) matchIds.push(oldId);
+      const matchIds = Array.from(new Set([
+        member.id,
+        member.id.toLowerCase(),
+        member.id.toUpperCase(),
+        ...(oldId && oldId !== member.id ? [oldId, oldId.toLowerCase(), oldId.toUpperCase()] : [])
+      ]));
       await supabase
         .from('transactions')
         .update({
@@ -1429,23 +1433,76 @@ export async function upsertSupabaseMember(member: MemberRecord): Promise<boolea
   return updateSupabaseMember(member);
 }
 
+export async function updateSupabaseTransactionsForMember(
+  memberId: string,
+  oldId: string | undefined,
+  newName: string,
+  newSection: string | undefined,
+  txIds?: string[]
+): Promise<boolean> {
+  const supabase = getSupabase();
+  if (!supabase || !memberId) return false;
+
+  const nowIso = new Date().toISOString();
+  const payload: any = {
+    donor_name: newName || 'Member',
+    donor_veng: newSection || null,
+    member_id: memberId,
+    updated_at: nowIso
+  };
+
+  try {
+    // 1. Direct update by transaction primary keys if available
+    if (Array.isArray(txIds) && txIds.length > 0) {
+      await supabase
+        .from('transactions')
+        .update(payload)
+        .in('id', txIds);
+    }
+
+    // 2. Also update by all case variants of memberId and oldId
+    const mIds = Array.from(new Set([
+      memberId,
+      memberId.toLowerCase().trim(),
+      memberId.toUpperCase().trim(),
+      ...(oldId ? [oldId, oldId.toLowerCase().trim(), oldId.toUpperCase().trim()] : [])
+    ]));
+
+    await supabase
+      .from('transactions')
+      .update(payload)
+      .in('member_id', mIds);
+
+    return true;
+  } catch (err: any) {
+    console.warn('[Supabase] Member transactions update warning:', err?.message);
+    return false;
+  }
+}
+
 export async function deleteSupabaseMember(id: string): Promise<boolean> {
   const supabase = getSupabase();
   if (!supabase || !id) return false;
 
   const clean = id.trim();
-  const altClean = clean.toUpperCase().startsWith('EBEZBK-') ? 'BCM-' + clean.substring(4) : (clean.toUpperCase().startsWith('BCM-') ? 'EBEZBK-' + clean.substring(4) : clean);
+  const lower = clean.toLowerCase();
+  const upper = clean.toUpperCase();
 
-  const { error } = await supabase
-    .from('members')
-    .delete()
-    .or(`id.eq.${clean},id.eq.${altClean}`);
+  try {
+    const { error } = await supabase
+      .from('members')
+      .delete()
+      .or(`id.eq.${clean},id.eq.${lower},id.eq.${upper},id.ilike.${clean}`);
 
-  if (error) {
-    console.warn('[Supabase] Member delete note:', error.message);
+    if (error) {
+      console.warn('[Supabase] Member delete note:', error.message);
+      return false;
+    }
+    return true;
+  } catch (err: any) {
+    console.warn('[Supabase] Member delete caught note:', err?.message);
     return false;
   }
-  return true;
 }
 
 export async function syncAllMembersToSupabase(): Promise<{ total: number; synced: number }> {

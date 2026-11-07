@@ -1132,8 +1132,8 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
         yearStatus: Object.keys(updatedYearStatus).length > 0 ? updatedYearStatus : undefined
       };
 
-      // Direct, permanent save to Supabase database, local storage & backend
-      await addOrUpdateMember(updatedM, oldId);
+      // Direct, permanent save to Supabase database, local storage & backend with automatic transaction cascade
+      await addOrUpdateMember(updatedM, oldId, editingMember.name, editingMember.section);
 
       // Instantly trigger component refresh and multi-device event broadcasts
       setMembersTick(t => t + 1);
@@ -1146,6 +1146,8 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('ronpay-members-updated', { detail: getMembers() }));
         window.dispatchEvent(new CustomEvent('ronpay_members_updated', { detail: getMembers() }));
+        window.dispatchEvent(new CustomEvent('ronpay-transactions-updated'));
+        window.dispatchEvent(new CustomEvent('ronpay_transactions_updated'));
         window.dispatchEvent(new CustomEvent('ronpay_state_sync_event', { detail: { type: 'member_updated', member: updatedM } }));
       }
 
@@ -1221,10 +1223,10 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
     setDeleteConfirmMember({ id: memberId, name: memberName });
   };
 
-  const confirmExecuteDeleteMember = () => {
+  const confirmExecuteDeleteMember = async () => {
     if (!deleteConfirmMember) return;
     const { id, name } = deleteConfirmMember;
-    deleteMember(id, selectedCampaignId);
+    await deleteMember(id, selectedCampaignId);
     setMembersTick(t => t + 1);
     if (selectedMember?.id === id) {
       setSelectedMember(null);
@@ -1232,6 +1234,13 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
     setRegSuccess(`Member "${name}" (${id}) hi hlumhlut takin paih (deleted) a ni ta!`);
     setDeleteConfirmMember(null);
     onDataUpdated();
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('ronpay-members-updated', { detail: getMembers() }));
+      window.dispatchEvent(new CustomEvent('ronpay_members_updated', { detail: getMembers() }));
+      window.dispatchEvent(new CustomEvent('ronpay_state_sync_event', { detail: { type: 'member_deleted', memberId: id } }));
+    }
+
     setTimeout(() => {
       setRegSuccess(null);
     }, 5000);

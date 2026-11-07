@@ -297,22 +297,30 @@ export async function syncAllWithServer(forceAuthoritative: boolean = false): Pr
         }
 
         // 3. Update members with authoritative server seeding & deletion protection
-        if (Array.isArray(serverData.members) && serverData.members.length > 0) {
+        if (Array.isArray(serverData.deletedMemberIds) && serverData.deletedMemberIds.length > 0) {
+          for (const dId of serverData.deletedMemberIds) {
+            markMemberAsDeleted(String(dId).toLowerCase().trim());
+          }
+        }
+
+        if (Array.isArray(serverData.members)) {
           const deletedMemIds = getDeletedMemberIds();
           const cleanServerMembers = serverData.members.filter((m: any) => {
             if (!m || !m.id) return false;
+            const cleanId = String(m.id).toLowerCase().trim();
             const name = String(m.name || m.fullName || '').trim();
-            return name.length >= 2 && !deletedMemIds.has(String(m.id).toLowerCase().trim());
+            return name.length >= 2 && !deletedMemIds.has(cleanId);
           });
 
           const localMembers = getMembers('all').filter(m => {
             if (!m || !m.id) return false;
+            const cleanId = String(m.id).toLowerCase().trim();
             const name = String(m.name || (m as any).fullName || '').trim();
             if (name.length <= 1) {
               markMemberAsDeleted(m.id);
               return false;
             }
-            return !deletedMemIds.has(String(m.id).toLowerCase().trim());
+            return !deletedMemIds.has(cleanId);
           });
 
           const memMap = new Map<string, any>();
@@ -322,9 +330,11 @@ export async function syncAllWithServer(forceAuthoritative: boolean = false): Pr
             memMap.set(String(sm.id).toLowerCase().trim(), sm);
           }
 
-          // Merge local members intelligently preserving user edits
+          // Merge local members intelligently preserving user edits and strictly respecting deletions
           for (const lm of localMembers) {
             const k = String(lm.id).toLowerCase().trim();
+            if (deletedMemIds.has(k)) continue;
+
             if (!memMap.has(k)) {
               memMap.set(k, lm);
             } else {
@@ -338,7 +348,7 @@ export async function syncAllWithServer(forceAuthoritative: boolean = false): Pr
                 memMap.set(k, {
                   ...existing,
                   name: (lm.updatedAt && lm.name) ? lm.name : existing.name,
-                  section: (lm.updatedAt && lm.section) ? lm.section : existing.section,
+                  section: (lm.section !== undefined && lm.section !== null) ? lm.section : existing.section,
                   fullPhone: lm.fullPhone || existing.fullPhone,
                   dependents: (lm.dependents && lm.dependents.length > 0) ? lm.dependents : existing.dependents,
                   updatedAt: lm.updatedAt || existing.updatedAt
@@ -347,7 +357,7 @@ export async function syncAllWithServer(forceAuthoritative: boolean = false): Pr
             }
           }
 
-          const finalMembers = Array.from(memMap.values());
+          const finalMembers = Array.from(memMap.values()).filter(m => !deletedMemIds.has(String(m.id).toLowerCase().trim()));
           saveMembers(finalMembers, true);
           serverData.members = finalMembers;
         }

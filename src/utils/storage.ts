@@ -3629,7 +3629,12 @@ export const addBatchMembers = (newMembers: MemberRecord[], overwriteExisting = 
   return { added, updated, total: allList.length };
 };
 
-export const addOrUpdateMember = async (member: MemberRecord, oldId?: string): Promise<boolean> => {
+export const addOrUpdateMember = async (
+  member: MemberRecord,
+  oldId?: string,
+  previousNameInput?: string,
+  previousSectionInput?: string
+): Promise<boolean> => {
   const campaigns = getStoredCampaigns();
   const ebeCamp = campaigns.find(c => c.id === 'cmp-kumtluang-1' || String(c.title).toLowerCase().includes('bcm ebenezer'));
   const currentEbeOrg = (ebeCamp && ebeCamp.orgCode) ? ebeCamp.orgCode.trim().toUpperCase() : 'ZBKEBE';
@@ -3683,11 +3688,11 @@ export const addOrUpdateMember = async (member: MemberRecord, oldId?: string): P
     return mClean === targetId || mClean === cleanNewId || samePhone;
   });
 
-  let previousName = '';
-  let previousSection = '';
+  let previousName = (previousNameInput || '').trim().toLowerCase();
+  let previousSection = (previousSectionInput || '').trim();
   if (idx >= 0) {
-    previousName = (allList[idx].name || '').trim().toLowerCase();
-    previousSection = (allList[idx].section || '').trim().toLowerCase();
+    if (!previousName) previousName = (allList[idx].name || '').trim().toLowerCase();
+    if (!previousSection) previousSection = (allList[idx].section || '').trim();
     allList[idx] = { ...allList[idx], ...stamped };
   } else {
     allList.unshift(stamped);
@@ -3729,28 +3734,44 @@ export const addOrUpdateMember = async (member: MemberRecord, oldId?: string): P
     const targetCampId = (stamped.campaignId || '').trim().toLowerCase();
     const nowIso = new Date().toISOString();
 
+    const newSectionVal = stamped.section !== undefined ? (stamped.section || '') : '';
+
     txs.forEach(t => {
       if (!t || !t.id) return;
       const tMid = (t.memberId || '').trim().toLowerCase();
+      const tSubId = (t.subId || '').trim().toLowerCase();
       const tCamp = (t.campaignId || '').trim().toLowerCase();
       const tName = (t.donorName || '').trim().toLowerCase();
       const tPhone = (t.donorPhone || '').replace(/\D/g, '').slice(-10);
 
-      const isIdMatch = Boolean(matchId && (tMid === matchId || tMid === cleanNewId || tMid === altMatchId));
-      const isSameCampNameMatch = Boolean(
-        !tMid &&
-        targetCampId &&
-        tCamp === targetCampId &&
-        previousName &&
-        tName === previousName
+      // Match 1: Member ID exact or prefix match (including dependent subIds)
+      const isIdMatch = Boolean(
+        matchId && (
+          tMid === matchId ||
+          tMid === cleanNewId ||
+          tMid === altMatchId ||
+          tMid.startsWith(matchId + '-') ||
+          tMid.startsWith(cleanNewId + '-') ||
+          tSubId.startsWith(matchId) ||
+          tSubId.startsWith(cleanNewId)
+        )
       );
-      const isSameCampPhoneMatch = Boolean(
-        !tMid &&
+
+      // Match 2: Same campaign & donor name matches member's previous name or new name
+      const isSameCampNameMatch = Boolean(
         targetCampId &&
-        tCamp === targetCampId &&
-        cleanPhone.length >= 10 &&
+        (!tCamp || tCamp === targetCampId) &&
+        previousName &&
+        (tName === previousName || (tMid && (tMid === matchId || tMid === cleanNewId)))
+      );
+
+      // Match 3: Same campaign & clean phone match
+      const isSameCampPhoneMatch = Boolean(
+        targetCampId &&
+        (!tCamp || tCamp === targetCampId) &&
+        cleanPhone.length >= 8 &&
         tPhone === cleanPhone &&
-        (!previousName || tName === previousName)
+        (!previousName || tName === previousName || tName === stamped.name.toLowerCase().trim())
       );
 
       if (isIdMatch || isSameCampNameMatch || isSameCampPhoneMatch) {
@@ -3758,10 +3779,18 @@ export const addOrUpdateMember = async (member: MemberRecord, oldId?: string): P
           ...t,
           memberId: stamped.id || t.memberId,
           donorName: stamped.name || t.donorName,
-          donorVeng: stamped.section !== undefined ? stamped.section : t.donorVeng,
-          section: stamped.section !== undefined ? stamped.section : (t as any).section,
+          donorVeng: newSectionVal || t.donorVeng || '',
+          section: newSectionVal || (t as any).section || '',
           isSynced: false,
-          updatedAt: nowIso
+          updatedAt: nowIso,
+          ...((t as any).metadata ? {
+            metadata: {
+              ...((t as any).metadata || {}),
+              donorName: stamped.name || t.donorName,
+              donorVeng: newSectionVal || t.donorVeng || '',
+              section: newSectionVal || (t as any).section || ''
+            }
+          } : {})
         } as Transaction;
         changedTxs.push(updatedTx);
       }
@@ -3769,6 +3798,17 @@ export const addOrUpdateMember = async (member: MemberRecord, oldId?: string): P
 
     if (changedTxs.length > 0) {
       saveMultipleTransactions(changedTxs);
+
+      // Push updated transactions directly to Supabase
+      import('../services/supabaseService').then(({ updateSupabaseTransactionsForMember }) => {
+        updateSupabaseTransactionsForMember(
+          stamped.id,
+          oldId,
+          stamped.name,
+          stamped.section,
+          changedTxs.map(t => t.id)
+        ).catch(() => {});
+      }).catch(() => {});
     }
   } catch (txPropErr) {
     console.warn('Transaction member info propagation note:', txPropErr);
@@ -3789,18 +3829,21 @@ export const deleteMember = (memberId: string, campaignId?: string): void => {
   if (!memberId) return;
   const cleanMid = (memberId || '').trim();
   const lowerMid = cleanMid.toLowerCase();
+  const upperMid = cleanMid.toUpperCase();
   const altLowerMid = lowerMid.startsWith('ebe-') ? 'bcm-' + lowerMid.substring(4) : (lowerMid.startsWith('bcm-') ? 'ebe-' + lowerMid.substring(4) : lowerMid);
 
-  // 1. Mark as deleted in tombstones (both primary and alternate prefixes)
+  // 1. Mark as deleted in tombstones (both primary, lowercase, uppercase, and alternate prefixes)
   markMemberAsDeleted(cleanMid);
+  markMemberAsDeleted(lowerMid);
+  markMemberAsDeleted(upperMid);
   markMemberAsDeleted(altLowerMid);
 
-  // 2. Filter local storage immediately
+  // 2. Filter local storage immediately (including dependents)
   const allList = getMembers();
   const filtered = allList.filter(m => {
     if (!m || !m.id) return false;
     const mClean = m.id.toLowerCase().trim();
-    if (mClean === lowerMid || mClean === altLowerMid) return false;
+    if (mClean === lowerMid || mClean === altLowerMid || mClean.startsWith(lowerMid + '-')) return false;
     return true;
   });
   saveMembers(filtered);
@@ -3810,6 +3853,8 @@ export const deleteMember = (memberId: string, campaignId?: string): void => {
   deleteMemberFromFirestore(altLowerMid).catch(() => {});
   import('../services/supabaseService').then(({ deleteSupabaseMember }) => {
     deleteSupabaseMember(cleanMid).catch(() => {});
+    deleteSupabaseMember(lowerMid).catch(() => {});
+    deleteSupabaseMember(upperMid).catch(() => {});
     deleteSupabaseMember(altLowerMid).catch(() => {});
   }).catch(() => {});
 
@@ -3823,7 +3868,7 @@ export const deleteMember = (memberId: string, campaignId?: string): void => {
   safeApiFetch('/api/data/sync', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ deletedMemberIds: [cleanMid, altLowerMid] })
+    body: JSON.stringify({ deletedMemberIds: [cleanMid, lowerMid, upperMid, altLowerMid] })
   }).catch(() => {});
 
   // 5. Broadcast instant sync to all open tabs and components
