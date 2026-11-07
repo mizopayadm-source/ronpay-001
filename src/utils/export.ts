@@ -258,10 +258,79 @@ export const getMonthsListForConfig = (config?: MonthRangeConfig): string[] => {
 export const getTransactionHead = (t: Transaction, campaign?: Campaign | null): string => {
   if (!t) return 'Donation / Contribution';
 
+  // 0. Group entries: return clean Group name (e.g. 'BMP', 'TKP', 'BKHP') without 'Pathian Ram'
+  const isGroup =
+    t.donorType === 'group' ||
+    (Boolean(t.groupName) && t.groupName!.trim().length > 0) ||
+    (Boolean(t.donorName) && t.donorName!.trim().toLowerCase().startsWith('group'));
+  if (isGroup) {
+    let gName = (t.groupName || '').trim();
+    if (!gName && t.donorName) {
+      const dTrim = t.donorName.trim();
+      if (dTrim.toLowerCase() !== 'group' && dTrim.toLowerCase() !== 'anonymous donor') {
+        gName = dTrim.replace(/^group\s*[:\-()]?\s*/i, '').replace(/\)$/, '').trim();
+      }
+    }
+    if (!gName && t.subCategory && typeof t.subCategory === 'string') {
+      const sTrim = t.subCategory.trim();
+      if (sTrim && !sTrim.toLowerCase().includes('pathian ram') && sTrim.toLowerCase() !== 'kumtluang' && sTrim.toLowerCase() !== 'general') {
+        gName = sTrim;
+      }
+    }
+    const matchGrp = gName.match(/^Group\s*\((.+)\)$/i);
+    if (matchGrp && matchGrp[1]) gName = matchGrp[1].trim();
+    return gName || 'Group Thawhlawm';
+  }
+
+  // 0b. General / Inkhawm entries: return exact collection title (e.g. 'Pathianni Zing Thawhlawm', 'Pathianni Zan Thawhlawm')
+  const donorLowerCheck = (t.donorName || '').trim().toLowerCase();
+  const isGeneral =
+    t.donorType === 'general' ||
+    Boolean((t as any).generalCollectionTitle) ||
+    donorLowerCheck.includes('inkhawm') ||
+    donorLowerCheck.includes('inkawm') ||
+    donorLowerCheck.includes('pathianni') ||
+    donorLowerCheck.includes('thawhlawm') ||
+    donorLowerCheck.startsWith('general');
+  if (isGeneral) {
+    const genTitle = ((t as any).generalCollectionTitle || '').trim();
+    if (genTitle && !genTitle.toLowerCase().includes('pathian ram') && genTitle.toLowerCase() !== 'kumtluang') {
+      return genTitle;
+    }
+    if (t.donorName && t.donorName.trim()) {
+      const dClean = t.donorName.trim();
+      const dLow = dClean.toLowerCase();
+      if (
+        dLow !== 'general' &&
+        dLow !== 'general offering' &&
+        dLow !== 'anonymous donor' &&
+        !dLow.includes('pathian ram') &&
+        dLow !== 'kumtluang'
+      ) {
+        return dClean;
+      }
+    }
+    if (t.subCategory && typeof t.subCategory === 'string' && t.subCategory.trim()) {
+      const sClean = t.subCategory.trim();
+      const sLow = sClean.toLowerCase();
+      if (!sLow.includes('pathian ram') && sLow !== 'kumtluang' && sLow !== 'general') {
+        return sClean;
+      }
+    }
+    if (t.remark && typeof t.remark === 'string' && t.remark.trim() && !t.remark.toLowerCase().includes('pathian ram')) {
+      const cleanRem = t.remark.replace(/Collector:.*$/i, '').replace(/\[.*?\]/g, '').trim();
+      if (cleanRem) return cleanRem;
+    }
+    return 'General Thawhlawm';
+  }
+
   // 1. If explicit subCategory is specified and not the raw generic string 'kumtluang'
   if (t.subCategory && typeof t.subCategory === 'string' && t.subCategory.trim()) {
     const cleanSub = t.subCategory.trim();
     if (cleanSub.toLowerCase() !== 'kumtluang') {
+      if (cleanSub.toLowerCase().includes('pathian ram')) {
+        return 'Pathian Ram';
+      }
       return cleanSub;
     }
   }
@@ -272,23 +341,26 @@ export const getTransactionHead = (t: Transaction, campaign?: Campaign | null): 
       k => (Number(t.subCategoryBreakdown[k]) || 0) > 0 && k.trim().toLowerCase() !== 'kumtluang'
     );
     if (validKeys.length === 1) {
-      return validKeys[0].trim();
+      const k0 = validKeys[0].trim();
+      return k0.toLowerCase().includes('pathian ram') ? 'Pathian Ram' : k0;
     } else if (validKeys.length > 1) {
-      return validKeys.join(', ');
+      return validKeys.map(k => k.trim().toLowerCase().includes('pathian ram') ? 'Pathian Ram' : k.trim()).join(', ');
     }
   }
 
   // 3. Check (t as any).head or (t as any).sub_
   const rawHead = (t as any).head || (t as any).sub_;
   if (rawHead && String(rawHead).trim().toLowerCase() !== 'kumtluang') {
-    return String(rawHead).trim();
+    const rh = String(rawHead).trim();
+    return rh.toLowerCase().includes('pathian ram') ? 'Pathian Ram' : rh;
   }
 
   // 4. Check bracketed head in remark e.g. [BMP Fund]
   if (t.remark) {
     const bracketMatch = t.remark.match(/\[(.*?)\]/);
     if (bracketMatch && bracketMatch[1]?.trim() && bracketMatch[1].trim().toLowerCase() !== 'kumtluang') {
-      return bracketMatch[1].trim();
+      const bh = bracketMatch[1].trim();
+      return bh.toLowerCase().includes('pathian ram') ? 'Pathian Ram' : bh;
     }
   }
 
@@ -301,13 +373,6 @@ export const getTransactionHead = (t: Transaction, campaign?: Campaign | null): 
     (campaign?.orgName && campaign.orgName.toLowerCase().includes('bmp'));
 
   if (isBmp) {
-    const donorLower = (t.donorName || '').toLowerCase().trim();
-    if (donorLower.includes('inkhawm') || donorLower.includes('inkawm') || t.donorType === 'general') {
-      return 'General Thawhlawm';
-    }
-    if (t.donorType === 'group' || (t.groupName && t.groupName.trim().length > 0)) {
-      return 'Group';
-    }
     return 'BMP Fund';
   }
 
@@ -317,20 +382,115 @@ export const getTransactionHead = (t: Transaction, campaign?: Campaign | null): 
       s => s && typeof s === 'string' && s.trim() && s.trim().toLowerCase() !== 'kumtluang'
     );
     if (validSubs.length > 0) {
-      return validSubs[0].trim();
+      const vs = validSubs[0].trim();
+      return vs.toLowerCase().includes('pathian ram') ? 'Pathian Ram' : vs;
     }
   }
 
   // 7. For other Kumtluang or general campaigns, avoid showing 'kumtluang' as the head
   const rawCat = t.category || campaign?.category || '';
   if (rawCat.toLowerCase() === 'kumtluang') {
-    if (campaign?.title) {
-      return `${campaign.title} Fund`;
-    }
-    return 'BMP Fund';
+    return 'Pathian Ram';
   }
 
-  return rawCat || 'Donation / Contribution';
+  return rawCat || 'Pathian Ram';
+};
+
+const FULL_MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December'
+];
+
+/**
+ * Resolves the Month & Year label (e.g. 'June 2026') and chronological sort key ('2026-06')
+ * for any transaction or cash book item.
+ */
+export const getTransactionMonthYear = (
+  t: Partial<Transaction> | any,
+  fallbackDateStr?: string
+): { monthYearLabel: string; sortKey: string } => {
+  const findMonthIdx = (str: string): number => {
+    const clean = str.toLowerCase().trim();
+    for (let i = 0; i < FULL_MONTH_NAMES.length; i++) {
+      const mLower = FULL_MONTH_NAMES[i].toLowerCase();
+      if (clean === mLower || clean.startsWith(mLower.slice(0, 3))) {
+        return i;
+      }
+    }
+    return -1;
+  };
+
+  const rawDate = t?.timestamp || t?.date || t?.createdAt || fallbackDateStr || '';
+  const parsedDate = rawDate ? new Date(rawDate) : new Date();
+  const defaultYear = !isNaN(parsedDate.getTime()) ? parsedDate.getFullYear() : new Date().getFullYear();
+  const defaultMonthIdx = !isNaN(parsedDate.getTime()) ? parsedDate.getMonth() : new Date().getMonth();
+
+  // 1. Check explicit periodMonth / periodYear
+  if (t?.periodMonth && typeof t.periodMonth === 'string') {
+    const mIdx = findMonthIdx(t.periodMonth);
+    if (mIdx >= 0) {
+      const yr = t?.periodYear && /^\d{4}$/.test(String(t.periodYear).trim())
+        ? Number(t.periodYear)
+        : defaultYear;
+      return {
+        monthYearLabel: `${FULL_MONTH_NAMES[mIdx]} ${yr}`,
+        sortKey: `${yr}-${String(mIdx + 1).padStart(2, '0')}`
+      };
+    }
+  }
+
+  // 2. Check periodLabel (e.g. 'June 2026', 'Jun 2026', 'June')
+  if (t?.periodLabel && typeof t.periodLabel === 'string' && t.periodLabel.trim()) {
+    const pClean = t.periodLabel.trim();
+    const yrMatch = pClean.match(/\b(20\d{2})\b/);
+    const yr = yrMatch ? Number(yrMatch[1]) : defaultYear;
+    const words = pClean.split(/[\s,\-/]+/);
+    for (const w of words) {
+      const mIdx = findMonthIdx(w);
+      if (mIdx >= 0) {
+        return {
+          monthYearLabel: `${FULL_MONTH_NAMES[mIdx]} ${yr}`,
+          sortKey: `${yr}-${String(mIdx + 1).padStart(2, '0')}`
+        };
+      }
+    }
+  }
+
+  // 3. Fallback to transaction date
+  if (!isNaN(parsedDate.getTime())) {
+    return {
+      monthYearLabel: `${FULL_MONTH_NAMES[defaultMonthIdx]} ${defaultYear}`,
+      sortKey: `${defaultYear}-${String(defaultMonthIdx + 1).padStart(2, '0')}`
+    };
+  }
+
+  return {
+    monthYearLabel: 'All Time',
+    sortKey: '9999-99'
+  };
+};
+
+/**
+ * Canonical sorting priority for Cash Book & Ledger Heads:
+ * 1. Pathian Ram
+ * 2. Pathianni Zing Thawhlawm
+ * 3. Pathianni Zan Thawhlawm
+ * 4. Other Inkhawm / General Thawhlawm
+ * 5. BMP
+ * 6. TKP
+ * 7. Other Groups / Sub-Heads (BKHP, KNP, Building, etc.)
+ */
+export const getHeadSortPriority = (headName: string): number => {
+  const h = (headName || '').trim().toLowerCase();
+  if (h.includes('pathian ram')) return 1;
+  if (h.includes('pathianni zing') || h.includes('zing thawhlawm') || h.includes('morning')) return 2;
+  if (h.includes('pathianni zan') || h.includes('zan thawhlawm') || h.includes('evening')) return 3;
+  if (h.includes('pathianni') || h.includes('inkhawm') || h.includes('thawhlawm')) return 4;
+  if (h === 'bmp' || h.startsWith('bmp')) return 5;
+  if (h === 'tkp' || h.startsWith('tkp') || h.startsWith('ṭkp')) return 6;
+  if (h === 'bkhp' || h.startsWith('bkhp')) return 7;
+  if (h === 'knp' || h.startsWith('knp')) return 8;
+  return 10;
 };
 
 /**
@@ -4314,6 +4474,7 @@ export const generateManualStyleLedgerPrintHtml = (options: CashBookPrintOptions
     key: string;
     head: string;
     monthYear: string;
+    sortKey: string;
     date: string;
     totalAmount: number;
     items: Array<{
@@ -4345,19 +4506,16 @@ export const generateManualStyleLedgerPrintHtml = (options: CashBookPrintOptions
   const subsidiaryGroupsMap = new Map<string, SubsidiaryHeadGroup>();
 
   rawReceipts.forEach(e => {
-    const d = new Date(e.date || 0);
-    const isValidDate = !isNaN(d.getTime());
-    const monthYear = isValidDate 
-      ? d.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })
-      : 'All Time';
-    const headName = e.head || 'General Receipts';
-    const groupKey = `${headName}___${monthYear}`;
+    const { monthYearLabel, sortKey } = getTransactionMonthYear((e as any).rawObject || e, e.date);
+    const headName = (e.head || 'Pathian Ram').trim();
+    const groupKey = `${headName}___${monthYearLabel}`;
 
     if (!subsidiaryGroupsMap.has(groupKey)) {
       subsidiaryGroupsMap.set(groupKey, {
         key: groupKey,
         head: headName,
-        monthYear,
+        monthYear: monthYearLabel,
+        sortKey,
         date: formatDateDDMMYYYY(e.date),
         totalAmount: 0,
         items: []
@@ -4375,14 +4533,20 @@ export const generateManualStyleLedgerPrintHtml = (options: CashBookPrintOptions
     });
   });
 
-  const subsidiaryGroups = Array.from(subsidiaryGroupsMap.values());
+  const subsidiaryGroups = Array.from(subsidiaryGroupsMap.values()).sort((a, b) => {
+    const pDiff = getHeadSortPriority(a.head) - getHeadSortPriority(b.head);
+    if (pDiff !== 0) return pDiff;
+    const hDiff = a.head.localeCompare(b.head);
+    if (hDiff !== 0) return hDiff;
+    return a.sortKey.localeCompare(b.sortKey);
+  });
 
   if (receiptGroupingMode === 'head_wise') {
     // Grouped by Category/Head & Month (Paper-friendly, manual ledger style)
     subsidiaryGroups.forEach(grp => {
       receiptEntries.push({
         date: grp.monthYear,
-        particulars: `To ${grp.head} - ${grp.monthYear} Collection`,
+        particulars: `To ${grp.head} - ${grp.monthYear}`,
         refNo: 'SUB-LDG',
         head: grp.head,
         amount: grp.totalAmount,

@@ -86,7 +86,9 @@ import {
   exportPaymentVoucherSlipPrint,
   exportCashBookToCSV,
   exportExpensesToCSV,
-  getTransactionHead 
+  getTransactionHead,
+  getTransactionMonthYear,
+  getHeadSortPriority
 } from '../utils/export';
 
 export interface CashBookItem {
@@ -923,7 +925,7 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
     });
   }, [onScreenPeriodData.periodEntries, cashBookSearch, cashBookTypeFilter, cashBookAuditFilter]);
 
-  // Head-wise Aggregated Receipts for Clean Ledger & Subsidiary Drill-down
+  // Head-wise Monthly Aggregated Receipts for Clean Ledger & Subsidiary Drill-down
   const aggregatedReceiptGroups = useMemo(() => {
     const rawReceipts = filteredCashBookEntries
       .filter(e => e.type === 'receipt')
@@ -933,29 +935,33 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
       key: string;
       head: string;
       monthYear: string;
+      sortKey: string;
       latestDate: string;
       totalAmount: number;
       count: number;
+      auditedCount: number;
+      unauditedCount: number;
+      flaggedCount: number;
       items: typeof filteredCashBookEntries;
     }>();
 
     rawReceipts.forEach(e => {
-      const d = new Date(e.date || 0);
-      const isValid = !isNaN(d.getTime());
-      const monthYear = isValid
-        ? d.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })
-        : 'All Time';
-      const headName = e.head || 'General Receipts';
-      const key = `${headName}___${monthYear}`;
+      const { monthYearLabel, sortKey } = getTransactionMonthYear(e.rawObject || e, e.date);
+      const headName = (e.head || 'Pathian Ram').trim();
+      const key = `${headName}___${monthYearLabel}`;
 
       if (!groupsMap.has(key)) {
         groupsMap.set(key, {
           key,
           head: headName,
-          monthYear,
+          monthYear: monthYearLabel,
+          sortKey,
           latestDate: e.date,
           totalAmount: 0,
           count: 0,
+          auditedCount: 0,
+          unauditedCount: 0,
+          flaggedCount: 0,
           items: []
         });
       }
@@ -963,11 +969,21 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
       const g = groupsMap.get(key)!;
       g.totalAmount += e.receiptAmount;
       g.count += 1;
+      const cat = getItemAuditCategory(e);
+      if (cat === 'audited') g.auditedCount += 1;
+      else if (cat === 'flagged') g.flaggedCount += 1;
+      else g.unauditedCount += 1;
       g.latestDate = e.date;
       g.items.push(e);
     });
 
-    return Array.from(groupsMap.values());
+    return Array.from(groupsMap.values()).sort((a, b) => {
+      const pDiff = getHeadSortPriority(a.head) - getHeadSortPriority(b.head);
+      if (pDiff !== 0) return pDiff;
+      const hDiff = a.head.localeCompare(b.head);
+      if (hDiff !== 0) return hDiff;
+      return a.sortKey.localeCompare(b.sortKey);
+    });
   }, [filteredCashBookEntries]);
 
   const toggleReceiptHead = (key: string) => {
@@ -2342,7 +2358,7 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
                       : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200'
                   }`}
                 >
-                  ✓ Audit Chin ({cashBookAuditCounts.audited})
+                  ✓ Audited ({cashBookAuditCounts.audited})
                 </button>
                 <button
                   type="button"
@@ -2370,7 +2386,7 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
                 )}
               </div>
               <div className="text-[10.5px] font-bold text-slate-500">
-                ✓ Audit ChinLut: <strong className="text-emerald-700">₹{cashBookAuditCounts.auditedReceiptsAmt.toLocaleString('en-IN')}</strong> • ⏳ La Audit Loh: <strong className="text-amber-700">₹{cashBookAuditCounts.unauditedReceiptsAmt.toLocaleString('en-IN')}</strong>
+                ✓ Audited Lut: <strong className="text-emerald-700">₹{cashBookAuditCounts.auditedReceiptsAmt.toLocaleString('en-IN')}</strong> • ⏳ La Audit Loh: <strong className="text-amber-700">₹{cashBookAuditCounts.unauditedReceiptsAmt.toLocaleString('en-IN')}</strong>
               </div>
             </div>
 
@@ -2472,7 +2488,7 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
                           const cat = getItemAuditCategory(item);
                           return cat === 'audited' ? (
                             <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
-                              ✓ AUDIT CHIN
+                              ✓ AUDITED
                             </span>
                           ) : cat === 'flagged' ? (
                             <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-300">
@@ -2570,7 +2586,7 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
                             <div className="inline-flex items-center gap-1">
                               {auditCat === 'audited' ? (
                                 <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
-                                  ✓ AUDIT CHIN
+                                  ✓ AUDITED
                                 </span>
                               ) : auditCat === 'flagged' ? (
                                 <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-300">
@@ -2617,51 +2633,104 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
                     <BookOpen className="w-4 h-4 text-indigo-700 shrink-0" />
                     <div>
                       <h4 className="text-xs font-black text-indigo-950 uppercase tracking-tight">
-                        Manual-Style Two-Sided Cash Book & Ledger
+                        Manual Cash Book &amp; Ledger Register (Head &amp; Monthly Summary)
                       </h4>
                       <p className="text-[10.5px] text-indigo-700 font-medium">
-                        Physical ledger register layout: Receipts on left, Payments on right with balanced totals.
+                        1. Pathian Ram (Monthly) • 2. Pathianni Zing/Zan Thawhlawm (Monthly) • 3. BMP / TKP / Sub-Heads (Monthly) + Subsidiary Ledger a hnuaiah.
                       </p>
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={handlePrintManualLedger}
-                    className="px-3.5 py-1.5 bg-indigo-700 hover:bg-indigo-800 text-white font-black text-xs rounded-xl shadow-xs transition flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 shrink-0"
-                    title="Print A4 landscape manual ledger or save as PDF"
-                  >
-                    <Printer className="w-3.5 h-3.5 text-amber-300" /> Print Ledger / Export PDF
-                  </button>
+                  <div className="flex items-center gap-2 flex-wrap shrink-0">
+                    <div className="inline-flex rounded-xl bg-white p-0.5 border border-indigo-200">
+                      <button
+                        type="button"
+                        onClick={() => setLedgerReceiptsMode('head_wise')}
+                        className={`px-2.5 py-1 rounded-lg text-[10.5px] font-black transition cursor-pointer ${
+                          ledgerReceiptsMode === 'head_wise'
+                            ? 'bg-emerald-600 text-white shadow-2xs'
+                            : 'text-slate-600 hover:bg-slate-100'
+                        }`}
+                      >
+                        📂 Head-wise Monthly ({aggregatedReceiptGroups.length})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setLedgerReceiptsMode('detailed')}
+                        className={`px-2.5 py-1 rounded-lg text-[10.5px] font-black transition cursor-pointer ${
+                          ledgerReceiptsMode === 'detailed'
+                            ? 'bg-emerald-600 text-white shadow-2xs'
+                            : 'text-slate-600 hover:bg-slate-100'
+                        }`}
+                      >
+                        📋 Mimal Tin
+                      </button>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handlePrintManualLedger}
+                      className="px-3.5 py-1.5 bg-indigo-700 hover:bg-indigo-800 text-white font-black text-xs rounded-xl shadow-xs transition flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 shrink-0"
+                      title="Print A4 landscape manual ledger or save as PDF"
+                    >
+                      <Printer className="w-3.5 h-3.5 text-amber-300" /> Print Ledger / Export PDF
+                    </button>
+                  </div>
                 </div>
 
                 {/* The Two-Sided Ledger Register Sheet */}
                 <div className="overflow-x-auto rounded-2xl border-2 border-slate-900 bg-white shadow-xs">
                   {(() => {
-                    const receiptSide = [
+                    type LedgerRowEntry = {
+                      date: string;
+                      particulars: string;
+                      refNo: string;
+                      head?: string;
+                      amount: number;
+                      auditCat?: 'audited' | 'unaudited' | 'flagged';
+                      rawItem?: CashBookItem;
+                      groupKey?: string;
+                      groupItems?: CashBookItem[];
+                      unauditedCount?: number;
+                    };
+
+                    const receiptSide: LedgerRowEntry[] = [
                       ...(onScreenPeriodData.openingBF > 0 || onScreenPeriodData.periodText !== 'All Time Statement' ? [{
                         date: onScreenEffectiveFromDate ? formatDateDDMMYYYY(onScreenEffectiveFromDate) : 'Start',
                         particulars: 'To Opening Balance (B/F) - Cash in Hand / Bank',
                         refNo: 'B/F',
                         head: 'Opening Balance',
-                        amount: onScreenPeriodData.openingBF,
-                        auditCat: undefined as 'audited' | 'unaudited' | 'flagged' | undefined,
-                        rawItem: undefined as CashBookItem | undefined
+                        amount: onScreenPeriodData.openingBF
                       }] : []),
-                      ...filteredCashBookEntries
-                        .filter(e => e.type === 'receipt')
-                        .sort((a, b) => new Date(a.date || 0).getTime() - new Date(b.date || 0).getTime())
-                        .map(e => ({
-                          date: formatDateDDMMYYYY(e.date),
-                          particulars: `To ${e.particulars}`,
-                          refNo: e.refNo || '--',
-                          head: e.head,
-                          amount: e.receiptAmount,
-                          auditCat: getItemAuditCategory(e),
-                          rawItem: e
-                        }))
+                      ...(ledgerReceiptsMode === 'head_wise'
+                        ? aggregatedReceiptGroups.map((grp, gIdx) => ({
+                            date: grp.monthYear,
+                            particulars: `${gIdx + 1}. To ${grp.head} (${grp.monthYear})`,
+                            refNo: `SUB-${gIdx + 1} (${grp.count})`,
+                            head: `${grp.count} receipts • ✓ Audited: ${grp.auditedCount} | ⏳ La Audit Loh: ${grp.unauditedCount}`,
+                            amount: grp.totalAmount,
+                            auditCat: (grp.flaggedCount > 0
+                              ? 'flagged'
+                              : grp.unauditedCount === 0
+                              ? 'audited'
+                              : 'unaudited') as 'audited' | 'unaudited' | 'flagged',
+                            groupKey: grp.key,
+                            groupItems: grp.items,
+                            unauditedCount: grp.unauditedCount
+                          }))
+                        : filteredCashBookEntries
+                            .filter(e => e.type === 'receipt')
+                            .sort((a, b) => new Date(a.date || 0).getTime() - new Date(b.date || 0).getTime())
+                            .map(e => ({
+                              date: formatDateDDMMYYYY(e.date),
+                              particulars: `To ${e.particulars}`,
+                              refNo: e.refNo || '--',
+                              head: e.head,
+                              amount: e.receiptAmount,
+                              auditCat: getItemAuditCategory(e),
+                              rawItem: e
+                            })))
                     ];
 
-                    const paymentSide = [
+                    const paymentSide: LedgerRowEntry[] = [
                       ...filteredCashBookEntries
                         .filter(e => e.type === 'payment')
                         .sort((a, b) => new Date(a.date || 0).getTime() - new Date(b.date || 0).getTime())
@@ -2679,9 +2748,7 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
                         particulars: 'By Closing Balance (C/D) - Cash in Hand / Bank',
                         refNo: 'C/D',
                         head: 'Closing Cash',
-                        amount: onScreenPeriodData.closingCD,
-                        auditCat: undefined as 'audited' | 'unaudited' | 'flagged' | undefined,
-                        rawItem: undefined as CashBookItem | undefined
+                        amount: onScreenPeriodData.closingCD
                       }
                     ];
 
@@ -2694,7 +2761,7 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
                         <thead>
                           <tr className="text-white">
                             <th colSpan={4} className="bg-emerald-900 p-2 text-center text-xs font-black tracking-wider border-r-2 border-slate-900 uppercase">
-                              Dr. &nbsp;&nbsp; (RECEIPTS  / SUM LUT)
+                              Dr. &nbsp;&nbsp; (RECEIPTS  / SUM LUT — HEAD &amp; MONTHLY)
                             </th>
                             <th colSpan={4} className="bg-rose-900 p-2 text-center text-xs font-black tracking-wider uppercase">
                               Cr. &nbsp;&nbsp; (PAYMENTS / SUM CHHUAK)
@@ -2702,9 +2769,9 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
                           </tr>
                           <tr className="bg-slate-900 text-slate-100 text-[10px] uppercase tracking-wider font-bold">
                             {/* Dr Columns */}
-                            <th className="p-2 w-20 text-center border-r border-slate-700">Date</th>
-                            <th className="p-2 border-r border-slate-700">Particulars (Narration)</th>
-                            <th className="p-2 w-20 text-center border-r border-slate-700">Ref / Rec</th>
+                            <th className="p-2 w-24 text-center border-r border-slate-700">Month / Date</th>
+                            <th className="p-2 border-r border-slate-700">Particulars (Head / Category)</th>
+                            <th className="p-2 w-20 text-center border-r border-slate-700">Ref / Sub</th>
                             <th className="p-2 w-24 text-right border-r-2 border-slate-900 bg-emerald-950">Amount (₹)</th>
 
                             {/* Cr Columns */}
@@ -2721,7 +2788,7 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
                             return (
                               <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/70'}>
                                 {/* Dr cell 1 */}
-                                <td className="p-2 font-mono text-[10.5px] text-slate-500 text-center border-r border-slate-200 whitespace-nowrap">
+                                <td className="p-2 font-mono text-[10.5px] text-slate-600 font-bold text-center border-r border-slate-200 whitespace-nowrap">
                                   {dr ? dr.date : ''}
                                 </td>
                                 {/* Dr cell 2 */}
@@ -2729,12 +2796,22 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
                                   {dr ? (
                                     <div>
                                       <div className="font-bold text-slate-900 flex items-center justify-between gap-1.5 flex-wrap">
-                                        <span>{dr.particulars}</span>
+                                        <span
+                                          onClick={() => {
+                                            if (dr.groupKey) {
+                                              setExpandedReceiptHeads(prev => ({ ...prev, [dr.groupKey!]: !prev[dr.groupKey!] }));
+                                            }
+                                          }}
+                                          className={dr.groupKey ? 'cursor-pointer hover:text-emerald-700 underline decoration-dotted underline-offset-2' : ''}
+                                          title={dr.groupKey ? 'Click la a hnuaia Subsidiary chipchiar en rawh' : undefined}
+                                        >
+                                          {dr.particulars}
+                                        </span>
                                         {dr.auditCat && (
                                           <span className="inline-flex items-center gap-1">
                                             {dr.auditCat === 'audited' ? (
                                               <span className="text-[8.5px] font-black px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
-                                                ✓ AUDIT CHIN
+                                                ✓ AUDITED
                                               </span>
                                             ) : dr.auditCat === 'flagged' ? (
                                               <span className="text-[8.5px] font-black px-1.5 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-300">
@@ -2749,10 +2826,45 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
                                               <button
                                                 type="button"
                                                 onClick={() => handleToggleCashBookItemAudit(dr.rawItem!)}
-                                                className="px-1 py-0.2 rounded text-[8.5px] font-black border border-emerald-400 text-emerald-700 hover:bg-emerald-50 cursor-pointer"
-                                                title="Audit / Dik tiin chhinchhiah rawh"
+                                                className="px-1.5 py-0.5 rounded text-[8.5px] font-black border border-emerald-400 text-emerald-700 hover:bg-emerald-50 cursor-pointer"
+                                                title="Audit / Dik tiin chhinchhiah rawh (Click nawnin sut theih)"
                                               >
-                                                ✓
+                                                ✓ Dik
+                                              </button>
+                                            )}
+                                            {canUserAuditCashBook && dr.groupItems && dr.groupItems.length > 0 && (
+                                              <button
+                                                type="button"
+                                                onClick={() => {
+                                                  const shouldClear = dr.auditCat === 'audited';
+                                                  dr.groupItems!.forEach(item => {
+                                                    const raw = item.rawObject as any;
+                                                    if (raw?.is_locked && !creatorProfile?.isAdmin && String(creatorProfile?.role || '').toUpperCase() !== 'ADMIN' && String(creatorProfile?.role || '').toUpperCase() !== 'SUPER_ADMIN') {
+                                                      return;
+                                                    }
+                                                    markRecordAuditVerification(
+                                                      item.id,
+                                                      'transaction',
+                                                      shouldClear ? undefined : 'verified',
+                                                      creatorProfile?.name || 'Auditor',
+                                                      '',
+                                                      shouldClear
+                                                    );
+                                                    if (raw) {
+                                                      raw.audit_mark = shouldClear ? undefined : 'verified';
+                                                      if (shouldClear) raw.is_locked = false;
+                                                    }
+                                                  });
+                                                  setAuditRefreshTick(t => t + 1);
+                                                }}
+                                                className={`px-1.5 py-0.5 rounded text-[8.5px] font-black border cursor-pointer transition ${
+                                                  dr.auditCat === 'audited'
+                                                    ? 'bg-emerald-600 text-white border-emerald-600 hover:bg-amber-600 hover:border-amber-600'
+                                                    : 'bg-white text-emerald-700 border-emerald-400 hover:bg-emerald-50'
+                                                }`}
+                                                title={dr.auditCat === 'audited' ? 'Audited tawh (Click nawn la sut rawh)' : 'He Head & Thla chhung zawng hi Dik tiin Audit rawh'}
+                                              >
+                                                ✓ Dik
                                               </button>
                                             )}
                                           </span>
@@ -2787,7 +2899,7 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
                                           <span className="inline-flex items-center gap-1">
                                             {cr.auditCat === 'audited' ? (
                                               <span className="text-[8.5px] font-black px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
-                                                ✓ AUDIT CHIN
+                                                ✓ AUDITED
                                               </span>
                                             ) : cr.auditCat === 'flagged' ? (
                                               <span className="text-[8.5px] font-black px-1.5 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-300">
@@ -2802,10 +2914,14 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
                                               <button
                                                 type="button"
                                                 onClick={() => handleToggleCashBookItemAudit(cr.rawItem!)}
-                                                className="px-1 py-0.2 rounded text-[8.5px] font-black border border-emerald-400 text-emerald-700 hover:bg-emerald-50 cursor-pointer"
-                                                title="Audit / Dik tiin chhinchhiah rawh"
+                                                className={`px-1.5 py-0.5 rounded text-[8.5px] font-black border cursor-pointer transition ${
+                                                  cr.auditCat === 'audited'
+                                                    ? 'bg-emerald-600 text-white border-emerald-600 hover:bg-amber-600'
+                                                    : 'border-emerald-400 text-emerald-700 hover:bg-emerald-50'
+                                                }`}
+                                                title="Audit / Dik tiin chhinchhiah rawh (Click nawnin sut theih)"
                                               >
-                                                ✓
+                                                ✓ Dik
                                               </button>
                                             )}
                                           </span>
@@ -2849,6 +2965,149 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
                     );
                   })()}
                 </div>
+
+                {/* SUBSIDIARY CASH LEDGER (A HNUAIA CHIPCHIAR ENNA) */}
+                {ledgerReceiptsMode === 'head_wise' && aggregatedReceiptGroups.length > 0 && (
+                  <div className="mt-4 bg-white border-2 border-emerald-800/80 rounded-2xl overflow-hidden shadow-2xs">
+                    <div className="bg-emerald-900 text-white px-3.5 py-2.5 flex items-center justify-between gap-2 flex-wrap">
+                      <div>
+                        <h5 className="text-xs font-black uppercase tracking-wide flex items-center gap-1.5">
+                          <span>📋 SUBSIDIARY CASH LEDGER (A HNUAIA HEAD &amp; THLA BI CHIPCHIAR)</span>
+                        </h5>
+                        <p className="text-[10px] text-emerald-200">
+                          Main Cash Book-a Head &amp; Monthly summary chhunga mimal/entry luh dan kimchang ({aggregatedReceiptGroups.length} groups)
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={handleExpandAllReceiptHeads}
+                          className="px-2.5 py-1 rounded-lg bg-emerald-800 hover:bg-emerald-700 text-white text-[10px] font-black cursor-pointer"
+                        >
+                          Hawng Vek (Expand All)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleCollapseAllReceiptHeads}
+                          className="px-2.5 py-1 rounded-lg bg-emerald-950 hover:bg-slate-800 text-emerald-200 text-[10px] font-bold cursor-pointer"
+                        >
+                          Phuih Vek (Collapse All)
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="divide-y divide-slate-200">
+                      {aggregatedReceiptGroups.map((grp, idx) => {
+                        const isExpanded = Boolean(expandedReceiptHeads[grp.key]);
+                        const allAudited = grp.unauditedCount === 0 && grp.flaggedCount === 0;
+                        return (
+                          <div key={grp.key} className="bg-white">
+                            <div
+                              onClick={() => toggleReceiptHead(grp.key)}
+                              className="px-3.5 py-2.5 bg-emerald-50/50 hover:bg-emerald-100/60 transition cursor-pointer flex items-center justify-between gap-2 flex-wrap"
+                            >
+                              <div className="flex items-center gap-2">
+                                <span className="text-[10px] font-mono font-black px-2 py-0.5 rounded bg-emerald-800 text-white">
+                                  SUB-{idx + 1}
+                                </span>
+                                <span className="font-black text-slate-900 text-xs">
+                                  {grp.head} — {grp.monthYear}
+                                </span>
+                                <span className="text-[10px] font-bold text-slate-500">
+                                  ({grp.count} entries)
+                                </span>
+                                {allAudited ? (
+                                  <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                    ✓ AUDITED
+                                  </span>
+                                ) : (
+                                  <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300">
+                                    ⏳ {grp.unauditedCount} LA AUDIT LOH
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="font-mono font-black text-emerald-800 text-xs">
+                                  ₹{grp.totalAmount.toLocaleString('en-IN')}
+                                </span>
+                                <span className="text-[10px] font-bold text-emerald-700 underline">
+                                  {isExpanded ? '▲ Phuih rawh' : '▼ Chipchiar enna'}
+                                </span>
+                              </div>
+                            </div>
+
+                            {isExpanded && (
+                              <div className="p-2.5 bg-slate-50 overflow-x-auto">
+                                <table className="w-full text-left border-collapse text-[11px] bg-white rounded-xl overflow-hidden border border-slate-200">
+                                  <thead>
+                                    <tr className="bg-slate-100 border-b border-slate-200 text-[9.5px] font-black uppercase text-slate-600">
+                                      <th className="p-2 w-24">Date</th>
+                                      <th className="p-2">Particulars / Member / Narration</th>
+                                      <th className="p-2 w-28">Ref / Tx ID</th>
+                                      <th className="p-2 w-24 text-center">Audit</th>
+                                      <th className="p-2 w-28 text-right">Amount (₹)</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-slate-100">
+                                    {grp.items.map(item => {
+                                      const cat = getItemAuditCategory(item);
+                                      return (
+                                        <tr key={item.id} className="hover:bg-slate-50">
+                                          <td className="p-2 font-mono text-[10px] text-slate-500 whitespace-nowrap">
+                                            {formatDateDDMMYYYY(item.date)}
+                                          </td>
+                                          <td className="p-2 font-bold text-slate-800">
+                                            {item.particulars}
+                                          </td>
+                                          <td className="p-2 font-mono text-[10px] text-slate-400 whitespace-nowrap">
+                                            {item.refNo}
+                                          </td>
+                                          <td className="p-2 text-center whitespace-nowrap">
+                                            <div className="inline-flex items-center gap-1">
+                                              {cat === 'audited' ? (
+                                                <span className="text-[8.5px] font-black px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800">
+                                                  ✓ AUDITED
+                                                </span>
+                                              ) : cat === 'flagged' ? (
+                                                <span className="text-[8.5px] font-black px-1.5 py-0.5 rounded bg-rose-100 text-rose-800">
+                                                  ⚠️ QUERY
+                                                </span>
+                                              ) : (
+                                                <span className="text-[8.5px] font-black px-1.5 py-0.5 rounded bg-amber-100 text-amber-900">
+                                                  ⏳ LA AUDIT LOH
+                                                </span>
+                                              )}
+                                              {canUserAuditCashBook && (
+                                                <button
+                                                  type="button"
+                                                  onClick={() => handleToggleCashBookItemAudit(item)}
+                                                  className={`px-1.5 py-0.5 rounded text-[8.5px] font-black border cursor-pointer ${
+                                                    cat === 'audited'
+                                                      ? 'bg-emerald-600 text-white border-emerald-600'
+                                                      : 'bg-white text-emerald-700 border-emerald-300 hover:bg-emerald-50'
+                                                  }`}
+                                                >
+                                                  ✓ Dik
+                                                </button>
+                                              )}
+                                            </div>
+                                          </td>
+                                          <td className="p-2 text-right font-mono font-black text-emerald-700 whitespace-nowrap">
+                                            ₹{item.receiptAmount.toLocaleString('en-IN')}
+                                          </td>
+                                        </tr>
+                                      );
+                                    })}
+                                  </tbody>
+                                </table>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
 
                 {/* Ledger Signatures */}
                 <div className="pt-4 grid grid-cols-3 gap-4 text-center">

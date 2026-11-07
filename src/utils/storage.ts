@@ -5907,22 +5907,30 @@ export const markRecordAuditVerification = (
   recordType: 'transaction' | 'expense',
   mark: 'verified' | 'flagged' | undefined,
   auditorName: string,
-  queryNote?: string
+  queryNote?: string,
+  forceUnlock?: boolean
 ): boolean => {
   const nowIso = new Date().toISOString();
   const cleanId = String(recordId).toLowerCase().trim();
+  const isClearing = mark === undefined;
   try {
     if (recordType === 'transaction') {
       const txs = getStoredTransactions();
       let modifiedTx: Transaction | null = null;
       const updated = txs.map(t => {
         if (String(t.id).toLowerCase().trim() === cleanId) {
+          const shouldUnlock = isClearing || forceUnlock;
           modifiedTx = {
             ...t,
             audit_mark: mark,
-            audit_query: queryNote !== undefined ? queryNote : t.audit_query,
+            audit_query: isClearing ? undefined : (queryNote !== undefined ? queryNote : t.audit_query),
             audit_marked_by: mark ? auditorName : undefined,
             audit_marked_at: mark ? nowIso : undefined,
+            is_locked: shouldUnlock ? false : Boolean(t.is_locked),
+            locked_by: shouldUnlock ? undefined : t.locked_by,
+            locked_at: shouldUnlock ? undefined : t.locked_at,
+            audit_date: shouldUnlock ? undefined : t.audit_date,
+            audit_period: shouldUnlock ? undefined : t.audit_period,
             isSynced: false,
             updatedAt: nowIso
           };
@@ -5942,12 +5950,18 @@ export const markRecordAuditVerification = (
       let modifiedExp: KumtluangExpense | null = null;
       const updated = exps.map(e => {
         if (String(e.id).toLowerCase().trim() === cleanId) {
+          const shouldUnlock = isClearing || forceUnlock;
           modifiedExp = {
             ...e,
             audit_mark: mark,
-            audit_query: queryNote !== undefined ? queryNote : e.audit_query,
+            audit_query: isClearing ? undefined : (queryNote !== undefined ? queryNote : e.audit_query),
             audit_marked_by: mark ? auditorName : undefined,
             audit_marked_at: mark ? nowIso : undefined,
+            is_locked: shouldUnlock ? false : Boolean(e.is_locked),
+            locked_by: shouldUnlock ? undefined : e.locked_by,
+            locked_at: shouldUnlock ? undefined : e.locked_at,
+            audit_date: shouldUnlock ? undefined : e.audit_date,
+            audit_period: shouldUnlock ? undefined : e.audit_period,
             updatedAt: nowIso
           };
           return modifiedExp;

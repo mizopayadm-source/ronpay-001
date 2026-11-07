@@ -260,6 +260,7 @@ export interface Transaction {
   is_locked?: boolean;
   audit_date?: string;
   locked_by?: string;
+  locked_at?: string;
   audit_period?: string;
   audit_notes?: string;
   unlock_expires_at?: string;
@@ -293,6 +294,7 @@ export interface KumtluangExpense {
   is_locked?: boolean;
   audit_date?: string;
   locked_by?: string;
+  locked_at?: string;
   audit_period?: string;
   audit_notes?: string;
   unlock_expires_at?: string;

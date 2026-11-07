@@ -22,7 +22,9 @@ import {
   Calendar,
   RefreshCw,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Users,
+  FolderTree
 } from 'lucide-react';
 import { Campaign, CreatorProfile, KumtluangExpense } from '../types';
 import { 
@@ -49,7 +51,7 @@ import { syncAllWithServer, RONPAY_SYNC_EVENT } from '../utils/syncEngine';
 import { fetchOpeningBalanceFromSupabase, fetchTableData } from '../services/SupabaseSync';
 import { fetchExpensesFromFirestore } from '../services/firestoreSync';
 import { formatDateDDMMYYYY } from '../utils/date';
-import { printHtmlSafely, getTransactionHead } from '../utils/export';
+import { printHtmlSafely, getTransactionHead, getTransactionMonthYear, getHeadSortPriority } from '../utils/export';
 
 interface AuditorPortalModalProps {
   isOpen: boolean;
@@ -88,8 +90,10 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
   const [cbToDate, setCbToDate] = useState<string>('');
   const [cbAuditFilter, setCbAuditFilter] = useState<'all' | 'audited' | 'unaudited' | 'flagged'>('all');
   const [cbViewMode, setCbViewMode] = useState<'ledger' | 'chronological'>('ledger');
-  const [cbReceiptsMode, setCbReceiptsMode] = useState<'detailed' | 'head_wise'>('detailed');
+  const [cbReceiptsMode, setCbReceiptsMode] = useState<'detailed' | 'head_wise'>('head_wise');
   const [expandedHeads, setExpandedHeads] = useState<Record<string, boolean>>({});
+  const [inflowViewMode, setInflowViewMode] = useState<'head_wise' | 'detailed'>('head_wise');
+  const [expandedInflowHeads, setExpandedInflowHeads] = useState<Record<string, boolean>>({});
   const [cbFullHeight, setCbFullHeight] = useState<boolean>(false);
   const [mobileLedgerPane, setMobileLedgerPane] = useState<'receipts' | 'payments' | 'both'>('receipts');
 
@@ -265,21 +269,47 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
     targetId: string,
     currentMark: 'verified' | 'flagged' | null | undefined,
     desiredMark: 'verified' | 'flagged',
-    queryText?: string
+    queryText?: string,
+    isCurrentlyLocked?: boolean
   ) => {
     if (!canAudit) return;
-    const nextMark = currentMark === desiredMark && queryText === undefined ? undefined : desiredMark;
+
+    // If record is locked after submission: ADMIN can modify/toggle it; Auditor cannot
+    if (isCurrentlyLocked && !isAdmin) {
+      setLockToast('🔒 He record hi Audit Submit & Lock tawh a ni a, Admin chiahin a khawih nawn thei.');
+      setTimeout(() => setLockToast(null), 3500);
+      return;
+    }
+
+    // Toggle: if already has this desired mark (or is verified/locked and user clicks 'verified'), toggle it off to undefined!
+    const isAlreadyVerified = currentMark === 'verified' || (Boolean(isCurrentlyLocked) && desiredMark === 'verified');
+    const isAlreadyFlagged = currentMark === 'flagged' && desiredMark === 'flagged';
+
+    let nextMark: 'verified' | 'flagged' | undefined = desiredMark;
+    if (desiredMark === 'verified' && isAlreadyVerified && queryText === undefined) {
+      nextMark = undefined; // toggle off (undo / clear mark)
+    } else if (desiredMark === 'flagged' && isAlreadyFlagged && queryText === undefined) {
+      nextMark = undefined; // toggle off (clear flag)
+    }
+
+    const shouldUnlock = nextMark === undefined || (Boolean(isCurrentlyLocked) && isAdmin);
+
     const ok = markRecordAuditVerification(
       targetId,
       targetType,
       nextMark,
       auditorName || creatorProfile?.name || 'Auditor',
-      nextMark === 'flagged' ? (queryText || 'Enfiah ngai / Query awm') : ''
+      nextMark === 'flagged' ? (queryText || 'Enfiah ngai / Query awm') : '',
+      shouldUnlock
     );
     if (ok) {
       setTick(t => t + 1);
       setFlaggingRecordId(null);
       setFlagQueryText('');
+      if (nextMark === undefined) {
+        setLockToast('↩️ Audit chhinchhiahna sut (Clear) a ni e.');
+        setTimeout(() => setLockToast(null), 2500);
+      }
       if (onRecordsUpdated) onRecordsUpdated();
     }
   };
@@ -667,6 +697,69 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
     });
   }, [allExpenses, filterLockStatus, searchQuery]);
 
+  // Group filtered transactions by Head / Category + Month (Monthly) for Head-wise Inflow Auditing
+  const inflowHeadGroups = useMemo(() => {
+    const map = new Map<string, {
+      headName: string;
+      baseHead: string;
+      monthYearLabel: string;
+      sortKey: string;
+      totalAmount: number;
+      count: number;
+      verifiedCount: number;
+      flaggedCount: number;
+      uncheckedCount: number;
+      lockedCount: number;
+      latestDisplayDate: string;
+      items: any[];
+    }>();
+
+    filteredTransactions.forEach(t => {
+      const baseHead = getTransactionHead(t, campaign) || 'Thawhlawm / Sum Lut';
+      const { monthYearLabel, sortKey } = getTransactionMonthYear(t);
+      const headName = `${baseHead} - ${monthYearLabel}`;
+      const key = `${baseHead}__${sortKey}`;
+
+      const grp = map.get(key) || {
+        headName,
+        baseHead,
+        monthYearLabel,
+        sortKey,
+        totalAmount: 0,
+        count: 0,
+        verifiedCount: 0,
+        flaggedCount: 0,
+        uncheckedCount: 0,
+        lockedCount: 0,
+        latestDisplayDate: '',
+        items: []
+      };
+
+      const amt = Number(t.amount) || 0;
+      grp.totalAmount += amt;
+      grp.count += 1;
+      if (t.audit_mark === 'verified' || t.is_locked) {
+        grp.verifiedCount += 1;
+      } else if (t.audit_mark === 'flagged') {
+        grp.flaggedCount += 1;
+      } else {
+        grp.uncheckedCount += 1;
+      }
+      if (t.is_locked) grp.lockedCount += 1;
+      grp.latestDisplayDate = formatDateDDMMYYYY(t.timestamp || t.date || t.createdAt);
+      grp.items.push(t);
+      map.set(key, grp);
+    });
+
+    return Array.from(map.values()).sort((a, b) => {
+      const pA = getHeadSortPriority(a.baseHead);
+      const pB = getHeadSortPriority(b.baseHead);
+      if (pA !== pB) return pA - pB;
+      if (pA === 10 && a.baseHead !== b.baseHead) return a.baseHead.localeCompare(b.baseHead);
+      return a.sortKey.localeCompare(b.sortKey);
+    });
+  }, [filteredTransactions, campaign]);
+
   // Unified Cash Book (Receipts & Payments) with Date Range & Audited/Unaudited Distinction
   const cashBookAuditData = useMemo(() => {
     const now = new Date();
@@ -775,6 +868,9 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
       timestampMs: number;
       voucherOrRef: string;
       headName: string;
+      baseHead?: string;
+      monthYearLabel?: string;
+      sortKey?: string;
       particulars: string;
       subDetail: string;
       sectionOrHead: string;
@@ -800,9 +896,19 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
         ? 'audited'
         : 'unaudited';
 
-      const headName = getTransactionHead(t, campaign) || t.subCategory || 'Thawhlawm / Sum Lut';
+      const isGroup = t.donorType === 'group' || (Boolean(t.groupName) && t.groupName!.trim().length > 0) || (Boolean(t.donorName) && t.donorName!.toLowerCase().startsWith('group'));
+      const isGeneral = t.donorType === 'general' || Boolean((t as any).generalCollectionTitle) || (Boolean(t.donorName) && (t.donorName!.toLowerCase().includes('inkhawm') || t.donorName!.toLowerCase().includes('inkawm') || t.donorName!.toLowerCase().includes('pathianni') || t.donorName!.toLowerCase().includes('general')));
+
+      const baseHead = getTransactionHead(t, campaign) || 'Thawhlawm / Sum Lut';
+      const { monthYearLabel, sortKey } = getTransactionMonthYear(t, iso);
+      const headName = `${baseHead} - ${monthYearLabel}`;
+      const particulars = `To ${baseHead} (${monthYearLabel})`;
+
+      const donorName = t.donorName || (isGeneral ? ((t as any).generalCollectionTitle || 'General Offering') : isGroup ? (t.groupName || 'Group') : 'Member');
       const secText = t.donorVeng || (t as any).section || '';
-      const periodText = t.periodLabel ? ` • ${t.periodLabel}` : '';
+      const refText = t.utr || t.referenceNo || t.id.slice(-6).toUpperCase();
+      const subDetail = `👤 ${donorName}${secText ? ` • Bial: ${secText}` : ''} • Ref: ${refText}`;
+
       rawEntries.push({
         id: t.id,
         recordType: 'transaction',
@@ -812,9 +918,12 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
         timestampMs: new Date(t.timestamp || t.date || iso || 0).getTime(),
         voucherOrRef: t.utr || t.referenceNo || t.id.slice(-8).toUpperCase(),
         headName,
-        particulars: `To ${t.donorName || 'Anonymous Donor'}`,
-        subDetail: `🏷️ ${headName}${secText ? ` • Bial: ${secText}` : ''}${periodText}`,
-        sectionOrHead: secText || headName,
+        baseHead,
+        monthYearLabel,
+        sortKey,
+        particulars,
+        subDetail,
+        sectionOrHead: secText || baseHead,
         paymentMode: String(t.paymentMethod || 'UPI').toUpperCase(),
         amount: Number(t.amount) || 0,
         audit_mark: t.audit_mark,
@@ -914,9 +1023,12 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
     const filteredReceipts = periodReceipts.filter(matchesFilterAndSearch);
     const filteredPayments = periodPayments.filter(matchesFilterAndSearch);
 
-    // Group filteredReceipts by Account Head for Head-wise Ledger Summary + Drill-down
+    // Group filteredReceipts by Account Head + Month (Monthly) for Head-wise Ledger Summary + Drill-down
     const headGroupsMap = new Map<string, {
       headName: string;
+      baseHead: string;
+      monthYearLabel: string;
+      sortKey: string;
       totalAmount: number;
       count: number;
       auditedCount: number;
@@ -927,9 +1039,16 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
     }>();
 
     filteredReceipts.forEach(r => {
-      const key = r.headName || 'General Receipts';
+      const baseHead = r.baseHead || r.headName || 'General Receipts';
+      const monthYearLabel = r.monthYearLabel || '';
+      const sortKey = r.sortKey || '9999-99';
+      const headName = r.headName || baseHead;
+      const key = `${baseHead}__${sortKey}`;
       const grp = headGroupsMap.get(key) || {
-        headName: key,
+        headName,
+        baseHead,
+        monthYearLabel,
+        sortKey,
         totalAmount: 0,
         count: 0,
         auditedCount: 0,
@@ -948,7 +1067,13 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
       headGroupsMap.set(key, grp);
     });
 
-    const receiptHeadGroups = Array.from(headGroupsMap.values()).sort((a, b) => b.totalAmount - a.totalAmount);
+    const receiptHeadGroups = Array.from(headGroupsMap.values()).sort((a, b) => {
+      const pA = getHeadSortPriority(a.baseHead);
+      const pB = getHeadSortPriority(b.baseHead);
+      if (pA !== pB) return pA - pB;
+      if (pA === 10 && a.baseHead !== b.baseHead) return a.baseHead.localeCompare(b.baseHead);
+      return a.sortKey.localeCompare(b.sortKey);
+    });
 
     return {
       effFrom,
@@ -1005,11 +1130,11 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
     });
     if (verifiedCnt > 0) {
       setTick(t => t + 1);
-      setLockToast(`✅ Selected Range (${cashBookAuditData.rangeLabel}) chhunga record ${verifiedCnt} chu '✓ Audit Chin (Verified)' tiin chhinchhiah vek a ni e!`);
+      setLockToast(`✅ Selected Range (${cashBookAuditData.rangeLabel}) chhunga record ${verifiedCnt} chu '✓ Audited' tiin chhinchhiah vek a ni e!`);
       if (onRecordsUpdated) onRecordsUpdated();
       setTimeout(() => setLockToast(null), 4000);
     } else {
-      setLockToast(`ℹ️ He range chhunga record zawng zawng hi Audit Chin (Verified) vek a ni tawh e.`);
+      setLockToast(`ℹ️ He range chhunga record zawng zawng hi Audited vek a ni tawh e.`);
       setTimeout(() => setLockToast(null), 3000);
     }
   };
@@ -1087,22 +1212,39 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
 
   // Print Official Audited Cash Book (Receipts & Payments) for Selected Range
   const handlePrintAuditedCashBook = () => {
-    const receiptsRowsHtml = cashBookAuditData.filteredReceipts.map(r => `
-      <tr>
-        <td>${r.displayDate}</td>
-        <td>${r.voucherOrRef}</td>
-        <td>
-          <strong>${r.particulars}</strong><br/>
-          <span style="font-size:10px;color:#64748b;">${r.subDetail} (${r.paymentMode})</span>
-        </td>
-        <td style="text-align:center;">
-          <span style="font-size:9px;font-weight:800;padding:2px 6px;border-radius:4px;background:${r.auditCategory === 'audited' ? '#dcfce7' : r.auditCategory === 'flagged' ? '#fee2e2' : '#fef3c7'};color:${r.auditCategory === 'audited' ? '#166534' : r.auditCategory === 'flagged' ? '#991b1b' : '#92400e'};">
-            ${r.auditCategory === 'audited' ? '✓ AUDIT CHIN' : r.auditCategory === 'flagged' ? '⚠️ QUERY' : '⏳ LA AUDIT LOH'}
-          </span>
-        </td>
-        <td style="text-align:right;font-weight:700;color:#065f46;">₹${r.amount.toLocaleString('en-IN')}</td>
-      </tr>
-    `).join('');
+    const receiptsRowsHtml = cbReceiptsMode === 'head_wise'
+      ? cashBookAuditData.receiptHeadGroups.map(grp => `
+        <tr style="background:#f0fdf4;">
+          <td>${grp.latestDisplayDate}</td>
+          <td>${grp.count} receipts</td>
+          <td>
+            <strong>To ${grp.headName}</strong><br/>
+            <span style="font-size:10px;color:#64748b;">Belhkhawm (${grp.count} receipts)</span>
+          </td>
+          <td style="text-align:center;">
+            <span style="font-size:9px;font-weight:800;padding:2px 6px;border-radius:4px;background:${grp.unauditedCount === 0 && grp.flaggedCount === 0 ? '#dcfce7' : '#fef3c7'};color:${grp.unauditedCount === 0 && grp.flaggedCount === 0 ? '#166534' : '#92400e'};">
+              ${grp.unauditedCount === 0 && grp.flaggedCount === 0 ? '✓ AUDITED' : `⏳ ${grp.unauditedCount} LA AUDIT LOH`}
+            </span>
+          </td>
+          <td style="text-align:right;font-weight:700;color:#065f46;">₹${grp.totalAmount.toLocaleString('en-IN')}</td>
+        </tr>
+      `).join('')
+      : cashBookAuditData.filteredReceipts.map(r => `
+        <tr>
+          <td>${r.displayDate}</td>
+          <td>${r.voucherOrRef}</td>
+          <td>
+            <strong>${r.particulars}</strong><br/>
+            <span style="font-size:10px;color:#64748b;">${r.subDetail} (${r.paymentMode})</span>
+          </td>
+          <td style="text-align:center;">
+            <span style="font-size:9px;font-weight:800;padding:2px 6px;border-radius:4px;background:${r.auditCategory === 'audited' ? '#dcfce7' : r.auditCategory === 'flagged' ? '#fee2e2' : '#fef3c7'};color:${r.auditCategory === 'audited' ? '#166534' : r.auditCategory === 'flagged' ? '#991b1b' : '#92400e'};">
+              ${r.auditCategory === 'audited' ? '✓ AUDITED' : r.auditCategory === 'flagged' ? '⚠️ QUERY' : '⏳ LA AUDIT LOH'}
+            </span>
+          </td>
+          <td style="text-align:right;font-weight:700;color:#065f46;">₹${r.amount.toLocaleString('en-IN')}</td>
+        </tr>
+      `).join('');
 
     const paymentsRowsHtml = cashBookAuditData.filteredPayments.map(p => `
       <tr>
@@ -1114,7 +1256,7 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
         </td>
         <td style="text-align:center;">
           <span style="font-size:9px;font-weight:800;padding:2px 6px;border-radius:4px;background:${p.auditCategory === 'audited' ? '#dcfce7' : p.auditCategory === 'flagged' ? '#fee2e2' : '#fef3c7'};color:${p.auditCategory === 'audited' ? '#166534' : p.auditCategory === 'flagged' ? '#991b1b' : '#92400e'};">
-            ${p.auditCategory === 'audited' ? '✓ AUDIT CHIN' : p.auditCategory === 'flagged' ? '⚠️ QUERY' : '⏳ LA AUDIT LOH'}
+            ${p.auditCategory === 'audited' ? '✓ AUDITED' : p.auditCategory === 'flagged' ? '⚠️ QUERY' : '⏳ LA AUDIT LOH'}
           </span>
         </td>
         <td style="text-align:right;font-weight:700;color:#9f1239;">₹${p.amount.toLocaleString('en-IN')}</td>
@@ -1152,7 +1294,7 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
       <body>
         <div class="header">
           <h1 class="title">${campaign?.title || ''} — CASH BOOK (RECEIPTS &amp; PAYMENTS)</h1>
-          <p class="sub">Period / Range: ${cashBookAuditData.rangeLabel} • Audit Status: ✓ Audit Chin (${cashBookAuditData.auditedCount}) | ⏳ La Audit Loh (${cashBookAuditData.unauditedCount})</p>
+          <p class="sub">Period / Range: ${cashBookAuditData.rangeLabel} • Audit Status: ✓ Audited (${cashBookAuditData.auditedCount}) | ⏳ La Audit Loh (${cashBookAuditData.unauditedCount})</p>
         </div>
         <div class="summary-bar">
           <div><strong>Opening Balance (B/F):</strong> ₹${cashBookAuditData.openingBalance.toLocaleString('en-IN')}</div>
@@ -1885,29 +2027,49 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                               ({cashBookAuditData.filteredReceipts.length})
                             </span>
                           </div>
-                        <div className="inline-flex rounded-lg bg-emerald-950/80 p-0.5 border border-emerald-700">
-                          <button
-                            type="button"
-                            onClick={() => setCbReceiptsMode('detailed')}
-                            className={`px-2 py-0.5 rounded-md text-[10px] font-black transition cursor-pointer ${
-                              cbReceiptsMode === 'detailed'
-                                ? 'bg-emerald-500 text-slate-950'
-                                : 'text-emerald-200 hover:text-white'
-                            }`}
-                          >
-                            📋 Mi Mal Tin
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setCbReceiptsMode('head_wise')}
-                            className={`px-2 py-0.5 rounded-md text-[10px] font-black transition cursor-pointer ${
-                              cbReceiptsMode === 'head_wise'
-                                ? 'bg-emerald-500 text-slate-950'
-                                : 'text-emerald-200 hover:text-white'
-                            }`}
-                          >
-                            📂 Head-wise ({cashBookAuditData.receiptHeadGroups.length})
-                          </button>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <div className="inline-flex rounded-lg bg-emerald-950/80 p-0.5 border border-emerald-700">
+                            <button
+                              type="button"
+                              onClick={() => setCbReceiptsMode('head_wise')}
+                              className={`px-2 py-0.5 rounded-md text-[10px] font-black transition cursor-pointer ${
+                                cbReceiptsMode === 'head_wise'
+                                  ? 'bg-emerald-500 text-slate-950 shadow-2xs'
+                                  : 'text-emerald-200 hover:text-white'
+                              }`}
+                            >
+                              📂 Head-wise ({cashBookAuditData.receiptHeadGroups.length})
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setCbReceiptsMode('detailed')}
+                              className={`px-2 py-0.5 rounded-md text-[10px] font-black transition cursor-pointer ${
+                                cbReceiptsMode === 'detailed'
+                                  ? 'bg-emerald-500 text-slate-950 shadow-2xs'
+                                  : 'text-emerald-200 hover:text-white'
+                              }`}
+                            >
+                              📋 Subsidiary (Mi Mal)
+                            </button>
+                          </div>
+                          {cbReceiptsMode === 'head_wise' && cashBookAuditData.receiptHeadGroups.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const allExp = Object.keys(expandedHeads).length === cashBookAuditData.receiptHeadGroups.length;
+                                if (allExp) {
+                                  setExpandedHeads({});
+                                } else {
+                                  const next: Record<string, boolean> = {};
+                                  cashBookAuditData.receiptHeadGroups.forEach(g => { next[g.headName] = true; });
+                                  setExpandedHeads(next);
+                                }
+                              }}
+                              className="text-[9.5px] font-bold text-emerald-200 hover:text-white underline cursor-pointer"
+                            >
+                              {Object.keys(expandedHeads).length === cashBookAuditData.receiptHeadGroups.length ? 'Phuih vek' : 'Hawng vek'}
+                            </button>
+                          )}
                         </div>
                       </div>
 
@@ -1951,7 +2113,7 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                                 </td>
                               </tr>
                             ) : cbReceiptsMode === 'head_wise' ? (
-                              cashBookAuditData.receiptHeadGroups.map(grp => {
+                              cashBookAuditData.receiptHeadGroups.map((grp, grpIdx) => {
                                 const isExpanded = Boolean(expandedHeads[grp.headName]);
                                 const allHeadAudited = grp.unauditedCount === 0 && grp.flaggedCount === 0;
                                 return (
@@ -1961,22 +2123,22 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                                       onClick={() => setExpandedHeads(prev => ({ ...prev, [grp.headName]: !prev[grp.headName] }))}
                                     >
                                       <td className="p-2 whitespace-nowrap align-top">
-                                        <div className="font-bold text-slate-800 text-[11px]">{grp.latestDisplayDate}</div>
+                                        <div className="font-bold text-slate-800 text-[11px]">{grp.monthYearLabel || grp.latestDisplayDate}</div>
                                         <div className="text-[9.5px] font-mono text-emerald-700">{grp.count} receipts</div>
                                       </td>
                                       <td className="p-2 align-top">
                                         <div className="font-black text-slate-900 flex items-center gap-1">
                                           {isExpanded ? <ChevronUp className="w-3.5 h-3.5 text-emerald-700 shrink-0" /> : <ChevronDown className="w-3.5 h-3.5 text-emerald-700 shrink-0" />}
-                                          <span>To {grp.headName}</span>
+                                          <span>{grpIdx + 1}. To {grp.baseHead} ({grp.monthYearLabel})</span>
                                         </div>
                                         <div className="text-[10px] text-slate-600">
-                                          ✓ Audit: {grp.auditedCount} • ⏳ La Audit Loh: {grp.unauditedCount} (Click to {isExpanded ? 'collapse' : 'expand'})
+                                          ✓ Audit: {grp.auditedCount} • ⏳ La Audit Loh: {grp.unauditedCount} (Subsidiary: {grp.count} entries)
                                         </div>
                                       </td>
                                       <td className="p-2 text-center align-top whitespace-nowrap">
                                         {allHeadAudited ? (
                                           <span className="inline-flex items-center gap-1 text-[9px] font-black px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
-                                            <span>✓ AUDIT CHIN</span>
+                                            <span>✓ AUDITED</span>
                                           </span>
                                         ) : (
                                           <span className="inline-flex items-center gap-1 text-[9px] font-black px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300">
@@ -1994,7 +2156,7 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                                               type="button"
                                               onClick={() => {
                                                 grp.items.forEach(item => {
-                                                  if (item.audit_mark !== 'verified') {
+                                                  if (item.auditCategory !== 'audited') {
                                                     markRecordAuditVerification(
                                                       item.id,
                                                       'transaction',
@@ -2012,7 +2174,34 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                                               ✓ Audit Head
                                             </button>
                                           ) : (
-                                            <span className="text-[10px] font-black text-emerald-700">✓ Checked</span>
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                if (grp.items.some(i => i.is_locked) && !isAdmin) {
+                                                  setLockToast('🔒 He Head chhunga record hi Lock tawh a ni a, Admin chiahin a khawih nawn thei.');
+                                                  setTimeout(() => setLockToast(null), 3500);
+                                                  return;
+                                                }
+                                                grp.items.forEach(item => {
+                                                  markRecordAuditVerification(
+                                                    item.id,
+                                                    'transaction',
+                                                    undefined,
+                                                    auditorName || creatorProfile?.name || 'Auditor',
+                                                    '',
+                                                    true
+                                                  );
+                                                });
+                                                setTick(t => t + 1);
+                                                setLockToast(`↩️ '${grp.headName}' Head audit-na sut (Undo) a ni e.`);
+                                                if (onRecordsUpdated) onRecordsUpdated();
+                                                setTimeout(() => setLockToast(null), 3000);
+                                              }}
+                                              title="Audit tawh a ni. Click la sut rawh."
+                                              className="px-2 py-0.5 rounded-lg text-[10px] font-black bg-emerald-100 hover:bg-amber-100 text-emerald-800 hover:text-amber-900 border border-emerald-300 hover:border-amber-400 cursor-pointer transition"
+                                            >
+                                              ✓ Audited (Undo)
+                                            </button>
                                           )}
                                         </td>
                                       )}
@@ -2024,12 +2213,12 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                                           <div className="text-[9px] font-mono text-slate-400">{r.voucherOrRef}</div>
                                         </td>
                                         <td className="p-2 align-top">
-                                          <div className="font-bold text-slate-800">{r.particulars}</div>
-                                          <div className="text-[10px] text-slate-500">{r.subDetail} ({r.paymentMode})</div>
+                                          <div className="font-extrabold text-slate-900">{r.subDetail}</div>
+                                          <div className="text-[10px] text-slate-500">{r.particulars} • Mode: {r.paymentMode}</div>
                                         </td>
                                         <td className="p-2 text-center align-top whitespace-nowrap">
                                           {r.auditCategory === 'audited' ? (
-                                            <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800">✓ Chin</span>
+                                            <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800">✓ Audited</span>
                                           ) : r.auditCategory === 'flagged' ? (
                                             <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-rose-100 text-rose-800">⚠️ Query</span>
                                           ) : (
@@ -2043,12 +2232,14 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                                           <td className="p-2 text-center align-top whitespace-nowrap">
                                             <button
                                               type="button"
-                                              onClick={() => handleMarkItem('transaction', r.id, r.audit_mark, 'verified')}
-                                              className={`px-1.5 py-0.5 rounded text-[9.5px] font-black border cursor-pointer ${
-                                                r.audit_mark === 'verified'
-                                                  ? 'bg-emerald-600 text-white border-emerald-600'
-                                                  : 'bg-white text-emerald-700 border-emerald-300'
-                                              }`}
+                                              onClick={() => handleMarkItem('transaction', r.id, r.audit_mark, 'verified', undefined, r.is_locked)}
+                                              title={r.is_locked && !isAdmin ? "Audit Submit & Lock tawh a ni (Admin chiahin a khawih theih)" : (r.auditCategory === 'audited' ? "Audit tawh a ni (Click nawn la, sut rawh)" : "Audit / Dik tiin chhinchhiah rawh")}
+                                              disabled={r.is_locked && !isAdmin}
+                                              className={`px-1.5 py-0.5 rounded text-[9.5px] font-black border transition cursor-pointer ${
+                                                r.auditCategory === 'audited'
+                                                  ? 'bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700'
+                                                  : 'bg-white text-emerald-700 border-emerald-300 hover:bg-emerald-50'
+                                              } ${r.is_locked && !isAdmin ? 'opacity-60 cursor-not-allowed' : ''}`}
                                             >
                                               ✓ Dik
                                             </button>
@@ -2088,7 +2279,7 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                                     {r.auditCategory === 'audited' ? (
                                       <span className="inline-flex items-center gap-1 text-[9px] font-black px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
                                         {r.is_locked ? <Lock className="w-2.5 h-2.5" /> : <CheckCircle2 className="w-2.5 h-2.5" />}
-                                        <span>✓ AUDIT CHIN</span>
+                                        <span>✓ AUDITED</span>
                                       </span>
                                     ) : r.auditCategory === 'flagged' ? (
                                       <span className="inline-flex items-center gap-1 text-[9px] font-black px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-300">
@@ -2108,13 +2299,14 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                                       <div className="inline-flex items-center gap-1">
                                         <button
                                           type="button"
-                                          onClick={() => handleMarkItem('transaction', r.id, r.audit_mark, 'verified')}
-                                          title="Audit / Dik tiin chhinchhiah rawh"
-                                          className={`px-2 py-1 rounded-lg text-[10px] font-black border cursor-pointer transition ${
-                                            r.audit_mark === 'verified'
-                                              ? 'bg-emerald-600 text-white border-emerald-600'
+                                          onClick={() => handleMarkItem('transaction', r.id, r.audit_mark, 'verified', undefined, r.is_locked)}
+                                          title={r.is_locked && !isAdmin ? "Audit Submit & Lock tawh a ni (Admin chiahin a khawih theih)" : (r.auditCategory === 'audited' ? "Audit tawh a ni (Click nawn la, sut rawh)" : "Audit / Dik tiin chhinchhiah rawh")}
+                                          disabled={r.is_locked && !isAdmin}
+                                          className={`px-2 py-1 rounded-lg text-[10px] font-black border transition cursor-pointer ${
+                                            r.auditCategory === 'audited'
+                                              ? 'bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700'
                                               : 'bg-white text-emerald-700 border-emerald-300 hover:bg-emerald-50'
-                                          }`}
+                                          } ${r.is_locked && !isAdmin ? 'opacity-60 cursor-not-allowed' : ''}`}
                                         >
                                           ✓ Dik
                                         </button>
@@ -2218,7 +2410,7 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                                     {p.auditCategory === 'audited' ? (
                                       <span className="inline-flex items-center gap-1 text-[9px] font-black px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
                                         {p.is_locked ? <Lock className="w-2.5 h-2.5" /> : <CheckCircle2 className="w-2.5 h-2.5" />}
-                                        <span>✓ AUDIT CHIN</span>
+                                        <span>✓ AUDITED</span>
                                       </span>
                                     ) : p.auditCategory === 'flagged' ? (
                                       <span className="inline-flex items-center gap-1 text-[9px] font-black px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-300">
@@ -2238,13 +2430,14 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                                       <div className="inline-flex items-center gap-1">
                                         <button
                                           type="button"
-                                          onClick={() => handleMarkItem('expense', p.id, p.audit_mark, 'verified')}
-                                          title="Audit / Dik tiin chhinchhiah rawh"
-                                          className={`px-2 py-1 rounded-lg text-[10px] font-black border cursor-pointer transition ${
-                                            p.audit_mark === 'verified'
-                                              ? 'bg-emerald-600 text-white border-emerald-600'
+                                          onClick={() => handleMarkItem('expense', p.id, p.audit_mark, 'verified', undefined, p.is_locked)}
+                                          title={p.is_locked && !isAdmin ? "Audit Submit & Lock tawh a ni (Admin chiahin a khawih theih)" : (p.auditCategory === 'audited' ? "Audit tawh a ni (Click nawn la, sut rawh)" : "Audit / Dik tiin chhinchhiah rawh")}
+                                          disabled={p.is_locked && !isAdmin}
+                                          className={`px-2 py-1 rounded-lg text-[10px] font-black border transition cursor-pointer ${
+                                            p.auditCategory === 'audited'
+                                              ? 'bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700'
                                               : 'bg-white text-emerald-700 border-emerald-300 hover:bg-emerald-50'
-                                          }`}
+                                          } ${p.is_locked && !isAdmin ? 'opacity-60 cursor-not-allowed' : ''}`}
                                         >
                                           ✓ Dik
                                         </button>
@@ -2307,6 +2500,113 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                     </div>
                   </div>
                 </div>
+
+                {/* SUBSIDIARY CASH LEDGER (A HNUAIA HEAD & THLA BI CHIPCHIAR ENNA) */}
+                {cashBookAuditData.receiptHeadGroups.length > 0 && (
+                  <div className="mt-4 bg-white border-2 border-slate-300 rounded-2xl overflow-hidden shadow-2xs">
+                    <div className="bg-slate-900 text-white px-4 py-3 flex items-center justify-between flex-wrap gap-2">
+                      <div>
+                        <div className="font-black text-xs sm:text-sm tracking-wide uppercase flex items-center gap-2">
+                          <span>📋 SUBSIDIARY CASH LEDGER (HEAD &amp; THLA BI CHIPCHIAR)</span>
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 font-bold">
+                            {cashBookAuditData.receiptHeadGroups.length} Monthly Heads • {cashBookAuditData.filteredReceipts.length} Entries
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-300 mt-0.5">
+                          Main Cash Book-a Head &amp; Thla bi belhkhawm chhunga mimal / pawl / inkhawm thawhlawm lut chipchiar enfiahna:
+                        </p>
+                      </div>
+                    </div>
+                    <div className="p-3 sm:p-4 space-y-3 bg-slate-50/60 max-h-[55vh] overflow-y-auto">
+                      {cashBookAuditData.receiptHeadGroups.map((grp, grpIdx) => {
+                        const allHeadAudited = grp.unauditedCount === 0 && grp.flaggedCount === 0;
+                        return (
+                          <div key={`sub_sched_${grp.headName}`} className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-2xs">
+                            <div className="bg-emerald-950/90 text-white px-3.5 py-2 flex items-center justify-between flex-wrap gap-2">
+                              <div className="font-black text-xs flex items-center gap-2">
+                                <span className="px-2 py-0.5 rounded bg-emerald-500 text-slate-950 text-[10px] font-black">
+                                  #{grpIdx + 1}
+                                </span>
+                                <span>{grp.baseHead} — {grp.monthYearLabel}</span>
+                                <span className="text-[10px] text-emerald-300 font-bold">({grp.count} entries)</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                {allHeadAudited ? (
+                                  <span className="text-[9.5px] font-black px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-200 border border-emerald-400/40">
+                                    ✓ AUDITED ({grp.auditedCount}/{grp.count})
+                                  </span>
+                                ) : (
+                                  <span className="text-[9.5px] font-black px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-200 border border-amber-400/40">
+                                    ⏳ {grp.unauditedCount} LA AUDIT LOH
+                                  </span>
+                                )}
+                                <span className="font-black text-xs sm:text-sm text-emerald-300 tabular-nums">
+                                  Total: ₹{grp.totalAmount.toLocaleString('en-IN')}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="overflow-x-auto">
+                              <table className="w-full text-left border-collapse text-[11px]">
+                                <thead className="bg-slate-100 border-b border-slate-200 text-[9.5px] font-black uppercase text-slate-600">
+                                  <tr>
+                                    <th className="py-1.5 px-2.5 w-10">#</th>
+                                    <th className="py-1.5 px-2.5">Date &amp; Ref</th>
+                                    <th className="py-1.5 px-2.5">Pek Tu / Hming &amp; Bial</th>
+                                    <th className="py-1.5 px-2.5 text-center">Mode</th>
+                                    <th className="py-1.5 px-2.5 text-center">Audit</th>
+                                    <th className="py-1.5 px-2.5 text-right">Amount (₹)</th>
+                                    {canAudit && <th className="py-1.5 px-2.5 text-center">Action</th>}
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100">
+                                  {grp.items.map((item, idx) => (
+                                    <tr key={item.id} className="hover:bg-slate-50">
+                                      <td className="py-1.5 px-2.5 font-mono text-slate-400">{idx + 1}</td>
+                                      <td className="py-1.5 px-2.5 whitespace-nowrap">
+                                        <span className="font-bold text-slate-800">{item.displayDate}</span>
+                                        <span className="ml-1.5 text-[9.5px] font-mono text-slate-400">{item.voucherOrRef}</span>
+                                      </td>
+                                      <td className="py-1.5 px-2.5 font-bold text-slate-800">{item.subDetail}</td>
+                                      <td className="py-1.5 px-2.5 text-center font-mono text-[10px] text-slate-600">{item.paymentMode}</td>
+                                      <td className="py-1.5 px-2.5 text-center whitespace-nowrap">
+                                        {item.auditCategory === 'audited' ? (
+                                          <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800">✓ AUDITED</span>
+                                        ) : item.auditCategory === 'flagged' ? (
+                                          <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-rose-100 text-rose-800">⚠️ QUERY</span>
+                                        ) : (
+                                          <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-amber-100 text-amber-900">⏳ LA AUDIT LOH</span>
+                                        )}
+                                      </td>
+                                      <td className="py-1.5 px-2.5 text-right font-black text-emerald-700 tabular-nums">
+                                        ₹{item.amount.toLocaleString('en-IN')}
+                                      </td>
+                                      {canAudit && (
+                                        <td className="py-1.5 px-2.5 text-center whitespace-nowrap">
+                                          <button
+                                            type="button"
+                                            onClick={() => handleMarkItem('transaction', item.id, item.audit_mark, 'verified', undefined, item.is_locked)}
+                                            disabled={item.is_locked && !isAdmin}
+                                            className={`px-1.5 py-0.5 rounded text-[9.5px] font-black border transition cursor-pointer ${
+                                              item.auditCategory === 'audited'
+                                                ? 'bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700'
+                                                : 'bg-white text-emerald-700 border-emerald-300 hover:bg-emerald-50'
+                                            } ${item.is_locked && !isAdmin ? 'opacity-60 cursor-not-allowed' : ''}`}
+                                          >
+                                            ✓ Dik
+                                          </button>
+                                        </td>
+                                      )}
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
               ) : (
                 /* VIEW MODE 2: CHRONOLOGICAL SINGLE CASH BOOK WITH RUNNING BALANCE */
@@ -2355,7 +2655,8 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                             <td className="p-2.5 text-center whitespace-nowrap">
                               {item.auditCategory === 'audited' ? (
                                 <span className="inline-flex items-center gap-1 text-[9.5px] font-black px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
-                                  <span>✓ AUDIT CHIN</span>
+                                  {item.is_locked ? <Lock className="w-2.5 h-2.5" /> : <CheckCircle2 className="w-2.5 h-2.5" />}
+                                  <span>✓ AUDITED</span>
                                 </span>
                               ) : item.auditCategory === 'flagged' ? (
                                 <span className="inline-flex items-center gap-1 text-[9.5px] font-black px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-300">
@@ -2381,12 +2682,14 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                                 <div className="inline-flex items-center gap-1">
                                   <button
                                     type="button"
-                                    onClick={() => handleMarkItem(item.recordType, item.id, item.audit_mark, 'verified')}
-                                    className={`px-2 py-1 rounded-lg text-[10px] font-black border cursor-pointer ${
-                                      item.audit_mark === 'verified'
-                                        ? 'bg-emerald-600 text-white border-emerald-600'
+                                    onClick={() => handleMarkItem(item.recordType, item.id, item.audit_mark, 'verified', undefined, item.is_locked)}
+                                    title={item.is_locked && !isAdmin ? "Audit Submit & Lock tawh a ni (Admin chiahin a khawih theih)" : (item.auditCategory === 'audited' ? "Audit tawh a ni (Click nawn la, sut rawh)" : "Audit / Dik tiin chhinchhiah rawh")}
+                                    disabled={item.is_locked && !isAdmin}
+                                    className={`px-2 py-1 rounded-lg text-[10px] font-black border transition cursor-pointer ${
+                                      item.auditCategory === 'audited'
+                                        ? 'bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700'
                                         : 'bg-white text-emerald-700 border-emerald-300 hover:bg-emerald-50'
-                                    }`}
+                                    } ${item.is_locked && !isAdmin ? 'opacity-60 cursor-not-allowed' : ''}`}
                                   >
                                     ✓ Dik
                                   </button>
@@ -3136,179 +3439,423 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                 </div>
               </div>
 
-              <div className="border border-slate-200 rounded-2xl overflow-hidden divide-y divide-slate-100 max-h-[52vh] overflow-y-auto">
-                {filteredTransactions.length === 0 ? (
-                  <div className="p-8 text-center text-xs text-slate-400">
-                    No transactions found matching filter.
-                  </div>
-                ) : (
-                  filteredTransactions.map(tx => (
-                    <div key={tx.id} className="p-3 bg-white hover:bg-slate-50 transition text-xs space-y-2">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="space-y-0.5 min-w-0">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="font-extrabold text-slate-900 truncate">
-                              {tx.donorName || 'Anonymous Donor'}
-                            </span>
-                            {tx.donorPhone && (
-                              <span className="text-[10px] text-slate-400 font-mono">
-                                ({tx.donorPhone})
-                              </span>
-                            )}
-                            <span className="text-[10px] text-slate-400 font-mono">
-                              • {tx.id}
-                            </span>
-                            {tx.audit_mark === 'verified' && (
-                              <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-300">
-                                ✓ AUDITOR VERIFIED
-                              </span>
-                            )}
-                            {tx.audit_mark === 'flagged' && (
-                              <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-rose-100 text-rose-800 border border-rose-300">
-                                ⚠️ QUERY / FLAGGED
-                              </span>
-                            )}
-                          </div>
-                          <div className="text-[11px] text-slate-500 flex items-center gap-2 flex-wrap">
-                            <span>{formatDateDDMMYYYY(tx.timestamp)}</span>
-                            <span>•</span>
-                            <span className="uppercase text-[9px] font-bold text-slate-600 bg-slate-100 px-1.5 py-0.2 rounded">
-                              {tx.paymentMethod}
-                            </span>
-                            {tx.memberId && (
-                              <span className="text-[9.5px] font-mono font-bold text-indigo-700 bg-indigo-50 px-1.5 py-0.2 rounded border border-indigo-200">
-                                Roll: {tx.memberId}
-                              </span>
-                            )}
-                            {(tx.donorVeng || (tx as any).donorSection) && (
-                              <span className="text-[9.5px] font-semibold text-slate-600 bg-slate-100 px-1.5 py-0.2 rounded">
-                                Bial: {tx.donorVeng || (tx as any).donorSection}
-                              </span>
-                            )}
-                            {(tx.utr || (tx as any).utrRef || tx.referenceNo) && (
-                              <span className="text-[9.5px] font-mono text-emerald-800 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">
-                                UTR/Ref: {tx.utr || (tx as any).utrRef || tx.referenceNo}
-                              </span>
-                            )}
-                            {(tx.approved_by || (tx as any).approvedBy || tx.verifiedBy) && (
-                              <span className="text-[9.5px] text-slate-600">
-                                Collector/Verified: <strong>{tx.approved_by || (tx as any).approvedBy || tx.verifiedBy}</strong>
-                              </span>
-                            )}
-                            {tx.audit_period && (
-                              <span className="text-[9.5px] font-bold text-amber-800 bg-amber-50 px-1.5 py-0.2 rounded border border-amber-200">
-                                {tx.audit_period}
-                              </span>
-                            )}
-                          </div>
-                          {tx.audit_query && (
-                            <div className="mt-1 text-[11px] bg-rose-50 text-rose-900 border border-rose-200 rounded-lg px-2.5 py-1 flex items-center gap-1.5">
-                              <MessageSquareWarning className="w-3.5 h-3.5 text-rose-600 shrink-0" />
-                              <span><strong>Auditor Query:</strong> {tx.audit_query}</span>
-                            </div>
-                          )}
-                        </div>
+              {/* View Mode Toggle: Head / Category-wise (Default) vs Mimal Tin */}
+              <div className="flex items-center justify-between gap-2 flex-wrap pt-1">
+                <div className="inline-flex rounded-xl bg-slate-100 p-0.5 border border-slate-200">
+                  <button
+                    type="button"
+                    onClick={() => setInflowViewMode('head_wise')}
+                    className={`px-3 py-1 rounded-lg text-xs font-black transition cursor-pointer flex items-center gap-1.5 ${
+                      inflowViewMode === 'head_wise'
+                        ? 'bg-emerald-600 text-white shadow-2xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    <FolderTree className="w-3.5 h-3.5" />
+                    <span>📂 Head-wise ({inflowHeadGroups.length})</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setInflowViewMode('detailed')}
+                    className={`px-3 py-1 rounded-lg text-xs font-black transition cursor-pointer flex items-center gap-1.5 ${
+                      inflowViewMode === 'detailed'
+                        ? 'bg-emerald-600 text-white shadow-2xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    <Users className="w-3.5 h-3.5" />
+                    <span>👤 Mimal Tin ({filteredTransactions.length})</span>
+                  </button>
+                </div>
 
-                        <div className="text-right shrink-0 space-y-1">
-                          <div className="font-black text-slate-900 text-sm">
-                            ₹{Number(tx.amount || 0).toLocaleString('en-IN')}
-                          </div>
-                          <div className="flex items-center justify-end gap-1 flex-wrap">
-                            {tx.is_locked ? (
-                              <>
-                                <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300 inline-flex items-center gap-1">
-                                  <Lock className="w-2.5 h-2.5 text-amber-700" />
-                                  <span>LOCKED</span>
-                                </span>
-                                {canAudit && (
-                                  <button
-                                    type="button"
-                                    onClick={() => handleSingleUnlock('transaction', tx.id)}
-                                    title="Unlock this record for correction"
-                                    className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300"
-                                  >
-                                    Unlock
-                                  </button>
-                                )}
-                              </>
-                            ) : (
-                              <span className="text-[9px] font-bold uppercase px-2 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200 inline-flex items-center gap-1">
-                                <Unlock className="w-2.5 h-2.5 text-slate-400" />
-                                <span>UNLOCKED</span>
-                              </span>
-                            )}
-                          </div>
-                          {canAudit && (
-                            <div className="flex items-center justify-end gap-1 pt-0.5">
-                              <button
-                                type="button"
-                                onClick={() => handleMarkItem('transaction', tx.id, tx.audit_mark, 'verified')}
-                                className={`text-[10px] font-bold px-2 py-0.5 rounded-lg border transition ${
-                                  tx.audit_mark === 'verified'
-                                    ? 'bg-emerald-600 text-white border-emerald-600'
-                                    : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-200'
-                                }`}
-                              >
-                                ✓ Dik
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  if (flaggingRecordId === tx.id) {
-                                    setFlaggingRecordId(null);
-                                  } else {
-                                    setFlaggingRecordType('transaction');
-                                    setFlaggingRecordId(tx.id);
-                                    setFlagQueryText(tx.audit_query || '');
-                                  }
-                                }}
-                                className={`text-[10px] font-bold px-2 py-0.5 rounded-lg border transition flex items-center gap-1 ${
-                                  tx.audit_mark === 'flagged'
-                                    ? 'bg-rose-600 text-white border-rose-600'
-                                    : 'bg-rose-50 hover:bg-rose-100 text-rose-800 border-rose-200'
-                                }`}
-                              >
-                                <Flag className="w-2.5 h-2.5" />
-                                <span>Query</span>
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-
-                      {flaggingRecordId === tx.id && flaggingRecordType === 'transaction' && (
-                        <div className="bg-rose-50/80 border border-rose-200 rounded-xl p-2.5 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-                          <input
-                            type="text"
-                            value={flagQueryText}
-                            onChange={e => setFlagQueryText(e.target.value)}
-                            placeholder="Enfiah ngai chhan ziak rawh (e.g., Receipt mil lo, Amount fiah ngai)..."
-                            className="flex-1 text-xs px-2.5 py-1.5 rounded-lg bg-white border border-rose-300 focus:outline-none focus:ring-2 focus:ring-rose-500"
-                          />
-                          <div className="flex items-center gap-1.5 shrink-0">
-                            <button
-                              type="button"
-                              onClick={() => handleMarkItem('transaction', tx.id, tx.audit_mark, 'flagged', flagQueryText || 'Enfiah ngai')}
-                              className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-[11px] rounded-lg"
-                            >
-                              Save Query
-                            </button>
-                            {tx.audit_mark === 'flagged' && (
-                              <button
-                                type="button"
-                                onClick={() => handleMarkItem('transaction', tx.id, 'flagged', 'flagged')}
-                                className="px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 font-bold text-[11px] rounded-lg border border-slate-300"
-                              >
-                                Clear Flag
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  ))
+                {inflowViewMode === 'head_wise' && inflowHeadGroups.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const allExp = Object.keys(expandedInflowHeads).length === inflowHeadGroups.length;
+                      if (allExp) {
+                        setExpandedInflowHeads({});
+                      } else {
+                        const next: Record<string, boolean> = {};
+                        inflowHeadGroups.forEach(g => { next[g.headName] = true; });
+                        setExpandedInflowHeads(next);
+                      }
+                    }}
+                    className="text-xs font-bold text-indigo-700 hover:text-indigo-900 underline cursor-pointer"
+                  >
+                    {Object.keys(expandedInflowHeads).length === inflowHeadGroups.length ? 'Phuih vek (Collapse All)' : 'Hawng vek (Expand All)'}
+                  </button>
                 )}
               </div>
+
+              {inflowViewMode === 'head_wise' ? (
+                <div className="border border-slate-200 rounded-2xl overflow-hidden divide-y divide-slate-100 max-h-[55vh] overflow-y-auto">
+                  {inflowHeadGroups.length === 0 ? (
+                    <div className="p-8 text-center text-xs text-slate-400">
+                      No transactions found matching filter.
+                    </div>
+                  ) : (
+                    inflowHeadGroups.map(grp => {
+                      const isExp = Boolean(expandedInflowHeads[grp.headName]);
+                      const allAudited = grp.uncheckedCount === 0 && grp.flaggedCount === 0;
+                      return (
+                        <div key={grp.headName} className="bg-white">
+                          <div
+                            onClick={() => setExpandedInflowHeads(prev => ({ ...prev, [grp.headName]: !prev[grp.headName] }))}
+                            className="p-3 hover:bg-emerald-50/50 transition cursor-pointer flex items-center justify-between gap-3 flex-wrap"
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <div className="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-800 flex items-center justify-center shrink-0">
+                                {isExp ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                              </div>
+                              <div>
+                                <div className="font-black text-slate-900 text-sm flex items-center gap-1.5 flex-wrap">
+                                  <span>To {grp.headName}</span>
+                                  <span className="text-[10px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                                    {grp.count} receipts
+                                  </span>
+                                </div>
+                                <div className="text-[10.5px] text-slate-500 flex items-center gap-2 flex-wrap">
+                                  <span>Hman hnuhnun: {grp.latestDisplayDate}</span>
+                                  <span>•</span>
+                                  <span className="text-emerald-700 font-bold">✓ Verified: {grp.verifiedCount}</span>
+                                  {grp.flaggedCount > 0 && <span className="text-rose-700 font-bold">• ⚠️ Query: {grp.flaggedCount}</span>}
+                                  {grp.uncheckedCount > 0 && <span className="text-amber-700 font-bold">• ⏳ La Audit Loh: {grp.uncheckedCount}</span>}
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-3 shrink-0" onClick={e => e.stopPropagation()}>
+                              <div className="text-right">
+                                <div className="font-black text-emerald-900 text-base tabular-nums">
+                                  ₹{grp.totalAmount.toLocaleString('en-IN')}
+                                </div>
+                                <div>
+                                  {allAudited ? (
+                                    <span className="text-[9.5px] font-black px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                      ✓ AUDITED
+                                    </span>
+                                  ) : (
+                                    <span className="text-[9.5px] font-black px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300">
+                                      ⏳ {grp.uncheckedCount} LA AUDIT LOH
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+
+                              {canAudit && (
+                                <div>
+                                  {grp.uncheckedCount > 0 ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        grp.items.forEach(t => {
+                                          if (t.audit_mark !== 'verified') {
+                                            markRecordAuditVerification(
+                                              t.id,
+                                              'transaction',
+                                              'verified',
+                                              auditorName || creatorProfile?.name || 'Auditor',
+                                              ''
+                                            );
+                                          }
+                                        });
+                                        setTick(t => t + 1);
+                                        setLockToast(`✅ '${grp.headName}' chhunga record ${grp.uncheckedCount} chu '✓ Audited' tiin chhinchhiah a ni e!`);
+                                        if (onRecordsUpdated) onRecordsUpdated();
+                                        setTimeout(() => setLockToast(null), 3500);
+                                      }}
+                                      className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs rounded-xl shadow-2xs cursor-pointer transition"
+                                    >
+                                      ✓ Audit Head
+                                    </button>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        if (grp.items.some(i => i.is_locked) && !isAdmin) {
+                                          setLockToast('🔒 He Head chhunga record hi Lock tawh a ni a, Admin chiahin a khawih nawn thei.');
+                                          setTimeout(() => setLockToast(null), 3500);
+                                          return;
+                                        }
+                                        grp.items.forEach(t => {
+                                          markRecordAuditVerification(
+                                            t.id,
+                                            'transaction',
+                                            undefined,
+                                            auditorName || creatorProfile?.name || 'Auditor',
+                                            '',
+                                            true
+                                          );
+                                        });
+                                        setTick(t => t + 1);
+                                        setLockToast(`↩️ '${grp.headName}' Head audit-na sut (Undo) a ni e.`);
+                                        if (onRecordsUpdated) onRecordsUpdated();
+                                        setTimeout(() => setLockToast(null), 3000);
+                                      }}
+                                      title="Audit tawh a ni. Click la sut rawh."
+                                      className="px-2.5 py-1.5 bg-emerald-50 hover:bg-amber-100 text-emerald-800 hover:text-amber-900 border border-emerald-300 hover:border-amber-400 font-black text-xs rounded-xl cursor-pointer transition"
+                                    >
+                                      ✓ Audited (Undo)
+                                    </button>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Expanded Subsidiary Members under this Head */}
+                          {isExp && (
+                            <div className="bg-slate-50/70 border-t border-slate-100 p-2 space-y-1.5 pl-4 sm:pl-8">
+                              <div className="text-[10px] font-black uppercase text-slate-500 pb-1">
+                                📋 Subsidiary Member Receipts ({grp.items.length})
+                              </div>
+                              {grp.items.map(tx => (
+                                <div key={tx.id} className="p-2.5 bg-white border border-slate-200/80 rounded-xl text-xs flex items-center justify-between gap-2 flex-wrap">
+                                  <div className="space-y-0.5 min-w-0">
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      <span className="font-extrabold text-slate-900">{tx.donorName || 'Member'}</span>
+                                      {tx.donorPhone && <span className="text-[10px] text-slate-400 font-mono">({tx.donorPhone})</span>}
+                                      {tx.memberId && <span className="text-[9.5px] font-mono font-bold text-indigo-700 bg-indigo-50 px-1 rounded border border-indigo-200">Roll: {tx.memberId}</span>}
+                                      {(tx.donorVeng || (tx as any).donorSection) && <span className="text-[9.5px] text-slate-600 bg-slate-100 px-1 rounded">Bial: {tx.donorVeng || (tx as any).donorSection}</span>}
+                                    </div>
+                                    <div className="text-[10.5px] text-slate-500 flex items-center gap-2">
+                                      <span>{formatDateDDMMYYYY(tx.timestamp || tx.date)}</span>
+                                      <span>•</span>
+                                      <span className="uppercase text-[9px] font-bold text-slate-600 bg-slate-100 px-1 rounded">{tx.paymentMethod}</span>
+                                      {(tx.utr || tx.referenceNo) && <span className="font-mono text-emerald-700">Ref: {tx.utr || tx.referenceNo}</span>}
+                                    </div>
+                                    {tx.audit_query && (
+                                      <div className="text-[10px] text-rose-700 font-bold bg-rose-50 border border-rose-200 rounded px-1.5 py-0.5">
+                                        ⚠️ Query: {tx.audit_query}
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  <div className="flex items-center gap-2 shrink-0">
+                                    <div className="font-black text-slate-900 text-sm tabular-nums">
+                                      ₹{Number(tx.amount || 0).toLocaleString('en-IN')}
+                                    </div>
+                                    {canAudit && (
+                                      <div className="flex items-center gap-1">
+                                        <button
+                                          type="button"
+                                          onClick={() => handleMarkItem('transaction', tx.id, tx.audit_mark, 'verified', undefined, tx.is_locked)}
+                                          title={tx.is_locked && !isAdmin ? "Audit Submit & Lock tawh a ni (Admin chiahin a khawih theih)" : (tx.audit_mark === 'verified' ? "Audit tawh a ni (Click nawn la, sut rawh)" : "Audit / Dik tiin chhinchhiah rawh")}
+                                          disabled={tx.is_locked && !isAdmin}
+                                          className={`px-2 py-1 rounded-lg text-[10px] font-black border transition cursor-pointer ${
+                                            tx.audit_mark === 'verified'
+                                              ? 'bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700'
+                                              : 'bg-white text-emerald-700 border-emerald-300 hover:bg-emerald-50'
+                                          } ${tx.is_locked && !isAdmin ? 'opacity-60 cursor-not-allowed' : ''}`}
+                                        >
+                                          ✓ Dik
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setFlaggingRecordType('transaction');
+                                            setFlaggingRecordId(tx.id);
+                                            setFlagQueryText(tx.audit_query || '');
+                                          }}
+                                          title="Query / Enfiah ngai"
+                                          className={`px-1.5 py-1 rounded-lg text-[10px] font-black border transition cursor-pointer ${
+                                            tx.audit_mark === 'flagged'
+                                              ? 'bg-rose-600 text-white border-rose-600'
+                                              : 'bg-white text-rose-700 border-rose-200 hover:bg-rose-50'
+                                          }`}
+                                        >
+                                          ⚠️
+                                        </button>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              ) : (
+                <div className="border border-slate-200 rounded-2xl overflow-hidden divide-y divide-slate-100 max-h-[52vh] overflow-y-auto">
+                  {filteredTransactions.length === 0 ? (
+                    <div className="p-8 text-center text-xs text-slate-400">
+                      No transactions found matching filter.
+                    </div>
+                  ) : (
+                    filteredTransactions.map(tx => (
+                      <div key={tx.id} className="p-3 bg-white hover:bg-slate-50 transition text-xs space-y-2">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="space-y-0.5 min-w-0">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="font-extrabold text-slate-900 truncate">
+                                {tx.donorName || 'Anonymous Donor'}
+                              </span>
+                              {tx.donorPhone && (
+                                <span className="text-[10px] text-slate-400 font-mono">
+                                  ({tx.donorPhone})
+                                </span>
+                              )}
+                              <span className="text-[10px] text-slate-400 font-mono">
+                                • {tx.id}
+                              </span>
+                              {tx.audit_mark === 'verified' && (
+                                <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                  ✓ AUDITOR VERIFIED
+                                </span>
+                              )}
+                              {tx.audit_mark === 'flagged' && (
+                                <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-rose-100 text-rose-800 border border-rose-300">
+                                  ⚠️ QUERY / FLAGGED
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-[11px] text-slate-500 flex items-center gap-2 flex-wrap">
+                              <span>{formatDateDDMMYYYY(tx.timestamp)}</span>
+                              <span>•</span>
+                              <span className="uppercase text-[9px] font-bold text-slate-600 bg-slate-100 px-1.5 py-0.2 rounded">
+                                {tx.paymentMethod}
+                              </span>
+                              {tx.memberId && (
+                                <span className="text-[9.5px] font-mono font-bold text-indigo-700 bg-indigo-50 px-1.5 py-0.2 rounded border border-indigo-200">
+                                  Roll: {tx.memberId}
+                                </span>
+                              )}
+                              {(tx.donorVeng || (tx as any).donorSection) && (
+                                <span className="text-[9.5px] font-semibold text-slate-600 bg-slate-100 px-1.5 py-0.2 rounded">
+                                  Bial: {tx.donorVeng || (tx as any).donorSection}
+                                </span>
+                              )}
+                              {(tx.utr || (tx as any).utrRef || tx.referenceNo) && (
+                                <span className="text-[9.5px] font-mono text-emerald-800 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">
+                                  UTR/Ref: {tx.utr || (tx as any).utrRef || tx.referenceNo}
+                                </span>
+                              )}
+                              {(tx.approved_by || (tx as any).approvedBy || tx.verifiedBy) && (
+                                <span className="text-[9.5px] text-slate-600">
+                                  Collector/Verified: <strong>{tx.approved_by || (tx as any).approvedBy || tx.verifiedBy}</strong>
+                                </span>
+                              )}
+                              {tx.audit_period && (
+                                <span className="text-[9.5px] font-bold text-amber-800 bg-amber-50 px-1.5 py-0.2 rounded border border-amber-200">
+                                  {tx.audit_period}
+                                </span>
+                              )}
+                            </div>
+                            {tx.audit_query && (
+                              <div className="mt-1 text-[11px] bg-rose-50 text-rose-900 border border-rose-200 rounded-lg px-2.5 py-1 flex items-center gap-1.5">
+                                <MessageSquareWarning className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                                <span><strong>Auditor Query:</strong> {tx.audit_query}</span>
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="text-right shrink-0 space-y-1">
+                            <div className="font-black text-slate-900 text-sm">
+                              ₹{Number(tx.amount || 0).toLocaleString('en-IN')}
+                            </div>
+                            <div className="flex items-center justify-end gap-1 flex-wrap">
+                              {tx.is_locked ? (
+                                <>
+                                  <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300 inline-flex items-center gap-1">
+                                    <Lock className="w-2.5 h-2.5 text-amber-700" />
+                                    <span>LOCKED</span>
+                                  </span>
+                                  {canAudit && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleSingleUnlock('transaction', tx.id)}
+                                      title="Unlock this record for correction"
+                                      className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300"
+                                    >
+                                      Unlock
+                                    </button>
+                                  )}
+                                </>
+                              ) : (
+                                <span className="text-[9px] font-bold uppercase px-2 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200 inline-flex items-center gap-1">
+                                  <Unlock className="w-2.5 h-2.5 text-slate-400" />
+                                  <span>UNLOCKED</span>
+                                </span>
+                              )}
+                            </div>
+                            {canAudit && (
+                              <div className="flex items-center justify-end gap-1 pt-0.5">
+                                <button
+                                  type="button"
+                                  onClick={() => handleMarkItem('transaction', tx.id, tx.audit_mark, 'verified', undefined, tx.is_locked)}
+                                  title={tx.is_locked && !isAdmin ? "Audit Submit & Lock tawh a ni (Admin chiahin a khawih theih)" : (tx.audit_mark === 'verified' ? "Audit tawh a ni (Click nawn la, sut rawh)" : "Audit / Dik tiin chhinchhiah rawh")}
+                                  disabled={tx.is_locked && !isAdmin}
+                                  className={`text-[10px] font-bold px-2 py-0.5 rounded-lg border transition cursor-pointer ${
+                                    tx.audit_mark === 'verified'
+                                      ? 'bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700'
+                                      : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-200'
+                                  } ${tx.is_locked && !isAdmin ? 'opacity-60 cursor-not-allowed' : ''}`}
+                                >
+                                  ✓ Dik
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (flaggingRecordId === tx.id) {
+                                      setFlaggingRecordId(null);
+                                    } else {
+                                      setFlaggingRecordType('transaction');
+                                      setFlaggingRecordId(tx.id);
+                                      setFlagQueryText(tx.audit_query || '');
+                                    }
+                                  }}
+                                  className={`text-[10px] font-bold px-2 py-0.5 rounded-lg border transition flex items-center gap-1 ${
+                                    tx.audit_mark === 'flagged'
+                                      ? 'bg-rose-600 text-white border-rose-600'
+                                      : 'bg-rose-50 hover:bg-rose-100 text-rose-800 border-rose-200'
+                                  }`}
+                                >
+                                  <Flag className="w-2.5 h-2.5" />
+                                  <span>Query</span>
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {flaggingRecordId === tx.id && flaggingRecordType === 'transaction' && (
+                          <div className="bg-rose-50/80 border border-rose-200 rounded-xl p-2.5 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                            <input
+                              type="text"
+                              value={flagQueryText}
+                              onChange={e => setFlagQueryText(e.target.value)}
+                              placeholder="Enfiah ngai chhan ziak rawh (e.g., Receipt mil lo, Amount fiah ngai)..."
+                              className="flex-1 text-xs px-2.5 py-1.5 rounded-lg bg-white border border-rose-300 focus:outline-none focus:ring-2 focus:ring-rose-500"
+                            />
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => handleMarkItem('transaction', tx.id, tx.audit_mark, 'flagged', flagQueryText || 'Enfiah ngai')}
+                                className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-[11px] rounded-lg"
+                              >
+                                Save Query
+                              </button>
+                              {tx.audit_mark === 'flagged' && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleMarkItem('transaction', tx.id, 'flagged', 'flagged')}
+                                  className="px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 font-bold text-[11px] rounded-lg border border-slate-300"
+                                >
+                                  Clear Flag
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
             </div>
           )}
 
