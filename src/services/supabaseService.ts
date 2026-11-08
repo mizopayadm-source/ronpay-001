@@ -1729,8 +1729,26 @@ export async function loadSupabaseInitialState(): Promise<{
     }
 
     // Update secondary cache and server SSOT
-    if (finalTxns.length > 0) saveStoredTransactions(finalTxns, false);
-    if (camps && camps.length > 0) saveStoredCampaigns(camps, false);
+    if (camps && camps.length > 0) {
+      const localCamps = getStoredCampaigns();
+      const mergedCamps = [...camps];
+      for (const loc of localCamps) {
+        if (!loc || !loc.id) continue;
+        const key = String(loc.id).toLowerCase().trim();
+        const remIdx = mergedCamps.findIndex(c => String(c.id).toLowerCase().trim() === key);
+        if (remIdx >= 0) {
+          const locTime = loc.updatedAt ? new Date(loc.updatedAt).getTime() : 0;
+          const remTime = mergedCamps[remIdx].updatedAt ? new Date(mergedCamps[remIdx].updatedAt).getTime() : 0;
+          if (locTime > remTime) {
+            mergedCamps[remIdx] = { ...mergedCamps[remIdx], ...loc };
+          }
+        } else {
+          mergedCamps.push(loc);
+          upsertSupabaseCampaign(loc).catch(() => {});
+        }
+      }
+      saveStoredCampaigns(mergedCamps, false);
+    }
     let finalMembers = mems && mems.length > 0 ? mems : getMembers();
     if (mems && mems.length > 0) {
       // Smart merge: don't let stale remote overwrite newer local edits!
@@ -1837,11 +1855,21 @@ export function initSupabaseRealtimeSync(callbacks: SupabaseRealtimeCallbacks): 
       try {
         const fresh = await fetchSupabaseCampaigns();
         if (fresh && fresh.length > 0) {
-          saveStoredCampaigns(fresh, true);
-          callbacks.onCampaignsUpdate?.(fresh);
+          const localCamps = getStoredCampaigns();
+          const merged = [...fresh];
+          for (const loc of localCamps) {
+            if (!loc || !loc.id) continue;
+            const lKey = String(loc.id).toLowerCase().trim();
+            if (!merged.some(c => String(c.id).toLowerCase().trim() === lKey)) {
+              merged.push(loc);
+              upsertSupabaseCampaign(loc).catch(() => {});
+            }
+          }
+          saveStoredCampaigns(merged, true);
+          callbacks.onCampaignsUpdate?.(merged);
           try {
-            window.dispatchEvent(new CustomEvent('ronpay_campaigns_updated', { detail: fresh }));
-            window.dispatchEvent(new CustomEvent('ronpay-campaigns-updated', { detail: fresh }));
+            window.dispatchEvent(new CustomEvent('ronpay_campaigns_updated', { detail: merged }));
+            window.dispatchEvent(new CustomEvent('ronpay-campaigns-updated', { detail: merged }));
           } catch {}
         }
       } catch (e) {

@@ -4559,6 +4559,25 @@ function autoHealDatabase(db: DatabaseSchema): boolean {
     }
   }
 
+  // Normalize BCM HQRS if present in db.campaigns
+  if (Array.isArray(db.campaigns)) {
+    for (const c of db.campaigns) {
+      if (!c) continue;
+      const tLower = String(c.title || '').toLowerCase();
+      const oLower = String(c.orgName || '').toLowerCase();
+      if (tLower.includes('bcm hq') || oLower.includes('bcm hq') || tLower.includes('bcm headquarters') || oLower.includes('bcm headquarters')) {
+        if (!c.category || c.category === 'others') {
+          c.category = 'kumtluang';
+          changed = true;
+        }
+        if (!c.orgCode) {
+          c.orgCode = 'BCMHQR';
+          changed = true;
+        }
+      }
+    }
+  }
+
   // Clean up purged test/deleted campaigns
   const PURGED_CAMPAIGNS = new Set(['cmp-1787545326556', 'cmp-chk-mu6on2s6', 'cmp-chk-mu6ojr7t', 'cmp-chhungkaw-2', 'cmp-chhungkaw-1', 'cmp-kumtluang-ymavt']);
   if (Array.isArray(db.campaigns)) {
@@ -5153,7 +5172,7 @@ async function syncFromSupabase(db: DatabaseSchema, force: boolean = false): Pro
         if (Array.isArray(campRows) && campRows.length > 0) {
           const delCampSet = new Set((db.deletedCampaignIds || []).map((id: string) => String(id).toLowerCase().trim()));
           const validCamps = campRows.filter(c => c && c.id && !delCampSet.has(String(c.id).toLowerCase().trim()));
-          db.campaigns = validCamps.map((r: any) => {
+          const mappedSupabaseCamps = validCamps.map((r: any) => {
             const meta = r.metadata || {};
             return {
               id: r.id,
@@ -5199,6 +5218,41 @@ async function syncFromSupabase(db: DatabaseSchema, force: boolean = false): Pro
               }
             };
           });
+
+          // Merge without overwriting campaigns created locally
+          db.campaigns = mergeCollections(db.campaigns || [], mappedSupabaseCamps, 'id', delCampSet);
+
+          // If server db has campaigns not yet present in Supabase, push them up
+          const supaCampIdSet = new Set(campRows.map(r => String(r.id).toLowerCase().trim()));
+          for (const localCamp of (db.campaigns || [])) {
+            if (localCamp && localCamp.id && !supaCampIdSet.has(String(localCamp.id).toLowerCase().trim())) {
+              fetch(`${sbUrl}/rest/v1/campaigns?on_conflict=id`, {
+                method: 'POST',
+                headers: {
+                  'apikey': sbKey,
+                  'Authorization': `Bearer ${sbKey}`,
+                  'Content-Type': 'application/json',
+                  'Prefer': 'resolution=merge-duplicates'
+                },
+                body: JSON.stringify({
+                  id: localCamp.id,
+                  title: localCamp.title,
+                  category: localCamp.category || 'kumtluang',
+                  org_name: localCamp.orgName || null,
+                  target_upi_id: localCamp.targetUpiId || localCamp.upiId || 'ronpay@upi',
+                  status: localCamp.status || 'active',
+                  created_by: localCamp.createdBy || 'ronpay_admin',
+                  opening_balance: Number(localCamp.openingBalance ?? (localCamp as any).opening_balance ?? 0),
+                  location: localCamp.location || null,
+                  description: localCamp.description || null,
+                  image_url: localCamp.imageUrl || null,
+                  is_approved: localCamp.isApproved ?? true,
+                  metadata: localCamp.metadata || {},
+                  updated_at: new Date().toISOString()
+                })
+              }).catch(() => {});
+            }
+          }
 
           // Extract embedded auditorGrants across campaigns and merge into db.auditorGrants
           const extractedGrants: any[] = [];
@@ -5366,7 +5420,9 @@ app.post('/api/data/sync', (req: Request, res: Response) => {
     }
 
     if (Array.isArray(body.campaigns) && body.campaigns.length > 0) {
-      db.campaigns = mergeCollections(db.campaigns, body.campaigns, 'id');
+      const delCampSet = new Set((db.deletedCampaignIds || []).map((id: string) => String(id).toLowerCase().trim()));
+      const validCampaigns = body.campaigns.filter((c: any) => c && c.id && !delCampSet.has(String(c.id).toLowerCase().trim()));
+      db.campaigns = mergeCollections(db.campaigns || [], validCampaigns, 'id', delCampSet);
     }
     if (Array.isArray(body.members) && body.members.length > 0) {
       const delMemSet = new Set<string>((db.deletedMemberIds || []).map((id: string) => String(id).toLowerCase().trim()));
@@ -5830,52 +5886,73 @@ app.post('/api/campaigns', (req: Request, res: Response) => {
     const sbUrl = sbConfig.url || process.env.VITE_SUPABASE_URL || 'https://aqrplcmpealgruduwnhw.supabase.co';
     const sbKey = sbConfig.anonKey || process.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable__zS5fiKvBI5u6HYgour64g_g_tJj5WL';
     if (sbUrl && sbKey && stamped.id) {
-      fetch(`${sbUrl}/rest/v1/campaigns?id=eq.${stamped.id}`, {
-        method: 'PATCH',
+      const campPayload = {
+        id: stamped.id,
+        title: stamped.title,
+        category: stamped.category || 'kumtluang',
+        org_name: stamped.orgName || null,
+        target_upi_id: stamped.targetUpiId || stamped.upiId || 'ronpay@upi',
+        status: stamped.status || 'active',
+        created_by: stamped.createdBy || 'ronpay_admin',
+        created_by_name: (stamped as any).createdByName || null,
+        custom_amount: stamped.customAmount ? Number(stamped.customAmount) : null,
+        opening_balance: Number(stamped.openingBalance ?? (stamped as any).opening_balance ?? 0),
+        location: stamped.location || null,
+        description: stamped.description || null,
+        image_url: stamped.imageUrl || null,
+        is_approved: stamped.isApproved ?? true,
+        allow_public_group_deposits: stamped.allowPublicGroupDeposits ?? true,
+        metadata: {
+          ...(stamped.metadata || {}),
+          subCategories: stamped.subCategories,
+          definedSections: stamped.definedSections,
+          sectionLabel: stamped.sectionLabel,
+          groupPresets: stamped.groupPresets,
+          generalPresets: stamped.generalPresets,
+          orgCode: stamped.orgCode,
+          cause: stamped.cause,
+          causeMizo: stamped.causeMizo,
+          causeEn: stamped.causeEn,
+          validityDate: stamped.validityDate,
+          expiry_date: stamped.expiry_date || stamped.validityDate,
+          valid_until: stamped.valid_until || stamped.validityDate,
+          gpsCoords: stamped.gpsCoords,
+          kumtluangFeeBearer: stamped.kumtluangFeeBearer,
+          officerPasscode: stamped.officerPasscode,
+          authorizedOfficers: stamped.authorizedOfficers,
+          expenseHeads: stamped.expenseHeads,
+          isHidden: Boolean(stamped.isHidden),
+          hiddenAt: stamped.hiddenAt || null,
+          hiddenBy: stamped.hiddenBy || null,
+          hideReason: stamped.hideReason || null,
+        },
+        updated_at: new Date().toISOString()
+      };
+
+      // 1. Try upsert first with on_conflict=id so new campaigns are inserted immediately
+      fetch(`${sbUrl}/rest/v1/campaigns?on_conflict=id`, {
+        method: 'POST',
         headers: {
           'apikey': sbKey,
           'Authorization': `Bearer ${sbKey}`,
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'Prefer': 'resolution=merge-duplicates,return=representation'
         },
-        body: JSON.stringify({
-          title: stamped.title,
-          category: stamped.category,
-          org_name: stamped.orgName || null,
-          target_upi_id: stamped.targetUpiId || stamped.upiId || 'ronpay@upi',
-          custom_amount: stamped.customAmount ? Number(stamped.customAmount) : null,
-          opening_balance: Number(stamped.openingBalance ?? (stamped as any).opening_balance ?? 0),
-          location: stamped.location || null,
-          description: stamped.description || null,
-          image_url: stamped.imageUrl || null,
-          is_approved: stamped.isApproved ?? true,
-          allow_public_group_deposits: stamped.allowPublicGroupDeposits ?? true,
-          metadata: {
-            ...(stamped.metadata || {}),
-            subCategories: stamped.subCategories,
-            definedSections: stamped.definedSections,
-            sectionLabel: stamped.sectionLabel,
-            groupPresets: stamped.groupPresets,
-            generalPresets: stamped.generalPresets,
-            orgCode: stamped.orgCode,
-            cause: stamped.cause,
-            causeMizo: stamped.causeMizo,
-            causeEn: stamped.causeEn,
-            validityDate: stamped.validityDate,
-            expiry_date: stamped.expiry_date || stamped.validityDate,
-            valid_until: stamped.valid_until || stamped.validityDate,
-            gpsCoords: stamped.gpsCoords,
-            kumtluangFeeBearer: stamped.kumtluangFeeBearer,
-            officerPasscode: stamped.officerPasscode,
-            authorizedOfficers: stamped.authorizedOfficers,
-            expenseHeads: stamped.expenseHeads,
-            isHidden: Boolean(stamped.isHidden),
-            hiddenAt: stamped.hiddenAt || null,
-            hiddenBy: stamped.hiddenBy || null,
-            hideReason: stamped.hideReason || null,
-          },
-          updated_at: new Date().toISOString()
-        })
-      }).catch(() => {});
+        body: JSON.stringify(campPayload)
+      }).then(res => {
+        if (!res.ok) {
+          // Fallback PATCH if already exists
+          fetch(`${sbUrl}/rest/v1/campaigns?id=eq.${encodeURIComponent(stamped.id)}`, {
+            method: 'PATCH',
+            headers: {
+              'apikey': sbKey,
+              'Authorization': `Bearer ${sbKey}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(campPayload)
+          }).catch(() => {});
+        }
+      }).catch((e: any) => console.warn('[Server Supabase Campaign Upsert Note]:', e?.message));
     }
 
     res.json({ success: true, campaign: stamped, data: db });

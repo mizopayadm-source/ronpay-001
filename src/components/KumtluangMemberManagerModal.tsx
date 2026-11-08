@@ -44,7 +44,7 @@ import {
 import { KumtluangExpenseManager } from './KumtluangExpenseManager';
 import { AuthorizedPersonsModal } from './AuthorizedPersonsModal';
 import { MemberRecord, MemberDependent, Campaign, Transaction, CreatorProfile } from '../types';
-import { getMembers, saveMembers, addOrUpdateMember, deleteMember, getDeletedMemberIds, saveTransaction, recordUserPaidTxId, isCampaignCreator, isTransactionForCampaign, saveCampaign, getStoredExpenses, getCampaignExpenseHeads, getStoredCampaigns } from '../utils/storage';
+import { getMembers, saveMembers, addOrUpdateMember, deleteMember, getDeletedMemberIds, saveTransaction, recordUserPaidTxId, isCampaignCreator, isTransactionForCampaign, saveCampaign, getStoredExpenses, getCampaignExpenseHeads, getStoredCampaigns, isCampaignManagerOrOfficer, derivePrefixFromText } from '../utils/storage';
 import {
   getStoredGroupMemberships,
   approveMembershipRequest,
@@ -196,41 +196,63 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
 
   // Calculate scoped campaigns strictly owned/created by this creator (or all if admin/moderator)
   const allowedCampaigns = useMemo(() => {
-    // 1. Strictly filter to 'kumtluang' category only (Exclude ralna, khawlsak, rikrum)
-    const kumtluangCampaigns = campaigns.filter(c => {
-      if (c.category !== 'kumtluang') return false;
-      // Filter out duplicate mock YMA campaign if present
-      if (c.id === 'cmp-kumtluang-ymavt' && campaigns.some(x => x.id === 'cmp-1787829303143')) return false;
-      return true;
+    // 1. Filter to eligible campaigns that support membership / roll registers
+    const eligibleCampaigns = campaigns.filter(c => {
+      if (!c || !c.id || !c.title) return false;
+      const cleanId = String(c.id).toLowerCase().trim();
+      if (cleanId === 'cmp-kumtluang-ymavt' && campaigns.some(x => x.id === 'cmp-1787829303143')) return false;
+
+      // Exclude only short-term ralna and rikrum unless explicitly created with membership/sections
+      const titleLower = String(c.title || '').toLowerCase();
+      const orgLower = String(c.orgName || '').toLowerCase();
+      const isChurchOrOrg = titleLower.includes('bcm') || titleLower.includes('hqrs') || 
+                            titleLower.includes('kohhran') || titleLower.includes('church') ||
+                            titleLower.includes('yma') || titleLower.includes('bmp') ||
+                            titleLower.includes('tkp') || titleLower.includes('knp') ||
+                            titleLower.includes('bial') || titleLower.includes('society') ||
+                            titleLower.includes('pawl') || titleLower.includes('shillong') ||
+                            orgLower.includes('bcm') || orgLower.includes('hqrs');
+
+      const isEligibleCategory = c.category === 'kumtluang' || c.category === 'others' || !c.category || isChurchOrOrg;
+      const hasMembershipMeta = Boolean(c.orgCode || c.orgName || (Array.isArray(c.definedSections) && c.definedSections.length > 0));
+      const hasExistingMembers = countCampaignMembers(c.id, c.orgCode) > 0;
+      const isCreatedByMe = Boolean(
+        creatorProfile?.phone && (
+          (c.createdBy && c.createdBy.replace(/\D/g, '').slice(-10) === creatorProfile.phone.replace(/\D/g, '').slice(-10)) ||
+          ((c as any).creatorPhone && (c as any).creatorPhone.replace(/\D/g, '').slice(-10) === creatorProfile.phone.replace(/\D/g, '').slice(-10))
+        )
+      );
+
+      return isEligibleCategory || hasMembershipMeta || hasExistingMembers || isCreatedByMe;
     }).map(c => {
-      if (c.id === 'cmp-kumtluang-1' || String(c.title || '').toLowerCase().includes('ebenezer')) {
-        return { ...c, orgCode: c.orgCode || 'ZBKEBE' };
+      let code = c.orgCode;
+      if (!code) {
+        if (c.id === 'cmp-kumtluang-1' || String(c.title || '').toLowerCase().includes('ebenezer')) {
+          code = 'ZBKEBE';
+        } else {
+          code = derivePrefixFromText(c.orgName || c.title);
+        }
       }
-      return c;
+      return { ...c, orgCode: code };
     });
 
     if (isPrivilegedUser) {
-      // For Super Admin, Admin, and Moderator: show all valid Kumtluang campaigns.
-      // Always include canonical default campaigns
-      return kumtluangCampaigns.filter(c => {
-        if (!c.id || !c.title) return false;
-        if (['cmp-kumtluang-1', 'cmp-kumtluang-2', 'cmp-1788107291420', 'cmp-1787829303143', 'cmp-1787771373697'].includes(c.id)) {
-          return true;
-        }
-        const count = countCampaignMembers(c.id, c.orgCode);
-        if (count > 0) return true;
-        const hasTx = transactions.some(t => t.campaignId === c.id);
-        if (hasTx) return true;
-        if (isStrictCampaignOwner(c, creatorProfile)) return true;
-        return false;
-      });
+      // For Super Admin, Admin, and Moderator: show ALL eligible campaigns so they can manage any church/organization roll
+      // including brand new ones with 0 members and 0 transactions!
+      return eligibleCampaigns;
     }
 
-    // For regular Creator: STRICT ISOLATION!
-    // A Creator must ONLY see the Bawm they created themselves.
-    // They must NEVER see Bawms created by other creators.
-    return kumtluangCampaigns.filter(c => isStrictCampaignOwner(c, creatorProfile));
-  }, [campaigns, creatorProfile, isPrivilegedUser, transactions, countCampaignMembers]);
+    // For regular Creator / Officer:
+    // Show campaigns they created, or where they are assigned as officer, or manage
+    return eligibleCampaigns.filter(c => {
+      if (isStrictCampaignOwner(c, creatorProfile)) return true;
+      if (isCampaignManagerOrOfficer(c, creatorProfile)) return true;
+      const cPhone = (creatorProfile?.phone || '').trim().replace(/\D/g, '').slice(-10);
+      const campCreatorPhone = (c.createdBy || (c as any).creatorPhone || '').trim().replace(/\D/g, '').slice(-10);
+      if (cPhone && campCreatorPhone && cPhone === campCreatorPhone) return true;
+      return false;
+    });
+  }, [campaigns, creatorProfile, isPrivilegedUser, countCampaignMembers]);
 
   const allowedCampaignIds = useMemo(() => new Set(allowedCampaigns.map(c => c.id)), [allowedCampaigns]);
   const allowedOrgCodes = useMemo(() => {

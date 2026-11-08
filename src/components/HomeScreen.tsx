@@ -258,14 +258,20 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   const isCampaignActive = (c: Campaign): boolean => {
     if (!c) return false;
     if (c.isVoided) return false;
-    if (c.status === 'expired' || c.status === 'cancelled' || c.status === 'archived' || c.status === 'rejected' || c.status === 'pending_approval') {
+    if (c.status === 'expired' || c.status === 'cancelled' || c.status === 'archived' || c.status === 'rejected') {
       return false;
+    }
+    if (c.status === 'pending_approval') {
+      const isOwner = isCampaignCreator(c, creatorProfile);
+      if (!isAuthorizedAdmin && !isOwner && !c.isApproved) {
+        return false;
+      }
     }
     const effDate = c.validityDate || c.expiry_date || c.valid_until || (c as any).validity_date || (c as any).metadata?.validityDate || (c as any).metadata?.expiry_date || (c as any).metadata?.valid_until;
     if (isCampaignExpired(effDate, c.status, c.category, c.createdAt)) {
       return false;
     }
-    return c.status === 'active' || !c.status;
+    return c.status === 'active' || c.status === 'pending_approval' || !c.status;
   };
 
   // GPS Location-Based Sorting States
