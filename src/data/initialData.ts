@@ -115,26 +115,6 @@ export const INITIAL_CAMPAIGNS: any[] = [
     generalPresets: ['Inkhawm Thawhlawm', 'Pathianni Thawhlawm'],
     createdAt: '2025-01-04T00:00:00.000Z',
     isVerified: true,
-  },
-  {
-    id: 'cmp-1794157985311',
-    category: 'kumtluang',
-    title: 'BCM HQRS, Serkawn',
-    orgName: 'BCM HQRS',
-    orgCode: 'BCM',
-    upiId: 'ronpay@upi',
-    imageUrl: '/images/bcm_ebenezer.jpg',
-    status: 'active',
-    location: 'Serkawn',
-    subCategories: ['HQRS Target'],
-    groupPresets: ['Group A', 'Group B', 'Group C', 'Group D'],
-    generalPresets: [],
-    validityDate: '2028-12-31T23:59',
-    expiry_date: '2028-12-31T23:59',
-    valid_until: '2028-12-31T23:59',
-    createdAt: '2026-11-08T17:13:06.59+00:00',
-    isApproved: true,
-    isVerified: true,
   }
 ];
 

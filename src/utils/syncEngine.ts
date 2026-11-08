@@ -288,31 +288,11 @@ export async function syncAllWithServer(forceAuthoritative: boolean = false): Pr
               }
               return updated;
             });
-
-          // Merge and preserve locally created campaigns that are not yet returned by serverData
-          const mergedCampaigns = [...cleanServerCampaigns];
-          const serverIdSet = new Set(cleanServerCampaigns.map(c => String(c.id).toLowerCase().trim()));
-
-          for (const localCamp of localCampaigns) {
-            if (!localCamp || !localCamp.id) continue;
-            const lId = String(localCamp.id).toLowerCase().trim();
-            if (!deletedCampIds.has(lId) && !serverIdSet.has(lId)) {
-              mergedCampaigns.push(localCamp);
-              serverIdSet.add(lId);
-              // Asynchronously push local campaign to server
-              safeApiFetch('/api/campaigns', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(localCamp)
-              });
-            }
-          }
-
-          saveStoredCampaigns(mergedCampaigns, true);
-          serverData.campaigns = mergedCampaigns;
+          saveStoredCampaigns(cleanServerCampaigns, true);
+          serverData.campaigns = cleanServerCampaigns;
           if (typeof window !== 'undefined') {
-            window.dispatchEvent(new CustomEvent('ronpay_campaigns_updated', { detail: mergedCampaigns }));
-            window.dispatchEvent(new CustomEvent('ronpay-campaigns-updated', { detail: mergedCampaigns }));
+            window.dispatchEvent(new CustomEvent('ronpay_campaigns_updated', { detail: cleanServerCampaigns }));
+            window.dispatchEvent(new CustomEvent('ronpay-campaigns-updated', { detail: cleanServerCampaigns }));
           }
         }
 

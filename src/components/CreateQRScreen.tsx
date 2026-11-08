@@ -196,7 +196,7 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
   const [newGeneralPresetInput, setNewGeneralPresetInput] = useState<string>('');
   const [kumtluangTarget, setKumtluangTarget] = useState<string>('');
   const [kumtluangTargetPeriod, setKumtluangTargetPeriod] = useState<'monthly' | 'yearly' | 'total'>('monthly');
-  const [kumtluangValidity, setKumtluangValidity] = useState<string>(() => getTodayDateTimeLocal(23, 59, 730));
+  const [kumtluangValidity, setKumtluangValidity] = useState<string>(() => getTodayDateTimeLocal(23, 59, 0));
   const [kumtluangFeeBearer, setKumtluangFeeBearer] = useState<'user_paid' | 'org_paid'>('user_paid');
 
   // Quick Presets State & Synchronization
@@ -642,8 +642,7 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
       validityDate: selectedCategory === 'ralna' ? ralnaValidity :
                     selectedCategory === 'khawlsak' ? khawlsakValidity :
                     selectedCategory === 'rikrum' ? rikrumValidity : kumtluangValidity,
-      status: (isPrivilegedUser || (pricingConfig as any)?.autoApproveCampaigns !== false) ? 'active' : 'pending_approval',
-      isApproved: Boolean(isPrivilegedUser || (pricingConfig as any)?.autoApproveCampaigns !== false),
+      status: 'pending_approval',
       createdAt: new Date().toISOString(),
       createdBy: creatorProfile.phone || creatorProfile.name,
       orgCode: derivedPrefix,

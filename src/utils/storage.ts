@@ -525,12 +525,6 @@ export const getStoredCampaigns = (): Campaign[] => {
                 updated.imageUrl = YMA_DEFAULT_LOGO;
               }
             }
-            const tLower = String(updated.title || '').toLowerCase();
-            const oLower = String(updated.orgName || '').toLowerCase();
-            if (tLower.includes('bcm hq') || oLower.includes('bcm hq') || tLower.includes('bcm headquarters') || oLower.includes('bcm headquarters')) {
-              if (!updated.category || updated.category === 'others') updated.category = 'kumtluang';
-              if (!updated.orgCode) updated.orgCode = 'BCMHQR';
-            }
             return updated;
           });
 
