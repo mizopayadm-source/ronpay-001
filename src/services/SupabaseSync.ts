@@ -989,10 +989,7 @@ export const runStartupCleanupSequence = async () => {
     const verification = await verifySupabaseSingleSourceOfTruth();
     console.log('[SupabaseSync] Live Supabase SSOT Verification:', verification);
 
-    // Automatically purge any rogue/synthetic duplicates from Supabase
-    import('../services/supabaseService').then(({ purgeLegacySupabaseMembers }) => {
-      purgeLegacySupabaseMembers().catch(() => {});
-    }).catch(() => {});
+    // SSOT active - do not auto-purge cloud members on client startup
   } catch (e) {
     console.warn('[SupabaseSync] Startup cleanup warning:', e);
   }

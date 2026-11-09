@@ -93,6 +93,12 @@ export const CreatorRegScreen: React.FC<CreatorRegScreenProps> = ({
   }, [initialMode, initialPhone]);
   const [password, setPassword] = useState<string>('');
   const [category, setCategory] = useState<BawmCategory>('ralna');
+  const [workspaceMode, setWorkspaceMode] = useState<'hybrid' | 'org_only'>(
+    creatorProfile.workspaceMode || 'hybrid'
+  );
+  const [orgType, setOrgType] = useState<'local_church' | 'hqrs_apex' | 'ngo_yma' | 'personal'>(
+    creatorProfile.orgType || 'local_church'
+  );
   const [uploadedDocName, setUploadedDocName] = useState<string>(creatorProfile.authDocName || '');
   const [avatarUrl, setAvatarUrl] = useState<string>(creatorProfile.avatarUrl || '');
   const [logoUrl, setLogoUrl] = useState<string>(creatorProfile.logoUrl || '');
@@ -356,22 +362,26 @@ export const CreatorRegScreen: React.FC<CreatorRegScreenProps> = ({
     const now = new Date();
     const trialExpiry = new Date(now.getTime() + 180 * 24 * 60 * 60 * 1000); // 6 Months (180 Days) dynamic fair trial from registration date
 
+    const finalCategory: BawmCategory = workspaceMode === 'org_only' ? 'kumtluang' : category;
+
     const updatedProfile: CreatorProfile = {
       name: applicantName.trim(),
       orgName: orgName.trim() || 'Community Organization',
-      designation: designation.trim() || 'Authorized Creator',
+      designation: designation.trim() || (workspaceMode === 'org_only' ? 'Treasurer / Accountant' : 'Authorized Creator'),
       phone: phone.trim(),
       password: password.trim(),
       pin: password.trim(),
       avatarUrl: avatarUrl.trim() || undefined,
       logoUrl: logoUrl.trim() || undefined,
       role: 'CREATOR',
+      workspaceMode,
+      orgType,
       isAdmin: false,
       isBlocked: false,
       isPhoneVerified: true,
       isApproved: false, // Explicit: Requires Admin Approval before posting!
       authDocName: uploadedDocName || 'Authorization_Letter.pdf',
-      approvedCategories: [category], // Strictly only the requested Bawm category!
+      approvedCategories: [finalCategory], // Strictly only the requested Bawm category!
       createdQRsCount: 0,
       registeredAt: now.toISOString(),
       trialExpiresAt: trialExpiry.toISOString(),
@@ -794,35 +804,145 @@ export const CreatorRegScreen: React.FC<CreatorRegScreenProps> = ({
             <div className="w-11 h-11 bg-amber-100 text-amber-700 rounded-2xl flex items-center justify-center mx-auto text-lg mb-1.5 shadow-xs border border-amber-200">
               <ShieldCheck className="w-6 h-6" />
             </div>
-            <h3 className="font-black text-slate-900 text-sm">QR Creator Dilna & Verification</h3>
-            <p className="text-[10px] text-slate-500 mt-0.5">Security leh Mawhphurhna felfai neihna a ni.</p>
+            <h3 className="font-black text-slate-900 text-sm">QR Creator & Pawl Workspace Dilna</h3>
+            <p className="text-[10px] text-slate-500 mt-0.5">Mimal + Pawl kawp emaw Pawl bik chauh (Organization-Only) thlang rawh le.</p>
+          </div>
+
+          {/* 0. WORKSPACE MODE SELECTOR (Personal + Org vs Organization-Only) */}
+          <div className="bg-slate-50 p-3.5 rounded-2xl border-2 border-indigo-200/80 space-y-3">
+            <div className="flex items-center justify-between">
+              <label className="text-[10.5px] font-black text-indigo-950 uppercase tracking-wider block">
+                1. Hman Dan Tur Thlang Rawh (Workspace Mode) *
+              </label>
+              <span className="text-[8.5px] font-black uppercase bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded-md border border-indigo-200">
+                DUAL-MODE WORKSPACE
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              {/* Option 1: Personal + Org (Hybrid) */}
+              <button
+                type="button"
+                onClick={() => setWorkspaceMode('hybrid')}
+                className={`p-3 rounded-xl border-2 text-left transition cursor-pointer flex flex-col justify-between ${
+                  workspaceMode === 'hybrid'
+                    ? 'bg-indigo-600 text-white border-indigo-700 shadow-sm'
+                    : 'bg-white text-slate-800 border-slate-200 hover:border-indigo-300'
+                }`}
+              >
+                <div>
+                  <div className="flex items-center justify-between gap-1 mb-1">
+                    <span className="font-black text-xs">1. Personal + Org (Kawp)</span>
+                    <span className={`text-[8.5px] font-black px-1.5 py-0.5 rounded ${
+                      workspaceMode === 'hybrid' ? 'bg-white/20 text-white' : 'bg-indigo-50 text-indigo-700'
+                    }`}>
+                      HYBRID
+                    </span>
+                  </div>
+                  <p className={`text-[10px] leading-snug ${
+                    workspaceMode === 'hybrid' ? 'text-indigo-100' : 'text-slate-500'
+                  }`}>
+                    Mimal mamawh (Ralna, Khawlsak, Rikrum, Bill Pay) leh Pawl Creator nihna hman kawp vek theihna.
+                  </p>
+                </div>
+              </button>
+
+              {/* Option 2: Organization-Only (Dedicated Clean View) */}
+              <button
+                type="button"
+                onClick={() => {
+                  setWorkspaceMode('org_only');
+                  setCategory('kumtluang');
+                }}
+                className={`p-3 rounded-xl border-2 text-left transition cursor-pointer flex flex-col justify-between ${
+                  workspaceMode === 'org_only'
+                    ? 'bg-emerald-700 text-white border-emerald-800 shadow-sm'
+                    : 'bg-white text-slate-800 border-slate-200 hover:border-emerald-300'
+                }`}
+              >
+                <div>
+                  <div className="flex items-center justify-between gap-1 mb-1">
+                    <span className="font-black text-xs">2. Organization-Only</span>
+                    <span className={`text-[8.5px] font-black px-1.5 py-0.5 rounded ${
+                      workspaceMode === 'org_only' ? 'bg-white/20 text-white' : 'bg-emerald-50 text-emerald-700'
+                    }`}>
+                      DEDICATED ORG
+                    </span>
+                  </div>
+                  <p className={`text-[10px] leading-snug ${
+                    workspaceMode === 'org_only' ? 'text-emerald-100' : 'text-slate-500'
+                  }`}>
+                    Kohhran / BCM HQRS / YMA / Accountant tan: Home-ah mahni Pawl Stats, Target & Ledger chauh langin bawm dang a bo vek ang.
+                  </p>
+                </div>
+              </button>
+            </div>
+
+            {/* Organization Sub-Type Selector when Org-Only is active */}
+            {workspaceMode === 'org_only' && (
+              <div className="pt-2 border-t border-indigo-200/70 space-y-2 animate-fadeIn">
+                <label className="text-[10px] font-extrabold text-emerald-950 uppercase tracking-wider block">
+                  Pawl / Kohhran Kalphung (Organization Type):
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { id: 'hqrs_apex', label: '🏛️ HQRS / Bial / ABC', desc: 'Target & Bial Roll' },
+                    { id: 'local_church', label: '⛪ Tualchhung Kohhran', desc: 'Chhungkua & Bial Roll' },
+                    { id: 'ngo_yma', label: '🛡️ YMA / NGO / Pawl', desc: 'Branch & Section Roll' },
+                  ].map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => setOrgType(item.id as any)}
+                      className={`p-2 rounded-xl border text-left transition cursor-pointer ${
+                        orgType === item.id
+                          ? 'bg-emerald-50 border-emerald-600 text-emerald-950 ring-1 ring-emerald-500'
+                          : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                      }`}
+                    >
+                      <div className="font-black text-[10.5px] truncate">{item.label}</div>
+                      <div className="text-[9px] text-slate-500 truncate mt-0.5">{item.desc}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Organization Name (Shown FIRST for Org-Only mode, or standard order) */}
+          <div>
+            <label className="text-[10.5px] font-bold text-slate-700 block mb-1">
+              {workspaceMode === 'org_only'
+                ? 'Kohhran / HQRS / Pawl Hming Pum (Official Organization Name) *'
+                : 'Pawl / NGO / Kohhran Hming (Organization Name)'}
+            </label>
+            <input
+              type="text"
+              required={workspaceMode === 'org_only'}
+              value={orgName}
+              onChange={(e) => setOrgName(e.target.value)}
+              placeholder={
+                orgType === 'hqrs_apex'
+                  ? 'e.g. Baptist Church of Mizoram (BCM HQRS) / ABC Lunglei'
+                  : 'e.g. BCM Ebenezer Zobawk / YMA Bungkawn Branch'
+              }
+              className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600 transition"
+            />
           </div>
 
           {/* Applicant Name */}
           <div>
             <label className="text-[10.5px] font-bold text-slate-700 block mb-1">
-              Diltu Hming Pum (Applicant Full Name) *
+              {workspaceMode === 'org_only'
+                ? 'Enkawltu Officer / Accountant / Treasurer Hming *'
+                : 'Diltu Hming Pum (Applicant Full Name) *'}
             </label>
             <input
               type="text"
               required
               value={applicantName}
               onChange={(e) => setApplicantName(e.target.value)}
-              placeholder="e.g. Lalremruata"
-              className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600 transition"
-            />
-          </div>
-
-          {/* Organization Name */}
-          <div>
-            <label className="text-[10.5px] font-bold text-slate-700 block mb-1">
-              Pawl / NGO / Kohhran Hming (Organization Name)
-            </label>
-            <input
-              type="text"
-              value={orgName}
-              onChange={(e) => setOrgName(e.target.value)}
-              placeholder="e.g. YMA Bungkawn Branch / BCM Zobawk"
+              placeholder="e.g. Upa Lalremruata"
               className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600 transition"
             />
           </div>
@@ -948,15 +1068,33 @@ export const CreatorRegScreen: React.FC<CreatorRegScreenProps> = ({
           {/* Designation */}
           <div>
             <label className="text-[10.5px] font-bold text-slate-700 block mb-1">
-              Pawl-ah Dinhmun Chelh (Designation)
+              Pawl-ah Dinhmun Chelh (Role / Designation)
             </label>
             <input
               type="text"
               value={designation}
               onChange={(e) => setDesignation(e.target.value)}
-              placeholder="e.g. Secretary / Treasurer / Finance Committee"
+              placeholder="e.g. Central Accountant / Treasurer / Finance Secretary"
               className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600 transition"
             />
+            {workspaceMode === 'org_only' && (
+              <div className="flex flex-wrap gap-1.5 mt-1.5">
+                {['Central Accountant', 'Finance Treasurer', 'Kohhran Secretary', 'Bial Treasurer', 'Branch OB'].map((rolePreset) => (
+                  <button
+                    key={rolePreset}
+                    type="button"
+                    onClick={() => setDesignation(rolePreset)}
+                    className={`text-[9.5px] font-bold px-2 py-0.5 rounded-lg border transition cursor-pointer ${
+                      designation === rolePreset
+                        ? 'bg-emerald-600 text-white border-emerald-700'
+                        : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-emerald-50'
+                    }`}
+                  >
+                    + {rolePreset}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Phone Number & Firebase OTP Verification */}

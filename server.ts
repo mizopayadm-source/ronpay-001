@@ -4424,7 +4424,7 @@ function autoHealDatabase(db: DatabaseSchema): boolean {
           orgCode: targetOrg,
           id: newId,
           dependents: updatedDeps,
-          updatedAt: new Date().toISOString()
+          updatedAt: m.updatedAt || m.createdAt
         };
       }
       return m;
@@ -4559,7 +4559,8 @@ function autoHealDatabase(db: DatabaseSchema): boolean {
     }
   }
 
-  // Clean up purged synthetic test campaigns (keep valid expired Ralna/Khawlsak campaigns intact)
+  // Clean up purged synthetic test & 0-member Kumtluang duplicate campaigns
+  // (Never purge Ralna, Khawlsak, or Rikrum Bawm campaigns!)
   const PURGED_CAMPAIGNS = new Set([
     'cmp-1787545326556', 'cmp-chk-mu6on2s6', 'cmp-chk-mu6ojr7t', 'cmp-chhungkaw-2', 'cmp-chhungkaw-1', 'cmp-kumtluang-ymavt', 'cmp-1794157985311'
   ]);
@@ -4568,7 +4569,17 @@ function autoHealDatabase(db: DatabaseSchema): boolean {
     db.campaigns = db.campaigns.filter(c => c && c.id && !PURGED_CAMPAIGNS.has(String(c.id).toLowerCase().trim()));
     if (db.campaigns.length !== beforeCampLen) changed = true;
   }
+  const PROTECTED_NON_KUMTLUANG = new Set([
+    'cmp-1787917594696', 'cmp-1788526889943', 'cmp-1788262396368', 'cmp-1792691263771',
+    'cmp-1789722801941', 'cmp-1789722668042', 'cmp-1789722498375', 'cmp-1789722358527',
+    'cmp-custom', 'cmp-khawlsak-3', 'cmp-ralna-2', 'cmp-ralna-1', 'cmp-rikrum-1',
+    'cmp-1787569484926', 'cmp-khawlsak-2', 'cmp-khawlsak-1'
+  ]);
   if (!Array.isArray(db.deletedCampaignIds)) db.deletedCampaignIds = [];
+  const beforeDelCampLen = db.deletedCampaignIds.length;
+  db.deletedCampaignIds = db.deletedCampaignIds.filter((id: string) => !PROTECTED_NON_KUMTLUANG.has(String(id || '').toLowerCase().trim()));
+  if (db.deletedCampaignIds.length !== beforeDelCampLen) changed = true;
+
   for (const pc of PURGED_CAMPAIGNS) {
     if (!db.deletedCampaignIds.includes(pc)) {
       db.deletedCampaignIds.push(pc);
@@ -4601,20 +4612,21 @@ function autoHealDatabase(db: DatabaseSchema): boolean {
     });
   }
 
-  // Clean up purged test members (do NOT purge BCM/EBE members!)
+  // Clean up legacy purged test members
   const PURGED_MEMBERS = new Set(['bmpshl-9000', 'bmpshl-9001', 'bmpshl-1253']);
   if (Array.isArray(db.members)) {
     const beforeLen = db.members.length;
     db.members = db.members.filter((m: any) => {
       if (!m || !m.id) return false;
       const cleanId = String(m.id || '').toLowerCase().trim();
-      return !PURGED_MEMBERS.has(cleanId);
+      if (PURGED_MEMBERS.has(cleanId)) return false;
+      return true;
     });
     if (db.members.length !== beforeLen) changed = true;
     
     // Normalize legacy BCM, EBE, or ZBKEBE member IDs to current campaign orgCode
     const ebeCampObj = (db.campaigns || []).find((c: any) => c.id === 'cmp-kumtluang-1');
-    const targetEbeOrg = (ebeCampObj && ebeCampObj.orgCode) ? String(ebeCampObj.orgCode).trim().toUpperCase() : 'ZBKEBE';
+    const targetEbeOrg = (ebeCampObj && ebeCampObj.orgCode) ? String(ebeCampObj.orgCode).trim().toUpperCase() : 'EBEZBK';
 
     db.members.forEach((m: any) => {
       if (!m || !m.id) return;
@@ -4655,33 +4667,13 @@ function autoHealDatabase(db: DatabaseSchema): boolean {
       changed = true;
     }
   }
-  // Remove any EBE or BCM member IDs from deletedMemberIds tombstone array
-  const beforeDelLen = db.deletedMemberIds.length;
-  db.deletedMemberIds = db.deletedMemberIds.filter((id: string) => {
-    const s = String(id || '').toLowerCase();
-    return !s.startsWith('ebe-') && !s.startsWith('ebezbk-') && !s.startsWith('bcm-');
-  });
-  if (db.deletedMemberIds.length !== beforeDelLen) changed = true;
 
-  // Ensure YMA Vengthar has strictly its own category (Chhiatni Fund) and zero foreign church presets
-  const ymaCamp = (db.campaigns || []).find(c => c.id === 'cmp-1787829303143' || c.orgCode === 'YMAVT');
-  if (ymaCamp) {
-    if (!Array.isArray(ymaCamp.subCategories) || ymaCamp.subCategories.length !== 1 || ymaCamp.subCategories[0] !== 'Chhiatni Fund') {
-      ymaCamp.subCategories = ['Chhiatni Fund'];
-      changed = true;
-    }
-    if (Array.isArray(ymaCamp.generalPresets) && ymaCamp.generalPresets.length > 0) {
-      ymaCamp.generalPresets = [];
-      changed = true;
-    }
-  }
-
-  // Ensure BCM Ebenezer, Zobawk (cmp-kumtluang-1) has orgCode default ZBKEBE if missing
+  // Ensure BCM Ebenezer, Zobawk (cmp-kumtluang-1) has orgCode default EBEZBK if missing
   const ebeCamp = (db.campaigns || []).find(c => c.id === 'cmp-kumtluang-1' || (c.title && String(c.title).toLowerCase().includes('bcm ebenezer')));
   if (ebeCamp) {
     if (!ebeCamp.orgCode) {
-      ebeCamp.orgCode = 'ZBKEBE';
-      if (ebeCamp.metadata) ebeCamp.metadata.orgCode = 'ZBKEBE';
+      ebeCamp.orgCode = 'EBEZBK';
+      if (ebeCamp.metadata) ebeCamp.metadata.orgCode = 'EBEZBK';
       changed = true;
     }
   }
@@ -4694,19 +4686,6 @@ function autoHealDatabase(db: DatabaseSchema): boolean {
       changed = true;
     }
   });
-
-  // Ensure BMP Shillong has both 'BMP Fund' and 'Inkhawm Thawhlawm' subcategories and canonical collectedAmount: ₹42,210
-  const bmpCamp = (db.campaigns || []).find(c => c.id === 'cmp-1788107291420' || (c.title && c.title.toLowerCase().includes('bmp')));
-  if (bmpCamp) {
-    if (!Array.isArray(bmpCamp.subCategories) || !bmpCamp.subCategories.includes('Inkhawm Thawhlawm')) {
-      bmpCamp.subCategories = ['BMP Fund', 'Inkhawm Thawhlawm'];
-      changed = true;
-    }
-    if (bmpCamp.collectedAmount !== 42210) {
-      bmpCamp.collectedAmount = 42210;
-      changed = true;
-    }
-  }
 
   // Ensure announcement banner is disabled by default unless explicitly turned on
   if (db.announcement && db.announcement.isActive) {
@@ -5325,7 +5304,8 @@ async function syncFromSupabase(db: DatabaseSchema, force: boolean = false): Pro
               metadata: meta
             };
           });
-          db.members = mergeCollections(db.members || [], normalizedMems, 'id', delMemSet);
+          // Supabase is the authoritative Single Source of Truth for members & sections
+          db.members = normalizedMems;
         }
       }
     } catch {}

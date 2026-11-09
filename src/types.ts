@@ -173,6 +173,10 @@ export interface Campaign {
     updatedAt?: string;
     updatedBy?: string;
   };
+  rollStructureType?: 'standard_member' | 'hqrs_hierarchy';
+  enabledCategories?: string[];
+  definedAbcList?: string[];
+  workspaceMode?: 'hybrid' | 'org_only';
 }
 
 export interface ExpenseRecord {
@@ -453,6 +457,8 @@ export interface CreatorProfile {
   assignedCampaignIds?: string[];
   groupMemberships?: UserGroupMembership[];
   accountType?: 'user' | 'tester' | 'developer' | 'creator' | 'staff' | string;
+  workspaceMode?: 'hybrid' | 'org_only';
+  orgType?: 'local_church' | 'hqrs_apex' | 'ngo_yma' | 'personal';
 }
 
 export interface UserGroupMembership {
@@ -708,6 +714,8 @@ export interface MemberRecord {
     pledgeAmount?: number;
     updatedAt?: string;
   }>;
+  abcName?: string;
+  entityType?: 'member' | 'church_unit';
 }
 
 export interface WalletTransaction {

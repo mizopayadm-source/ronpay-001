@@ -42,7 +42,7 @@ export const PERMANENTLY_PURGED_CAMPAIGN_IDS = new Set([
   'cmp-1794157985311'
 ]);
 
-export const RESTORED_EXPIRED_CAMPAIGN_IDS = new Set([
+export const PROTECTED_NON_KUMTLUANG_CAMPAIGN_IDS = new Set([
   'cmp-1787917594696',
   'cmp-1788526889943',
   'cmp-1788262396368',
@@ -51,6 +51,7 @@ export const RESTORED_EXPIRED_CAMPAIGN_IDS = new Set([
   'cmp-1789722668042',
   'cmp-1789722498375',
   'cmp-1789722358527',
+  'cmp-custom',
   'cmp-khawlsak-3',
   'cmp-ralna-2',
   'cmp-ralna-1',
@@ -64,7 +65,7 @@ export const getDeletedCampaignIds = (): Set<string> => {
   const result = new Set<string>();
   for (const id of PERMANENTLY_PURGED_CAMPAIGN_IDS) {
     const clean = id ? id.toLowerCase().trim() : '';
-    if (clean && !RESTORED_EXPIRED_CAMPAIGN_IDS.has(clean)) {
+    if (clean && !PROTECTED_NON_KUMTLUANG_CAMPAIGN_IDS.has(clean)) {
       result.add(clean);
     }
   }
@@ -76,14 +77,14 @@ export const getDeletedCampaignIds = (): Set<string> => {
         let cleaned = false;
         arr.forEach(id => {
           const clean = String(id).toLowerCase().trim();
-          if (RESTORED_EXPIRED_CAMPAIGN_IDS.has(clean)) {
+          if (PROTECTED_NON_KUMTLUANG_CAMPAIGN_IDS.has(clean)) {
             cleaned = true;
           } else if (clean) {
             result.add(clean);
           }
         });
         if (cleaned && typeof localStorage !== 'undefined') {
-          const filtered = arr.filter(id => !RESTORED_EXPIRED_CAMPAIGN_IDS.has(String(id).toLowerCase().trim()));
+          const filtered = arr.filter(id => !PROTECTED_NON_KUMTLUANG_CAMPAIGN_IDS.has(String(id).toLowerCase().trim()));
           localStorage.setItem(DELETED_CAMPAIGN_IDS_KEY, JSON.stringify(filtered));
         }
       }
@@ -96,6 +97,7 @@ export const recordDeletedCampaignId = (campaignId: string): void => {
   if (!campaignId) return;
   try {
     const clean = String(campaignId).toLowerCase().trim();
+    if (PROTECTED_NON_KUMTLUANG_CAMPAIGN_IDS.has(clean)) return;
     const set = getDeletedCampaignIds();
     if (set.has(clean)) return;
     set.add(clean);
@@ -128,7 +130,20 @@ export const getDeletedMemberIds = (): Set<string> => {
     const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(DELETED_MEMBER_IDS_KEY) : null;
     if (raw) {
       const arr = JSON.parse(raw);
-      if (Array.isArray(arr)) return new Set(arr.map(id => String(id).toLowerCase().trim()));
+      if (Array.isArray(arr)) {
+        // Active BCM Ebenezer member suffixes should never be blocked by stale tombstones
+        const activeEbeIds = new Set([
+          'ebezbk-4998', 'ebezbk-8670', 'ebezbk-2862', 'ebezbk-0000', 'ebezbk-7788',
+          'ebezbk-5566', 'ebezbk-8622', 'ebezbk-2233', 'ebezbk-4646', 'ebezbk-5544',
+          'ebezbk-1122', 'ebezbk-0001', 'ebezbk-6677', 'ebezbk-9912', 'ebezbk-1460',
+          'ebezbk-3120', 'ebezbk-4455', 'ebezbk-5634', 'ebezbk-9988',
+          'zbkebe-4998', 'zbkebe-8670', 'zbkebe-2862', 'zbkebe-0000', 'zbkebe-7788',
+          'zbkebe-5566', 'zbkebe-8622', 'zbkebe-2233', 'zbkebe-4646', 'zbkebe-5544',
+          'zbkebe-1122', 'zbkebe-0001', 'zbkebe-6677', 'zbkebe-9912', 'zbkebe-1460',
+          'zbkebe-3120', 'zbkebe-4455', 'zbkebe-5634', 'zbkebe-9988'
+        ]);
+        return new Set(arr.map(id => String(id).toLowerCase().trim()).filter(id => !activeEbeIds.has(id)));
+      }
     }
   } catch (e) {}
   return new Set<string>();
@@ -490,14 +505,6 @@ export const setLastSyncTime = (timestamp: string = new Date().toISOString()) =>
 
 export const getStoredCampaigns = (): Campaign[] => {
   try {
-    if (isCleanSlateModeActive()) {
-      const raw = localStorage.getItem(CAMPAIGNS_KEY);
-      if (!raw) return [];
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) return parsed;
-      return [];
-    }
-
     const deletedCampIds = getDeletedCampaignIds();
     const raw = localStorage.getItem(CAMPAIGNS_KEY);
     if (raw !== null) {
@@ -560,7 +567,7 @@ export const getStoredCampaigns = (): Campaign[] => {
             return updated;
           });
 
-        // Smart merge: ensure all canonical initial campaigns always exist and inherit canonical settings
+        // Smart merge: ensure all canonical initial campaigns exist, but NEVER overwrite live user-configured campaign fields (definedSections, orgCode, subCategories, generalPresets, etc.)
         const existingIds = new Set(mapped.map(c => String(c.id).toLowerCase().trim()));
         let hasNew = false;
         const merged = mapped.map(camp => {
@@ -568,10 +575,6 @@ export const getStoredCampaigns = (): Campaign[] => {
           if (initMatch) {
             let changed = false;
             const updated = { ...camp };
-            if (String(updated.id).toLowerCase().trim() === 'cmp-1787829303143' && updated.orgCode !== 'YMAVT') {
-              updated.orgCode = 'YMAVT';
-              changed = true;
-            }
             if (!updated.officerPasscode && initMatch.officerPasscode) {
               updated.officerPasscode = initMatch.officerPasscode;
               changed = true;
@@ -580,15 +583,9 @@ export const getStoredCampaigns = (): Campaign[] => {
               updated.allowPublicGroupDeposits = initMatch.allowPublicGroupDeposits;
               changed = true;
             }
-            if (String(updated.id).toLowerCase().trim() === 'cmp-1788107291420') {
-              if (!updated.subCategories || updated.subCategories.length === 0) {
-                updated.subCategories = ['BMP Fund'];
-                changed = true;
-              }
-              if (!updated.generalPresets || updated.generalPresets.length === 0) {
-                updated.generalPresets = ['Inkhawm Thawhlawm', 'General Hnathlang', 'Pathianni Chawhma Thawhlawm', 'Pathianni Chawhnu Thawhlawm', 'Pathianni Zan Thawhlawm', 'Nilai Zan Thawhlawm', 'Buhfaiṭham Thawhlawm'];
-                changed = true;
-              }
+            if ((!updated.definedSections || updated.definedSections.length === 0) && initMatch.definedSections && initMatch.definedSections.length > 0) {
+              updated.definedSections = initMatch.definedSections;
+              changed = true;
             }
             if (changed) {
               hasNew = true;
@@ -740,8 +737,19 @@ export const suggestAlternativePrefixes = (baseTextOrPrefix: string, excludeCamp
 
 export const saveStoredCampaigns = (campaigns: Campaign[], skipServerPush: boolean = false) => {
   try {
+    const deletedCampIds = getDeletedCampaignIds();
+    const mergedList = [...campaigns];
+    const seenIds = new Set(mergedList.map(c => String(c?.id || '').toLowerCase().trim()));
+    for (const initCamp of INITIAL_CAMPAIGNS) {
+      const initCleanId = String(initCamp.id).toLowerCase().trim();
+      if (!seenIds.has(initCleanId) && (!deletedCampIds.has(initCleanId) || PROTECTED_NON_KUMTLUANG_CAMPAIGN_IDS.has(initCleanId))) {
+        mergedList.push(initCamp);
+        seenIds.add(initCleanId);
+      }
+    }
+
     // Preserve campaign configuration without random automatic mutations
-    const sanitized = campaigns.map(c => {
+    const sanitized = mergedList.map(c => {
       const code = c.orgCode ? String(c.orgCode).trim().toUpperCase() : derivePrefixFromText(c.orgName || c.title).trim().toUpperCase();
       return { ...c, orgCode: code };
     });
@@ -2680,198 +2688,43 @@ export const restoreFullDatabaseBackup = (
 
 export const INITIAL_DEFAULT_MEMBERS: MemberRecord[] = [
   {
-    id: 'ZBKEBE-1460',
-    campaignId: 'cmp-kumtluang-1',
-    name: 'Rammuanpuia Ralte',
-    orgCode: 'ZBKEBE',
-    phoneLast4: '1460',
-    fullPhone: '9436141460',
-    section: 'Bial 1 (Vengchhak)',
-    isFamilyHead: true,
-    dependents: [
-      { subId: 'ZBKEBE-1460-01', name: 'Lalrinchhani (Nupui)', relation: 'Nupui' },
-      { subId: 'ZBKEBE-1460-02', name: 'Muanpuia Jr. (Fapa)', relation: 'Fa' }
-    ],
-    createdAt: '2026-01-01T00:00:00.000Z'
-  },
-  {
-    id: 'ZBKEBE-8622',
-    campaignId: 'cmp-kumtluang-1',
-    name: 'Lalduhawma Fanai',
-    orgCode: 'ZBKEBE',
-    phoneLast4: '8622',
-    fullPhone: '9862358622',
-    section: 'Bial 2 (Vengthlang)',
-    isFamilyHead: true,
-    dependents: [
-      { subId: 'ZBKEBE-8622-01', name: 'Zodingliani (Nupui)', relation: 'Nupui' },
-      { subId: 'ZBKEBE-8622-02', name: 'Lalmuanawma (Fa)', relation: 'Fa' }
-    ],
-    createdAt: '2026-01-02T00:00:00.000Z'
-  },
-  {
-    id: 'ZBKEBE-3120',
-    campaignId: 'cmp-kumtluang-1',
-    name: 'Zonunsanga Hnamte',
-    orgCode: 'ZBKEBE',
-    phoneLast4: '3120',
-    fullPhone: '8794563120',
-    section: 'Bial 1 (Vengchhak)',
-    isFamilyHead: true,
-    dependents: [
-      { subId: 'ZBKEBE-3120-01', name: 'Lalremruati (Nupui)', relation: 'Nupui' }
-    ],
-    createdAt: '2026-01-03T00:00:00.000Z'
-  },
-  {
-    id: 'ZBKEBE-5544',
-    campaignId: 'cmp-kumtluang-1',
-    name: 'C. Lalmuanpuia',
-    orgCode: 'ZBKEBE',
-    phoneLast4: '5544',
-    fullPhone: '9436125544',
-    section: 'Bial 3 (Venglai)',
-    isFamilyHead: true,
-    dependents: [],
-    createdAt: '2026-01-04T00:00:00.000Z'
-  },
-  {
-    id: 'ZBKEBE-4646',
-    campaignId: 'cmp-kumtluang-1',
-    name: 'Lalnunpuia',
-    orgCode: 'ZBKEBE',
-    phoneLast4: '4646',
-    fullPhone: '9862464646',
-    section: 'Bial 3 (Venglai)',
-    isFamilyHead: true,
-    dependents: [],
-    createdAt: '2026-01-04T12:00:00.000Z'
-  },
-  {
-    id: 'ZBKEBE-9912',
-    campaignId: 'cmp-kumtluang-1',
-    name: 'Lalbiakzuala & Chhungte',
-    orgCode: 'ZBKEBE',
-    phoneLast4: '9912',
-    fullPhone: '9862399912',
-    section: 'Bial 4 (Field Veng)',
-    isFamilyHead: true,
-    dependents: [
-      { subId: 'ZBKEBE-9912-01', name: 'Lalhmingmawii (Nupui)', relation: 'Nupui' }
-    ],
-    createdAt: '2026-01-05T00:00:00.000Z'
-  },
-  {
-    id: 'ZBKEBE-4455',
-    campaignId: 'cmp-kumtluang-1',
-    name: 'Lalrosanga Sailo',
-    orgCode: 'ZBKEBE',
-    phoneLast4: '4455',
-    fullPhone: '9862114455',
-    section: 'Bial 1 (Vengchhak)',
-    isFamilyHead: true,
-    dependents: [],
-    createdAt: '2026-01-06T00:00:00.000Z'
-  },
-  {
-    id: 'ZBKEBE-7788',
-    campaignId: 'cmp-kumtluang-1',
-    name: 'Vanlalruati Pachuau',
-    orgCode: 'ZBKEBE',
-    phoneLast4: '7788',
-    fullPhone: '9436227788',
-    section: 'Bial 2 (Vengthlang)',
-    isFamilyHead: true,
-    dependents: [],
-    createdAt: '2026-01-07T00:00:00.000Z'
-  },
-  {
-    id: 'ZBKEBE-2233',
-    campaignId: 'cmp-kumtluang-1',
-    name: 'C. Lalrinsanga',
-    orgCode: 'ZBKEBE',
-    phoneLast4: '2233',
-    fullPhone: '8794332233',
-    section: 'Bial 3 (Venglai)',
-    isFamilyHead: true,
-    dependents: [],
-    createdAt: '2026-01-08T00:00:00.000Z'
-  },
-  {
-    id: 'ZBKEBE-6677',
-    campaignId: 'cmp-kumtluang-1',
-    name: 'H. Lalthansanga',
-    orgCode: 'ZBKEBE',
-    phoneLast4: '6677',
-    fullPhone: '9615446677',
-    section: 'Bial 4 (Field Veng)',
-    isFamilyHead: true,
-    dependents: [],
-    createdAt: '2026-01-09T00:00:00.000Z'
-  },
-  {
-    id: 'ZBKEBE-9988',
+    id: 'EBEZBK-4998',
     campaignId: 'cmp-kumtluang-1',
     name: 'Dr. Zoramthanga Fanai',
-    orgCode: 'ZBKEBE',
-    phoneLast4: '9988',
-    fullPhone: '7005559988',
-    section: 'General / Khawchhung',
+    orgCode: 'EBEZBK',
+    phoneLast4: '4998',
+    fullPhone: '6346664998',
+    phone: '6346664998',
+    section: 'Bial No I',
     isFamilyHead: true,
     dependents: [],
-    createdAt: '2026-01-10T00:00:00.000Z'
+    createdAt: '2026-11-09T08:13:29.594Z'
   },
   {
-    id: 'ZBKEBE-5566',
+    id: 'EBEZBK-8670',
     campaignId: 'cmp-kumtluang-1',
-    name: 'Rohluzuala (Backend Dev)',
-    orgCode: 'ZBKEBE',
-    phoneLast4: '5566',
-    fullPhone: '9862005566',
-    phone: '9862005566',
-    section: 'Bial 2 (Vengthlang)',
-    isFamilyHead: true,
-    dependents: [],
-    createdAt: '2026-01-01T00:00:00.000Z'
-  },
-  {
-    id: 'ZBKEBE-1122',
-    campaignId: 'cmp-kumtluang-1',
-    name: 'Zoramliana (Mobile QA)',
-    orgCode: 'ZBKEBE',
-    phoneLast4: '1122',
-    fullPhone: '9862001122',
-    phone: '9862001122',
-    section: 'Bial 3 (Venglai)',
-    isFamilyHead: true,
-    dependents: [],
-    createdAt: '2026-01-01T00:00:00.000Z'
-  },
-  {
-    id: 'ZBKEBE-8670',
-    campaignId: 'cmp-kumtluang-1',
-    name: 'Laltholeha Chhakchhuak',
-    orgCode: 'ZBKEBE',
+    name: 'Tholeha Chhakchhuak',
+    orgCode: 'EBEZBK',
     phoneLast4: '8670',
     fullPhone: '8974908670',
     phone: '8974908670',
-    section: 'Bial 2 (Vengthlang)',
+    section: 'Bial No I',
     isFamilyHead: true,
     dependents: [],
-    createdAt: '2026-01-01T00:00:00.000Z'
+    createdAt: '2026-11-09T08:13:28.597Z'
   },
   {
-    id: 'ZBKEBE-5634',
+    id: 'EBEZBK-2862',
     campaignId: 'cmp-kumtluang-1',
-    name: 'Vanlalpuia',
-    orgCode: 'ZBKEBE',
-    phoneLast4: '5634',
-    fullPhone: '',
-    phone: '',
-    section: 'Bial 1 (Vengchhak)',
+    name: 'Lalduhawma Fana',
+    orgCode: 'EBEZBK',
+    phoneLast4: '2862',
+    fullPhone: '4332542862',
+    phone: '4332542862',
+    section: 'Bial No II',
     isFamilyHead: true,
     dependents: [],
-    createdAt: '2026-01-01T00:00:00.000Z'
+    createdAt: '2026-11-01T17:28:22.457Z'
   },
   {
     id: 'KTL-5510',
@@ -3623,10 +3476,10 @@ export const saveMembers = (members: MemberRecord[], skipServerPush: boolean = f
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ members })
       }).catch(() => {});
-    }
 
-    // Safely sync to Supabase with debounce
-    debouncedSyncMembersToSupabase();
+      // Only push to Supabase when locally modified (not when saving remote members from Supabase/Server)
+      debouncedSyncMembersToSupabase();
+    }
   } catch (e) {
     console.error('Failed to save members to localStorage', e);
   }

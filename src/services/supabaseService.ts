@@ -1558,11 +1558,12 @@ export async function syncAllMembersToSupabase(): Promise<{ total: number; synce
       continue;
     }
 
+    const existingUpdatedAt = member.updatedAt || member.createdAt || new Date().toISOString();
     const updatedMember: MemberRecord = {
       ...member,
       id: effectiveId,
       orgCode: effectiveCode,
-      updatedAt: new Date().toISOString()
+      updatedAt: existingUpdatedAt
     };
     alignedMembers.push(updatedMember);
 
@@ -1589,7 +1590,7 @@ export async function syncAllMembersToSupabase(): Promise<{ total: number; synce
       status: member.status || 'pending',
       dependents: member.dependents || [],
       created_at: cleanCreated,
-      updated_at: new Date().toISOString(),
+      updated_at: existingUpdatedAt,
       metadata: {
         notes: member.notes,
         avatarUrl: member.avatarUrl,
@@ -1623,20 +1624,17 @@ export async function syncAllMembersToSupabase(): Promise<{ total: number; synce
       }
     }
 
-    // 2. Cleanup orphaned/old prefix member records in Supabase
+    // 2. Only cleanup explicitly deleted member records in Supabase (never delete valid cloud rows just because a client cache was partial)
     try {
-      const { data: cloudRows } = await supabase.from('members').select('id, campaign_id, org_code');
-      if (cloudRows && cloudRows.length > 0) {
-        for (const cloudRow of cloudRows) {
-          const cloudId = String(cloudRow.id || '').trim();
-          const cloudCampId = cloudRow.campaign_id;
-          const expectedCode = campOrgMap.get(cloudCampId);
-
-          const isWrongPrefix = expectedCode && cloudRow.org_code && String(cloudRow.org_code).toUpperCase() !== expectedCode;
-          const isNotLocallyPresent = !validMemberIds.has(cloudId) && !validMemberIds.has(cloudId.toLowerCase());
-
-          if (isWrongPrefix || isNotLocallyPresent) {
-            await supabase.from('members').delete().eq('id', cloudRow.id);
+      const deletedMemSet = getDeletedMemberIds();
+      if (deletedMemSet.size > 0) {
+        const { data: cloudRows } = await supabase.from('members').select('id');
+        if (cloudRows && cloudRows.length > 0) {
+          for (const cloudRow of cloudRows) {
+            const cloudId = String(cloudRow.id || '').toLowerCase().trim();
+            if (deletedMemSet.has(cloudId)) {
+              await supabase.from('members').delete().eq('id', cloudRow.id);
+            }
           }
         }
       }
@@ -1751,28 +1749,9 @@ export async function loadSupabaseInitialState(): Promise<{
     }
     let finalMembers = mems && mems.length > 0 ? mems : getMembers();
     if (mems && mems.length > 0) {
-      // Smart merge: don't let stale remote overwrite newer local edits!
-      const localMems = getMembers();
-      const mergedMems = [...mems];
-      for (const loc of localMems) {
-        const key = (loc.id || '').toLowerCase().trim();
-        const remIdx = mergedMems.findIndex(m => (m.id || '').toLowerCase().trim() === key);
-        if (remIdx >= 0) {
-          const locTime = loc.updatedAt ? new Date(loc.updatedAt).getTime() : 0;
-          const remTime = mergedMems[remIdx].updatedAt ? new Date(mergedMems[remIdx].updatedAt).getTime() : 0;
-          if (locTime > remTime) {
-            // Local is newer! Keep local and update Supabase
-            mergedMems[remIdx] = loc;
-            updateSupabaseMember(loc).catch(() => {});
-          }
-        } else {
-          // Local member not in remote yet, keep it and sync
-          mergedMems.push(loc);
-          updateSupabaseMember(loc).catch(() => {});
-        }
-      }
-      finalMembers = mergedMems;
-      saveMembers(mergedMems, false);
+      // Supabase is the authoritative Single Source of Truth for members; never re-inject local seed/cache members into Supabase on initial load
+      finalMembers = mems;
+      saveMembers(mems, true);
     }
     if (pool) {
       try {
@@ -1782,7 +1761,7 @@ export async function loadSupabaseInitialState(): Promise<{
 
     return {
       transactions: finalTxns,
-      campaigns: camps && camps.length > 0 ? camps : getStoredCampaigns(),
+      campaigns: getStoredCampaigns(),
       members: finalMembers,
       creators: users && users.length > 0 ? users : getStoredCreatorsList(),
       fundPool: pool,

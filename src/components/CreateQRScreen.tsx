@@ -38,6 +38,7 @@ import {
   Users,
   UserPlus,
   CreditCard,
+  Building2,
   Printer,
   RefreshCw,
   Globe,
@@ -198,6 +199,16 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
   const [kumtluangTargetPeriod, setKumtluangTargetPeriod] = useState<'monthly' | 'yearly' | 'total'>('monthly');
   const [kumtluangValidity, setKumtluangValidity] = useState<string>(() => getTodayDateTimeLocal(23, 59, 730));
   const [kumtluangFeeBearer, setKumtluangFeeBearer] = useState<'user_paid' | 'org_paid'>('user_paid');
+  const [kumtluangRollStructure, setKumtluangRollStructure] = useState<'standard_member' | 'hqrs_hierarchy'>(
+    creatorProfile.orgType === 'hqrs_apex' ? 'hqrs_hierarchy' : 'standard_member'
+  );
+  const [kumtluangAbcList, setKumtluangAbcList] = useState<string[]>([
+    'ABC Lunglei East', 'ABC Lunglei West', 'ABC Aizawl', 'ABC Lawngtlai', 'ABC Siaha'
+  ]);
+  const [newAbcInput, setNewAbcInput] = useState<string>('');
+  const [allCandidateCategories, setAllCandidateCategories] = useState<string[]>([
+    'Pathian Ram', 'Ramthar', 'Tualchhung', 'Building Fund', 'Target', 'Thawhlawm', 'Handover', 'Krismas', 'Relief / Tanpuina', 'Membership Fee'
+  ]);
 
   // Quick Presets State & Synchronization
   const [sectionPresets, setSectionPresets] = useState<SectionQuickPreset[]>(() => getStoredSectionPresets());
@@ -579,41 +590,37 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
       location = kumtluangVeng.trim() || 'Aizawl, Mizoram';
     }
 
-    // System-wide Unique Prefix Code Enforcement
+    // Check if an existing Bawm for this same Organization / Title already exists
+    // so changing Unique Code (orgCode) overwrites the existing Bawm instead of creating a duplicate 0-member Bawm!
+    const cleanTitle = title.trim().toLowerCase();
+    const cleanOrg = (selectedCategory === 'kumtluang' ? kumtluangOrg : creatorProfile.orgName || '').trim().toLowerCase();
+    const cleanLoc = location.trim().toLowerCase();
+
+    const existingSameOrgCampaign = campaigns.find(c => {
+      if (!c || !c.id || c.status === 'archived' || c.status === 'rejected') return false;
+      const cTitle = String(c.title || '').trim().toLowerCase();
+      const cOrg = String(c.orgName || '').trim().toLowerCase();
+      const cLoc = String(c.location || '').trim().toLowerCase();
+      if (cTitle === cleanTitle && cLoc === cleanLoc) return true;
+      if (selectedCategory === 'kumtluang' && cleanOrg && (cOrg === cleanOrg || cTitle.includes(cleanOrg))) return true;
+      return false;
+    });
+
+    // System-wide Unique Prefix Code Enforcement (excluding the campaign being overwritten)
     let derivedPrefix = prefixCode.trim().toUpperCase();
     if (!derivedPrefix) {
       derivedPrefix = derivePrefixFromText(selectedCategory === 'kumtluang' ? kumtluangOrg : title);
     }
 
-    if (isPrefixCodeTaken(derivedPrefix)) {
+    if (isPrefixCodeTaken(derivedPrefix, existingSameOrgCampaign?.id)) {
       if (selectedCategory !== 'kumtluang') {
-        // Non-kumtluang categories (Rikrum, Ralna, Khawlsak, Chhungkaw) do not manage member rolls.
-        // Auto-assign an alternative unique prefix behind the scenes without blocking or alerting the user.
-        const suggestions = suggestAlternativePrefixes(derivedPrefix);
+        const suggestions = suggestAlternativePrefixes(derivedPrefix, existingSameOrgCampaign?.id);
         derivedPrefix = suggestions[0] || `${derivedPrefix.substring(0, 2)}${Math.floor(10 + Math.random() * 89)}`;
       } else {
-        const suggestions = suggestAlternativePrefixes(derivedPrefix);
+        const suggestions = suggestAlternativePrefixes(derivedPrefix, existingSameOrgCampaign?.id);
         alert(`⚠️ Prefix Code "${derivedPrefix}" hi Bawm dangin an hmang tawh a ni (Already Taken)!\n\nKhawngaihin prefix dang thlang rawh le:\n${suggestions.join(', ')}`);
         return;
       }
-    }
-
-    // Duplicate Check: If BOTH Title AND Location are identical to an existing active campaign,
-    // notify the creator to avoid accidental duplicate submissions, but allow them to proceed if it is distinct.
-    const cleanTitle = title.trim().toLowerCase();
-    const cleanLoc = location.trim().toLowerCase();
-    const duplicateSamePlace = campaigns.find(c => 
-      c.status !== 'archived' && 
-      c.status !== 'rejected' &&
-      c.title.trim().toLowerCase() === cleanTitle && 
-      c.location.trim().toLowerCase() === cleanLoc
-    );
-
-    if (duplicateSamePlace) {
-      const proceed = window.confirm(
-        `ℹ️ Hriattirna: He hming leh veng ("${title}" - ${location}) ah hian Bawm dang a awm tawh a ni.\n\nThil thuhmun (duplicate) a nih lohva, he bawm hi siam chhunzawm zel i duh chuan "OK" hmet rawh le.`
-      );
-      if (!proceed) return;
     }
 
     // Derive bilingual title and cause representations
@@ -630,7 +637,8 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
     const finalCauseEn = causeEn || (cause ? formatMizoTextToEnglish(cause) : undefined);
 
     const newCampaign: Campaign = {
-      id: 'cmp-' + Date.now(),
+      ...(existingSameOrgCampaign || {}),
+      id: existingSameOrgCampaign ? existingSameOrgCampaign.id : 'cmp-' + Date.now(),
       category: selectedCategory,
       title: title,
       titleMizo: titleMizo,
@@ -638,14 +646,14 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
       location: location,
       gpsCoords: gpsCoords,
       upiId: upiId.trim(),
-      imageUrl: imagePreviewUrl || undefined,
+      imageUrl: imagePreviewUrl || existingSameOrgCampaign?.imageUrl || undefined,
       validityDate: selectedCategory === 'ralna' ? ralnaValidity :
                     selectedCategory === 'khawlsak' ? khawlsakValidity :
                     selectedCategory === 'rikrum' ? rikrumValidity : kumtluangValidity,
       status: (isPrivilegedUser || (pricingConfig as any)?.autoApproveCampaigns !== false) ? 'active' : 'pending_approval',
       isApproved: Boolean(isPrivilegedUser || (pricingConfig as any)?.autoApproveCampaigns !== false),
-      createdAt: new Date().toISOString(),
-      createdBy: creatorProfile.phone || creatorProfile.name,
+      createdAt: existingSameOrgCampaign?.createdAt || new Date().toISOString(),
+      createdBy: existingSameOrgCampaign?.createdBy || creatorProfile.phone || creatorProfile.name,
       orgCode: derivedPrefix,
       allow_online_pg: allowOnlinePG,
       allow_cash_payment: allowCashPayment,
@@ -678,6 +686,10 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
 
       orgName: selectedCategory === 'kumtluang' ? kumtluangOrg : undefined,
       subCategories: selectedCategory === 'kumtluang' ? kumtluangSubcats : undefined,
+      enabledCategories: selectedCategory === 'kumtluang' ? kumtluangSubcats : undefined,
+      rollStructureType: selectedCategory === 'kumtluang' ? kumtluangRollStructure : undefined,
+      definedAbcList: selectedCategory === 'kumtluang' && kumtluangRollStructure === 'hqrs_hierarchy' ? kumtluangAbcList : undefined,
+      workspaceMode: creatorProfile.workspaceMode || 'hybrid',
       trxnFeeBearer: selectedCategory === 'kumtluang' ? kumtluangFeeBearer : undefined,
       sectionLabel: selectedCategory === 'kumtluang' ? kumtluangSectionLabel : undefined,
       definedSections: selectedCategory === 'kumtluang' ? kumtluangSections : undefined,
@@ -1652,52 +1664,267 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
                 </p>
               </div>
 
-              {/* Fund Heads / Sub-Categories */}
-              <div className="space-y-1.5">
-                <div className="flex justify-between items-center mb-1">
-                  <label className="text-[10.5px] font-bold text-slate-700">Sub-Categories / Fund Heads</label>
+              {/* 1. DYNAMIC CATEGORY CONFIGURATOR (Checkbox Selector & Preset Packs) */}
+              <div className="bg-white p-3.5 rounded-2xl border-2 border-indigo-200/90 space-y-3 shadow-2xs">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                  <div>
+                    <label className="text-[11px] font-black text-indigo-950 uppercase tracking-wider flex items-center gap-1.5">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                      <span>1. Dynamic Category Configurator (Bawm Category Thlanna)</span>
+                    </label>
+                    <p className="text-[9.5px] text-slate-500 font-medium mt-0.5">
+                      Pawl lian leh HQRS tan category tam tak tihlan vek a ngai lo. A hnuaiah hian i mamawh chauh <b>Check (✓)</b> la, mamawh loh chu <b>Uncheck</b> rawh.
+                    </p>
+                  </div>
+                  <span className="text-[9.5px] bg-indigo-100 text-indigo-900 font-black px-2 py-0.5 rounded-lg border border-indigo-200 shrink-0 self-start sm:self-center">
+                    {kumtluangSubcats.length} Selected
+                  </span>
                 </div>
 
-                <div className="space-y-1.5">
-                  {kumtluangSubcats.map((head, idx) => (
-                    <div key={idx} className="flex gap-1.5 items-center">
-                      <input
-                        type="text"
-                        value={head}
-                        onChange={(e) => {
-                          const updated = [...kumtluangSubcats];
-                          updated[idx] = e.target.value;
-                          setKumtluangSubcats(updated);
-                        }}
-                        className="flex-1 min-w-0 bg-white border border-slate-300 rounded-xl p-1.5 text-xs font-bold text-slate-800 focus:outline-none focus:border-blue-500"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveSubcategory(idx)}
-                        className="w-7 h-7 shrink-0 bg-rose-100 text-rose-600 rounded-lg flex items-center justify-center text-xs hover:bg-rose-200 transition cursor-pointer"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  ))}
-
-                  <div className="flex gap-1.5 items-center pt-1">
-                    <input
-                      type="text"
-                      value={newSubcatName}
-                      onChange={(e) => setNewSubcatName(e.target.value)}
-                      placeholder="+ Sub-category hming thar..."
-                      className="flex-1 min-w-0 bg-white border border-dashed border-slate-300 rounded-xl p-1.5 text-xs font-medium text-slate-800 focus:outline-none focus:border-blue-500"
-                    />
+                {/* Preset Packs */}
+                <div className="space-y-1">
+                  <span className="text-[9.5px] font-extrabold text-slate-500 uppercase tracking-wider block">
+                    ⚡ 1-Click Category Preset Packs:
+                  </span>
+                  <div className="flex flex-wrap gap-1.5">
                     <button
                       type="button"
-                      onClick={handleAddSubcategory}
-                      className="px-2.5 py-1.5 shrink-0 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 transition cursor-pointer"
+                      onClick={() => {
+                        const pack = ['Target', 'Thawhlawm', 'Handover'];
+                        setKumtluangSubcats(pack);
+                        setAllCandidateCategories(prev => Array.from(new Set([...prev, ...pack])));
+                      }}
+                      className="text-[10px] font-black px-2.5 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-300 transition cursor-pointer flex items-center gap-1 shadow-2xs"
                     >
-                      Add
+                      <span>🏛️ BCM HQRS / Pawl Lian (Target, Thawhlawm, Handover)</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const pack = ['Pathian Ram', 'Ramthar', 'Tualchhung', 'Building Fund', 'Krismas'];
+                        setKumtluangSubcats(pack);
+                        setAllCandidateCategories(prev => Array.from(new Set([...prev, ...pack])));
+                      }}
+                      className="text-[10px] font-black px-2.5 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-900 border border-blue-300 transition cursor-pointer flex items-center gap-1 shadow-2xs"
+                    >
+                      <span>⛪ Tualchhung Kohhran (5 Heads)</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const pack = ['Membership Fee', 'Kumtluang Runpui', 'Building / Bungrua', 'Relief / Tanpuina'];
+                        setKumtluangSubcats(pack);
+                        setAllCandidateCategories(prev => Array.from(new Set([...prev, ...pack])));
+                      }}
+                      className="text-[10px] font-black px-2.5 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 transition cursor-pointer flex items-center gap-1 shadow-2xs"
+                    >
+                      <span>🛡️ YMA / NGO Preset (4 Heads)</span>
                     </button>
                   </div>
                 </div>
+
+                {/* Interactive Checkbox Grid */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1">
+                  {Array.from(new Set([...allCandidateCategories, ...kumtluangSubcats])).map((catName) => {
+                    const isChecked = kumtluangSubcats.includes(catName);
+                    return (
+                      <label
+                        key={catName}
+                        onClick={() => {
+                          if (isChecked) {
+                            if (kumtluangSubcats.length <= 1) {
+                              alert('A tlem berah Category pakhat tal thlan (Check) tur a ni.');
+                              return;
+                            }
+                            setKumtluangSubcats(kumtluangSubcats.filter(c => c !== catName));
+                          } else {
+                            setKumtluangSubcats([...kumtluangSubcats, catName]);
+                          }
+                        }}
+                        className={`p-2 rounded-xl border text-left transition cursor-pointer flex items-center gap-2 select-none ${
+                          isChecked
+                            ? 'bg-indigo-600 text-white border-indigo-700 font-bold shadow-2xs'
+                            : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100 font-medium'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => {}}
+                          className="w-3.5 h-3.5 accent-white rounded cursor-pointer shrink-0"
+                        />
+                        <span className="text-[10.5px] truncate">{catName}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+
+                {/* Add Custom Category Checkbox */}
+                <div className="flex gap-1.5 items-center pt-1 border-t border-slate-100">
+                  <input
+                    type="text"
+                    value={newSubcatName}
+                    onChange={(e) => setNewSubcatName(e.target.value)}
+                    placeholder="+ Category thar belhna (e.g. Centennial Fund)..."
+                    className="flex-1 min-w-0 bg-slate-50 border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-800 focus:outline-none focus:bg-white focus:border-indigo-500"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        const trimmed = newSubcatName.trim();
+                        if (trimmed) {
+                          if (!allCandidateCategories.includes(trimmed)) {
+                            setAllCandidateCategories([...allCandidateCategories, trimmed]);
+                          }
+                          if (!kumtluangSubcats.includes(trimmed)) {
+                            setKumtluangSubcats([...kumtluangSubcats, trimmed]);
+                          }
+                          setNewSubcatName('');
+                        }
+                      }
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const trimmed = newSubcatName.trim();
+                      if (trimmed) {
+                        if (!allCandidateCategories.includes(trimmed)) {
+                          setAllCandidateCategories([...allCandidateCategories, trimmed]);
+                        }
+                        if (!kumtluangSubcats.includes(trimmed)) {
+                          setKumtluangSubcats([...kumtluangSubcats, trimmed]);
+                        }
+                        setNewSubcatName('');
+                      }
+                    }}
+                    className="px-3 py-2 shrink-0 bg-indigo-600 text-white rounded-xl text-xs font-black hover:bg-indigo-700 transition cursor-pointer"
+                  >
+                    + Add & Check
+                  </button>
+                </div>
+              </div>
+
+              {/* 2. ROLE-BASED CUSTOM FORMS (Mimal Roll vs BCM HQRS / ABC / Bial / Kohhran Hierarchy Form) */}
+              <div className="bg-white p-3.5 rounded-2xl border-2 border-emerald-200/90 space-y-3 shadow-2xs">
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <label className="text-[11px] font-black text-emerald-950 uppercase tracking-wider flex items-center gap-1.5">
+                      <Building2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                      <span>2. Roll & Form Structure (Mimal vs HQRS/Bial/Kohhran)</span>
+                    </label>
+                    <p className="text-[9.5px] text-slate-500 font-medium mt-0.5">
+                      BCM HQRS emaw Bial tan mimal chhungkaw hming ziah ngai lovin <b>ABC, Pastor Bial, Kohhran Hming leh Target Amount</b> chauh thunna form thlang rawh.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setKumtluangRollStructure('standard_member');
+                      if (kumtluangSectionLabel === 'Pastor Bial') {
+                        setKumtluangSectionLabel('Bial / Unit');
+                      }
+                    }}
+                    className={`p-3 rounded-xl border-2 text-left transition cursor-pointer ${
+                      kumtluangRollStructure === 'standard_member'
+                        ? 'bg-blue-600 text-white border-blue-700 shadow-xs'
+                        : 'bg-slate-50 text-slate-800 border-slate-200 hover:border-blue-300'
+                    }`}
+                  >
+                    <div className="font-black text-xs mb-0.5">👤 1. Standard Member / Chhungkua Roll</div>
+                    <p className={`text-[10px] leading-snug ${
+                      kumtluangRollStructure === 'standard_member' ? 'text-blue-100' : 'text-slate-500'
+                    }`}>
+                      Tualchhung Kohhran & Branch tan: Member Hming, Pa Hming, Bial/Section, leh Chhungkaw member-te dah luhna.
+                    </p>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setKumtluangRollStructure('hqrs_hierarchy');
+                      setKumtluangSectionLabel('Pastor Bial');
+                      if (kumtluangSections.some(s => s.includes('Vengchhak'))) {
+                        setKumtluangSections(['Zobawk Bial', 'Bazar Bial', 'Chanmari Bial', 'Serkawn Bial', 'Rahsiveng Bial']);
+                      }
+                    }}
+                    className={`p-3 rounded-xl border-2 text-left transition cursor-pointer ${
+                      kumtluangRollStructure === 'hqrs_hierarchy'
+                        ? 'bg-emerald-700 text-white border-emerald-800 shadow-xs'
+                        : 'bg-slate-50 text-slate-800 border-slate-200 hover:border-emerald-300'
+                    }`}
+                  >
+                    <div className="font-black text-xs mb-0.5">🏛️ 2. BCM HQRS / ABC / Bial / Kohhran Form</div>
+                    <p className={`text-[10px] leading-snug ${
+                      kumtluangRollStructure === 'hqrs_hierarchy' ? 'text-emerald-100' : 'text-slate-500'
+                    }`}>
+                      HQRS & Pawl Lian tan: Mimal detail tel lovin ABC Hming, Pastor Bial Hming, Kohhran Hming leh Target Amount (₹) chauh vawm luhna.
+                    </p>
+                  </button>
+                </div>
+
+                {/* ABC / Area Council Setup when HQRS Hierarchy Mode is active */}
+                {kumtluangRollStructure === 'hqrs_hierarchy' && (
+                  <div className="p-3 bg-emerald-50/70 rounded-xl border border-emerald-200 space-y-2 animate-fadeIn">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[10px] font-black text-emerald-950 uppercase tracking-wider">
+                        ABC (Area Baptist Council) / Region List ({kumtluangAbcList.length})
+                      </label>
+                      <span className="text-[9px] font-bold text-emerald-700 bg-white px-2 py-0.5 rounded border border-emerald-200">
+                        HQRS Hierarchy Level 1
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {kumtluangAbcList.map((abc, idx) => (
+                        <span
+                          key={idx}
+                          className="bg-white border border-emerald-300 text-emerald-950 font-bold px-2.5 py-1 rounded-lg text-[10.5px] flex items-center gap-1.5 shadow-2xs"
+                        >
+                          <span>{abc}</span>
+                          <button
+                            type="button"
+                            onClick={() => setKumtluangAbcList(kumtluangAbcList.filter((_, i) => i !== idx))}
+                            className="text-rose-500 hover:text-rose-700 font-black cursor-pointer"
+                          >
+                            ×
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                    <div className="flex gap-1.5">
+                      <input
+                        type="text"
+                        value={newAbcInput}
+                        onChange={(e) => setNewAbcInput(e.target.value)}
+                        placeholder="e.g. ABC Chhimtuipui / ABC Mamit..."
+                        className="flex-1 bg-white border border-emerald-300 rounded-xl px-2.5 py-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-emerald-600"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            if (newAbcInput.trim() && !kumtluangAbcList.includes(newAbcInput.trim())) {
+                              setKumtluangAbcList([...kumtluangAbcList, newAbcInput.trim()]);
+                              setNewAbcInput('');
+                            }
+                          }
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (newAbcInput.trim() && !kumtluangAbcList.includes(newAbcInput.trim())) {
+                            setKumtluangAbcList([...kumtluangAbcList, newAbcInput.trim()]);
+                            setNewAbcInput('');
+                          }
+                        }}
+                        className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white font-black text-xs rounded-xl cursor-pointer shrink-0"
+                      >
+                        + Add ABC
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Bial / Section / Veng Structure Setup (Dropdown & Clean Data Sorting) */}
@@ -3092,6 +3319,32 @@ const EditCampaignModal: React.FC<EditCampaignModalProps> = ({
   const [kumtluangFeeBearer, setKumtluangFeeBearer] = useState<'user_paid' | 'org_paid'>(
     (campaign.kumtluangFeeBearer as any) || 'org_paid'
   );
+  const [rollStructureType, setRollStructureType] = useState<'standard_member' | 'hqrs_hierarchy'>(
+    campaign.rollStructureType || 'standard_member'
+  );
+  const [definedAbcList, setDefinedAbcList] = useState<string[]>(
+    campaign.definedAbcList && campaign.definedAbcList.length > 0
+      ? campaign.definedAbcList
+      : ['ABC Lunglei East', 'ABC Lunglei West', 'ABC Aizawl', 'ABC Lawngtlai', 'ABC Siaha']
+  );
+  const [newEditAbcInput, setNewEditAbcInput] = useState<string>('');
+  const [editCandidateCategories, setEditCandidateCategories] = useState<string[]>(() =>
+    Array.from(
+      new Set([
+        'Pathian Ram',
+        'Ramthar',
+        'Tualchhung',
+        'Building Fund',
+        'Target',
+        'Thawhlawm',
+        'Handover',
+        'Krismas',
+        'Relief / Tanpuina',
+        'Membership Fee',
+        ...(campaign.subCategories || []),
+      ])
+    )
+  );
 
   // Section / Bial setup for Kumtluang
   const [kumtluangSectionLabel, setKumtluangSectionLabel] = useState<string>(
@@ -3279,6 +3532,9 @@ const EditCampaignModal: React.FC<EditCampaignModalProps> = ({
       
       orgName: orgName.trim() || campaign.orgName,
       subCategories: subCategories && subCategories.length > 0 ? subCategories : campaign.subCategories,
+      enabledCategories: subCategories && subCategories.length > 0 ? subCategories : campaign.enabledCategories,
+      rollStructureType: campaign.category === 'kumtluang' ? rollStructureType : campaign.rollStructureType,
+      definedAbcList: campaign.category === 'kumtluang' && rollStructureType === 'hqrs_hierarchy' ? definedAbcList : campaign.definedAbcList,
       kumtluangFeeBearer: kumtluangFeeBearer || campaign.kumtluangFeeBearer,
       sectionLabel: kumtluangSectionLabel.trim() || campaign.sectionLabel || 'Bial / Section',
       definedSections: kumtluangSections && kumtluangSections.length > 0 ? kumtluangSections : campaign.definedSections,
@@ -3767,29 +4023,68 @@ const EditCampaignModal: React.FC<EditCampaignModalProps> = ({
                 )}
               </div>
 
-              {/* Fund Heads List */}
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-bold text-blue-950 block">
-                  Category / Fund Heads ({subCategories.length})
-                </label>
-                
-                <div className="flex flex-wrap gap-1.5">
-                  {subCategories.map((head, idx) => (
-                    <span 
-                      key={idx}
-                      className="bg-white border border-blue-300 text-blue-900 font-bold px-2.5 py-1 rounded-xl text-xs flex items-center gap-1 shadow-2xs"
+              {/* 1. DYNAMIC CATEGORY CONFIGURATOR (Checkbox Grid + Presets in Edit Modal) */}
+              <div className="bg-white p-3 rounded-2xl border border-indigo-200 space-y-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <label className="text-[10.5px] font-black text-indigo-950 uppercase tracking-wider">
+                    1. Dynamic Category Configurator ({subCategories.length} Checked)
+                  </label>
+                  <div className="flex gap-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const pack = ['Target', 'Thawhlawm', 'Handover'];
+                        setSubCategories(pack);
+                        setEditCandidateCategories(prev => Array.from(new Set([...prev, ...pack])));
+                      }}
+                      className="text-[9px] font-black px-2 py-0.5 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-300 hover:bg-emerald-100 cursor-pointer"
                     >
-                      <span>{head}</span>
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveSubCat(idx)}
-                        className="text-rose-500 hover:text-rose-700 ml-1 font-black cursor-pointer"
-                        title="Paih rawh"
+                      🏛️ HQRS (3)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const pack = ['Pathian Ram', 'Ramthar', 'Tualchhung', 'Building Fund', 'Krismas'];
+                        setSubCategories(pack);
+                        setEditCandidateCategories(prev => Array.from(new Set([...prev, ...pack])));
+                      }}
+                      className="text-[9px] font-black px-2 py-0.5 rounded-lg bg-blue-50 text-blue-800 border border-blue-300 hover:bg-blue-100 cursor-pointer"
+                    >
+                      ⛪ Kohhran (5)
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                  {Array.from(new Set([...editCandidateCategories, ...subCategories])).map((head) => {
+                    const isChecked = subCategories.includes(head);
+                    return (
+                      <label
+                        key={head}
+                        onClick={() => {
+                          if (isChecked) {
+                            if (subCategories.length <= 1) return;
+                            setSubCategories(subCategories.filter(h => h !== head));
+                          } else {
+                            setSubCategories([...subCategories, head]);
+                          }
+                        }}
+                        className={`p-1.5 px-2 rounded-xl border text-left transition cursor-pointer flex items-center gap-1.5 select-none ${
+                          isChecked
+                            ? 'bg-indigo-600 text-white border-indigo-700 font-bold'
+                            : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100 font-medium'
+                        }`}
                       >
-                        ✕
-                      </button>
-                    </span>
-                  ))}
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => {}}
+                          className="w-3.5 h-3.5 accent-white rounded cursor-pointer shrink-0"
+                        />
+                        <span className="text-[10px] truncate">{head}</span>
+                      </label>
+                    );
+                  })}
                 </div>
 
                 <div className="flex gap-1.5 pt-1">
@@ -3797,23 +4092,126 @@ const EditCampaignModal: React.FC<EditCampaignModalProps> = ({
                     type="text"
                     value={newSubCatInput}
                     onChange={(e) => setNewSubCatInput(e.target.value)}
-                    placeholder="Head thar hming (e.g. Relief Fund)..."
-                    className="flex-1 bg-white border border-blue-300 rounded-xl px-2.5 py-1.5 font-medium text-slate-900 text-xs focus:outline-none focus:border-blue-600"
+                    placeholder="+ Category thar belhna..."
+                    className="flex-1 bg-slate-50 border border-blue-300 rounded-xl px-2.5 py-1.5 font-bold text-slate-900 text-xs focus:outline-none focus:bg-white focus:border-blue-600"
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
                         e.preventDefault();
-                        handleAddSubCat();
+                        const trimmed = newSubCatInput.trim();
+                        if (trimmed) {
+                          if (!editCandidateCategories.includes(trimmed)) {
+                            setEditCandidateCategories([...editCandidateCategories, trimmed]);
+                          }
+                          if (!subCategories.includes(trimmed)) {
+                            setSubCategories([...subCategories, trimmed]);
+                          }
+                          setNewSubCatInput('');
+                        }
                       }
                     }}
                   />
                   <button
                     type="button"
-                    onClick={handleAddSubCat}
-                    className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-3 py-1.5 rounded-xl text-xs shadow-xs cursor-pointer flex items-center gap-1"
+                    onClick={() => {
+                      const trimmed = newSubCatInput.trim();
+                      if (trimmed) {
+                        if (!editCandidateCategories.includes(trimmed)) {
+                          setEditCandidateCategories([...editCandidateCategories, trimmed]);
+                        }
+                        if (!subCategories.includes(trimmed)) {
+                          setSubCategories([...subCategories, trimmed]);
+                        }
+                        setNewSubCatInput('');
+                      }
+                    }}
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-3 py-1.5 rounded-xl text-xs shadow-xs cursor-pointer flex items-center gap-1"
                   >
-                    <Plus className="w-3.5 h-3.5" /> Dah Belh
+                    <Plus className="w-3.5 h-3.5" /> Check Belh
                   </button>
                 </div>
+              </div>
+
+              {/* 2. ROLL & FORM STRUCTURE IN EDIT MODAL */}
+              <div className="bg-white p-3 rounded-2xl border border-emerald-200 space-y-2">
+                <label className="text-[10.5px] font-black text-emerald-950 uppercase tracking-wider block">
+                  2. Roll & Form Structure (Mimal vs BCM HQRS/Bial/Kohhran)
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setRollStructureType('standard_member')}
+                    className={`p-2 rounded-xl border text-left transition cursor-pointer ${
+                      rollStructureType === 'standard_member'
+                        ? 'bg-blue-600 text-white border-blue-700 font-bold'
+                        : 'bg-slate-50 text-slate-700 border-slate-200'
+                    }`}
+                  >
+                    <div className="text-[10.5px] font-black">👤 Standard Member Roll</div>
+                    <div className={`text-[9px] ${rollStructureType === 'standard_member' ? 'text-blue-100' : 'text-slate-500'}`}>
+                      Mimal, Pa Hming & Chhungkua
+                    </div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRollStructureType('hqrs_hierarchy');
+                      setKumtluangSectionLabel('Pastor Bial');
+                    }}
+                    className={`p-2 rounded-xl border text-left transition cursor-pointer ${
+                      rollStructureType === 'hqrs_hierarchy'
+                        ? 'bg-emerald-700 text-white border-emerald-800 font-bold'
+                        : 'bg-slate-50 text-slate-700 border-slate-200'
+                    }`}
+                  >
+                    <div className="text-[10.5px] font-black">🏛️ HQRS / Bial / Kohhran</div>
+                    <div className={`text-[9px] ${rollStructureType === 'hqrs_hierarchy' ? 'text-emerald-100' : 'text-slate-500'}`}>
+                      ABC, Pastor Bial, Kohhran & Target
+                    </div>
+                  </button>
+                </div>
+
+                {rollStructureType === 'hqrs_hierarchy' && (
+                  <div className="pt-2 border-t border-emerald-100 space-y-1.5">
+                    <span className="text-[9.5px] font-extrabold text-emerald-900 block">
+                      ABC / Area Council List ({definedAbcList.length}):
+                    </span>
+                    <div className="flex flex-wrap gap-1">
+                      {definedAbcList.map((abc, i) => (
+                        <span key={i} className="bg-emerald-50 border border-emerald-200 text-emerald-900 font-bold px-2 py-0.5 rounded-lg text-[10px] flex items-center gap-1">
+                          <span>{abc}</span>
+                          <button
+                            type="button"
+                            onClick={() => setDefinedAbcList(definedAbcList.filter((_, idx) => idx !== i))}
+                            className="text-rose-500 font-black cursor-pointer"
+                          >
+                            ×
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                    <div className="flex gap-1.5">
+                      <input
+                        type="text"
+                        value={newEditAbcInput}
+                        onChange={(e) => setNewEditAbcInput(e.target.value)}
+                        placeholder="+ Add ABC (e.g. ABC Lunglei East)..."
+                        className="flex-1 bg-slate-50 border border-emerald-300 rounded-xl px-2 py-1 text-xs font-bold text-slate-900"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (newEditAbcInput.trim() && !definedAbcList.includes(newEditAbcInput.trim())) {
+                            setDefinedAbcList([...definedAbcList, newEditAbcInput.trim()]);
+                            setNewEditAbcInput('');
+                          }
+                        }}
+                        className="bg-emerald-700 text-white font-bold px-2.5 py-1 rounded-xl text-[10px] cursor-pointer"
+                      >
+                        + Add
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Bial / Section / Veng Structure Setup (Dropdown & Clean Data Sorting) */}

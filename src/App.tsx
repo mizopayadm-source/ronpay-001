@@ -135,6 +135,7 @@ import { RonPayWebsite } from './components/RonPayWebsite';
 import { BackupSyncSettingsModal } from './components/BackupSyncSettingsModal';
 import { MyMembershipsModal } from './components/MyMembershipsModal';
 import { AuditorPortalModal } from './components/AuditorPortalModal';
+import { WorkspaceRouterModal } from './components/WorkspaceRouterModal';
 import { initBackupScheduler } from './services/backupService';
 import { 
   getUrlRoute, 
@@ -259,6 +260,7 @@ export default function App() {
   const [isMyMembershipsOpen, setIsMyMembershipsOpen] = useState<boolean>(false);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState<boolean>(false);
   const [loginModalInitialMethod, setLoginModalInitialMethod] = useState<'credentials' | 'biometric' | 'google' | 'demo'>('credentials');
+  const [isWorkspaceRouterOpen, setIsWorkspaceRouterOpen] = useState<boolean>(false);
   const [isWalletOpen, setIsWalletOpen] = useState<boolean>(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState<boolean>(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState<boolean>(false);
@@ -2410,6 +2412,7 @@ export default function App() {
             setIsKumtluangManagerOpen(false);
             handleNavigate('create_qr');
           }}
+          onOpenWorkspaceSelector={() => setIsWorkspaceRouterOpen(true)}
         />
 
         <AuthorizedPersonsModal
@@ -2592,8 +2595,28 @@ export default function App() {
               if (targetCamp) {
                 setAuditorPortalCampaign(targetCamp);
                 setIsAuditorPortalOpen(true);
+                return;
               }
             }
+            // Open Workspace Isolation Router immediately after login / OTP verification
+            setIsWorkspaceRouterOpen(true);
+          }}
+        />
+
+        <WorkspaceRouterModal
+          isOpen={isWorkspaceRouterOpen}
+          onClose={() => setIsWorkspaceRouterOpen(false)}
+          userPhone={creatorProfile?.phone || creatorProfile?.phoneNumber || ''}
+          creatorProfile={creatorProfile}
+          campaigns={campaigns}
+          onSelectOrganization={(org, initialTab) => {
+            setKumtluangInitialCampaignId(org.id);
+            setKumtluangInitialTab(initialTab || 'members_list');
+            setIsKumtluangManagerOpen(true);
+          }}
+          onSelectNormalMode={() => {
+            setKumtluangInitialCampaignId(undefined);
+            setIsKumtluangManagerOpen(false);
           }}
         />
 

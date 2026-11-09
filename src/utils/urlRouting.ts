@@ -92,6 +92,7 @@ export function getUrlRoute(campaignsList?: Campaign[], transactionsList?: Trans
     const campaignId = searchParams.get('campaign') || 
                        searchParams.get('cmp') || 
                        searchParams.get('c') || 
+                       searchParams.get('org') ||
                        searchParams.get('id') || 
                        searchParams.get('bawm') || 
                        searchParams.get('post') ||
@@ -265,7 +266,10 @@ export function getUrlRoute(campaignsList?: Campaign[], transactionsList?: Trans
         ...INITIAL_CAMPAIGNS
       ];
 
-      const existing = allCampaigns.find(c => c.id.toLowerCase() === cleanId.toLowerCase());
+      const existing = allCampaigns.find(c => 
+        c.id.toLowerCase() === cleanId.toLowerCase() || 
+        (c.orgCode && c.orgCode.toLowerCase() === cleanId.toLowerCase())
+      );
       
       // Only explicit donation amount params (amt, amount, am, payAmt), NEVER target or total
       const urlAmtStr = searchParams.get('amt') || searchParams.get('amount') || searchParams.get('am') || searchParams.get('payAmt');
@@ -276,6 +280,28 @@ export function getUrlRoute(campaignsList?: Campaign[], transactionsList?: Trans
       const isAnon = donorParam === 'Anonymous' || searchParams.get('anon') === '1' || searchParams.get('anon') === 'true';
 
       if (existing) {
+        // If arriving via direct organization link or Org QR without explicit checkout requested
+        const isOrgLink = searchParams.has('org') || 
+                          searchParams.get('mode') === 'org' || 
+                          (existing.category === 'kumtluang' && screenParam !== 'checkout' && searchParams.get('pay') !== '1' && searchParams.get('pay') !== 'true');
+        
+        if (isOrgLink) {
+          try {
+            localStorage.setItem('ronpay_home_workspace_mode', 'org_only');
+            localStorage.setItem('ronpay_selected_org_campaign_id', existing.id);
+          } catch {}
+          return {
+            screen: 'home',
+            campaignId: existing.id,
+            campaign: numUrlAmt ? { ...existing, customAmount: numUrlAmt } : existing,
+            category: existing.category,
+            view: parsedView || 'app',
+            donorName: donorParam ? decodeURIComponent(donorParam) : undefined,
+            donorVeng: vengParam ? decodeURIComponent(vengParam) : undefined,
+            isAnonymous: isAnon,
+          };
+        }
+
         return {
           screen: 'checkout',
           campaignId: existing.id,

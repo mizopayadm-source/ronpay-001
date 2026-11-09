@@ -44,7 +44,7 @@ import {
 import { KumtluangExpenseManager } from './KumtluangExpenseManager';
 import { AuthorizedPersonsModal } from './AuthorizedPersonsModal';
 import { MemberRecord, MemberDependent, Campaign, Transaction, CreatorProfile } from '../types';
-import { getMembers, saveMembers, addOrUpdateMember, deleteMember, getDeletedMemberIds, saveTransaction, recordUserPaidTxId, isCampaignCreator, isTransactionForCampaign, saveCampaign, getStoredExpenses, getCampaignExpenseHeads, getStoredCampaigns, isCampaignManagerOrOfficer, derivePrefixFromText } from '../utils/storage';
+import { getMembers, saveMembers, addOrUpdateMember, deleteMember, getDeletedMemberIds, saveTransaction, recordUserPaidTxId, isCampaignCreator, isConfirmedTransaction, isTransactionForCampaign, saveCampaign, getStoredExpenses, getCampaignExpenseHeads, getStoredCampaigns, isCampaignManagerOrOfficer, derivePrefixFromText } from '../utils/storage';
 import {
   getStoredGroupMemberships,
   approveMembershipRequest,
@@ -152,6 +152,7 @@ interface KumtluangMemberManagerModalProps {
   initialCampaignId?: string;
   onDataUpdated: () => void;
   onOpenCreateQR?: () => void;
+  onOpenWorkspaceSelector?: () => void;
 }
 
 export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalProps> = ({
@@ -164,7 +165,8 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
   initialTab = 'members_list',
   initialCampaignId,
   onDataUpdated,
-  onOpenCreateQR
+  onOpenCreateQR,
+  onOpenWorkspaceSelector
 }) => {
   const [activeTab, setActiveTab] = useState<'quick_entry' | 'register_member' | 'members_list' | 'print_reports' | 'expenses' | 'requests'>(initialTab || 'members_list');
   const [membersTick, setMembersTick] = useState<number>(0);
@@ -196,7 +198,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
 
   // Calculate scoped campaigns strictly owned/created by this creator (or all if admin/moderator)
   const allowedCampaigns = useMemo(() => {
-    // 1. Include all active, unexpired campaigns (Ralna, Khawlsak, Rikrum, Kumtluang, Others)
+    // 1. Only include campaigns that actually have members (> 0 Members)
     const eligibleCampaigns = campaigns.filter(c => {
       if (!c || !c.id || !c.title) return false;
       const cleanId = String(c.id).toLowerCase().trim();
@@ -212,6 +214,10 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
           return false;
         }
       }
+
+      // Strictly exclude 0-member Bawms from Member Roll dropdown
+      const memberCount = countCampaignMembers(c.id, c.orgCode);
+      if (memberCount === 0) return false;
 
       return true;
     }).map(c => {
@@ -360,6 +366,8 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
   const [newPhone4, setNewPhone4] = useState<string>('');
   const [newFullPhone, setNewFullPhone] = useState<string>('');
   const [newSection, setNewSection] = useState<string>('');
+  const [newAbcName, setNewAbcName] = useState<string>('');
+  const [newTargetAmount, setNewTargetAmount] = useState<string>('');
   const [newAvatarUrl, setNewAvatarUrl] = useState<string>('');
   const [newDependents, setNewDependents] = useState<{ name: string; relation: string }[]>([]);
   const [depNameInput, setDepNameInput] = useState<string>('');
@@ -371,6 +379,9 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
   // SECY / Creator Campaign Handover State
   const [isTransferModalOpen, setIsTransferModalOpen] = useState<boolean>(false);
   const [transferSuccessInfo, setTransferSuccessInfo] = useState<{ title: string; newOfficer: string; phone: string } | null>(null);
+  const [isCategoryConfigOpen, setIsCategoryConfigOpen] = useState<boolean>(false);
+  const [abcFilter, setAbcFilter] = useState<string>('all');
+  const [sectionFilter, setSectionFilter] = useState<string>('all');
 
   // Year-wise Member Roll (Kum bi Roll) State
   const [selectedRollYear, setSelectedRollYear] = useState<string>(() => getCurrentYearString());
@@ -397,6 +408,8 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
   const [editPhone4, setEditPhone4] = useState<string>('');
   const [editFullPhone, setEditFullPhone] = useState<string>('');
   const [editSection, setEditSection] = useState<string>('');
+  const [editAbcName, setEditAbcName] = useState<string>('');
+  const [editTargetAmount, setEditTargetAmount] = useState<string>('');
   const [editAvatarUrl, setEditAvatarUrl] = useState<string>('');
   const [editDependents, setEditDependents] = useState<MemberDependent[]>([]);
   const [editDepName, setEditDepName] = useState<string>('');
@@ -527,69 +540,16 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
   // Fetch fresh members on demand from Supabase & Server when Kumtluang modal opens
   useEffect(() => {
     if (isOpen) {
-      import('../services/supabaseService').then(({ fetchSupabaseMembers, updateSupabaseMember, deleteSupabaseMember }) => {
+      import('../services/supabaseService').then(({ fetchSupabaseMembers }) => {
         fetchSupabaseMembers('all').then(remoteMembers => {
           if (Array.isArray(remoteMembers) && remoteMembers.length > 0) {
-            const currentLocal = getMembers('all');
             const deletedMemIds = getDeletedMemberIds();
-            const merged = [...currentLocal];
-            const storedCamps = getStoredCampaigns();
-            const campCodeMap = new Map<string, string>();
-            storedCamps.forEach(c => {
-              if (c.id && c.orgCode) campCodeMap.set(c.id, c.orgCode.toUpperCase());
+            const cleanRemote = remoteMembers.filter(rm => {
+              if (!rm || !rm.id) return false;
+              const rmClean = rm.id.toLowerCase().trim();
+              return !deletedMemIds.has(rmClean);
             });
-
-            remoteMembers.forEach(rm => {
-              if (rm && rm.id) {
-                const origRemoteId = rm.id;
-                // Align remote member prefix with canonical campaign orgCode
-                const campOrg = (rm.campaignId && campCodeMap.get(rm.campaignId)) || (rm.campaignId === 'cmp-kumtluang-1' ? (campCodeMap.get('cmp-kumtluang-1') || 'ZBKEBE') : null);
-                if (campOrg && rm.id.includes('-')) {
-                  const parts = rm.id.split('-');
-                  if (parts[0].toUpperCase() !== campOrg) {
-                    const suffix = parts.length > 2 ? parts[1] : parts.slice(1).join('-');
-                    rm.id = `${campOrg}-${suffix}`;
-                    rm.orgCode = campOrg;
-                  }
-                }
-
-                const rmClean = rm.id.toLowerCase().trim();
-                const origClean = origRemoteId.toLowerCase().trim();
-                if (deletedMemIds.has(rmClean) || deletedMemIds.has(origClean)) {
-                  return; // Exclude deleted members from resurrection
-                }
-
-                // Match by exact ID or phone suffix within the same campaign
-                const idx = merged.findIndex(m => {
-                  if (m.id.toLowerCase() === rm.id.toLowerCase()) return true;
-                  if (m.campaignId && rm.campaignId && m.campaignId === rm.campaignId) {
-                    const mSuffix = m.phoneLast4 || (m.id.includes('-') ? m.id.split('-').slice(1).join('-') : '');
-                    const rmSuffix = rm.phoneLast4 || (rm.id.includes('-') ? rm.id.split('-').slice(1).join('-') : '');
-                    if (mSuffix && rmSuffix && mSuffix === rmSuffix) return true;
-                  }
-                  return false;
-                });
-
-                if (idx >= 0) {
-                  const localItem = merged[idx];
-                  const remoteTime = rm.updatedAt ? new Date(rm.updatedAt).getTime() : 0;
-                  const localTime = localItem.updatedAt ? new Date(localItem.updatedAt).getTime() : 0;
-                  if (remoteTime >= localTime) {
-                    merged[idx] = { ...localItem, ...rm };
-                  } else {
-                    // Local is newer, push to Supabase
-                    updateSupabaseMember(localItem).catch(() => {});
-                  }
-                  // Clean up legacy cloud record if ID was updated
-                  if (origRemoteId !== rm.id) {
-                    deleteSupabaseMember(origRemoteId).catch(() => {});
-                  }
-                } else {
-                  merged.unshift(rm);
-                }
-              }
-            });
-            saveMembers(merged, true);
+            saveMembers(cleanRemote, true);
             setMembersTick(t => t + 1);
           }
         }).catch(() => {});
@@ -686,26 +646,85 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
     : null) || activeScopedCampaign;
 
   const campaignCategories = useMemo(() => {
-    const subs = Array.isArray(activeScopedCampaign?.subCategories) && activeScopedCampaign.subCategories.length > 0
+    const enabled = Array.isArray(activeScopedCampaign?.enabledCategories) && activeScopedCampaign.enabledCategories.length > 0
+      ? activeScopedCampaign.enabledCategories
+      : Array.isArray(activeScopedCampaign?.subCategories) && activeScopedCampaign.subCategories.length > 0
       ? activeScopedCampaign.subCategories
       : defaultCategories;
-    return subs;
-  }, [activeScopedCampaign, defaultCategories]);
+    return enabled;
+  }, [activeScopedCampaign, defaultCategories, membersTick]);
+
+  const handleToggleCampaignCategory = (catName: string) => {
+    if (!activeScopedCampaign) return;
+    const current = [...campaignCategories];
+    const isChecked = current.includes(catName);
+    let updated: string[];
+    if (isChecked) {
+      if (current.length <= 1) {
+        alert('A tlem berah Category pakhat tal thlan (Check) tur a ni.');
+        return;
+      }
+      updated = current.filter(c => c !== catName);
+    } else {
+      updated = [...current, catName];
+    }
+    const updatedCamp: Campaign = {
+      ...activeScopedCampaign,
+      subCategories: updated,
+      enabledCategories: updated,
+      updatedAt: new Date().toISOString()
+    };
+    saveCampaign(updatedCamp);
+    setMembersTick(t => t + 1);
+    onDataUpdated();
+  };
+
+  const handleApplyCategoryPreset = (pack: string[]) => {
+    if (!activeScopedCampaign) return;
+    const updatedCamp: Campaign = {
+      ...activeScopedCampaign,
+      subCategories: pack,
+      enabledCategories: pack,
+      updatedAt: new Date().toISOString()
+    };
+    saveCampaign(updatedCamp);
+    setSelectedCategory(pack[0] || 'Target');
+    setMembersTick(t => t + 1);
+    onDataUpdated();
+  };
+
+  const handleToggleRollStructureType = (mode: 'standard_member' | 'hqrs_hierarchy') => {
+    if (!activeScopedCampaign) return;
+    const updatedCamp: Campaign = {
+      ...activeScopedCampaign,
+      rollStructureType: mode,
+      sectionLabel: mode === 'hqrs_hierarchy' ? 'Pastor Bial' : (activeScopedCampaign.sectionLabel === 'Pastor Bial' ? 'Bial / Section' : activeScopedCampaign.sectionLabel),
+      definedAbcList: mode === 'hqrs_hierarchy' && (!activeScopedCampaign.definedAbcList || activeScopedCampaign.definedAbcList.length === 0)
+        ? ['ABC Lunglei East', 'ABC Lunglei West', 'ABC Aizawl', 'ABC Lawngtlai', 'ABC Siaha']
+        : activeScopedCampaign.definedAbcList,
+      updatedAt: new Date().toISOString()
+    };
+    saveCampaign(updatedCamp);
+    setMembersTick(t => t + 1);
+    onDataUpdated();
+  };
 
   const handleAddNewHead = () => {
     const trimmed = newHeadInput.trim();
     if (!trimmed) return;
     if (activeScopedCampaign) {
-      const currentSubs = Array.isArray(activeScopedCampaign.subCategories) ? activeScopedCampaign.subCategories : [];
+      const currentSubs = [...campaignCategories];
       if (!currentSubs.includes(trimmed)) {
         const updatedSubs = [...currentSubs, trimmed];
-        const updatedCamp = { ...activeScopedCampaign, subCategories: updatedSubs };
+        const updatedCamp = { ...activeScopedCampaign, subCategories: updatedSubs, enabledCategories: updatedSubs };
         saveCampaign(updatedCamp);
       }
     }
     setSelectedCategory(trimmed);
     setNewHeadInput('');
     setIsAddingNewHead(false);
+    setMembersTick(t => t + 1);
+    onDataUpdated();
   };
 
   // Auto-sync selected category with campaign's available categories
@@ -955,18 +974,23 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
     }));
 
     const rollYearToEnroll = regRollYear || selectedRollYear || getCurrentYearString();
+    const isHqrsForm = targetCamp?.rollStructureType === 'hqrs_hierarchy';
+    const parsedTarget = newTargetAmount && parseFloat(newTargetAmount) > 0 ? parseFloat(newTargetAmount) : undefined;
     const newM: MemberRecord = {
       id: generatedId,
       campaignId: targetCamp?.id || 'cmp-kumtluang-1',
       name: newHming.trim(),
-      fatherName: newFatherName.trim() || undefined,
+      fatherName: isHqrsForm ? undefined : (newFatherName.trim() || undefined),
       orgCode: org,
       phoneLast4: p4,
       fullPhone: newFullPhone.trim() || undefined,
       section: newSection.trim() || undefined,
+      abcName: newAbcName.trim() || undefined,
+      pledgeAmount: parsedTarget,
+      entityType: isHqrsForm ? 'church_unit' : 'member',
       avatarUrl: newAvatarUrl || undefined,
       isFamilyHead: true,
-      dependents: formattedDependents,
+      dependents: isHqrsForm ? [] : formattedDependents,
       enrollmentYear: rollYearToEnroll,
       activeYears: [rollYearToEnroll],
       yearStatus: {
@@ -974,6 +998,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
           status: 'active',
           reason: 'Initial registration / In-chhiar thar',
           section: newSection.trim() || undefined,
+          pledgeAmount: parsedTarget,
           updatedAt: new Date().toISOString()
         }
       },
@@ -984,7 +1009,11 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
     addOrUpdateMember(newM);
     setMembersTick(t => t + 1);
 
-    setRegSuccess(`Member [${generatedId}] ${newHming} ${formattedDependents.length > 0 ? `leh dependent ${formattedDependents.length}` : ''} chu vawn fel a ni ta!`);
+    setRegSuccess(
+      isHqrsForm
+        ? `Kohhran / Unit [${generatedId}] ${newHming} (${newSection || 'Bial'}${parsedTarget ? ` • Target: ₹${parsedTarget.toLocaleString('en-IN')}` : ''}) chu vawn fel a ni ta!`
+        : `Member [${generatedId}] ${newHming} ${formattedDependents.length > 0 ? `leh dependent ${formattedDependents.length}` : ''} chu vawn fel a ni ta!`
+    );
     setSelectedMember(newM);
     setSelectedPayerType('primary');
     setQuickPhone4(newM.phoneLast4);
@@ -997,7 +1026,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
     setNewFatherName('');
     setNewPhone4('');
     setNewFullPhone('');
-    setNewSection('');
+    setNewTargetAmount('');
     setNewAvatarUrl('');
     setNewDependents([]);
     setDuplicateWarning(null);
@@ -1020,6 +1049,9 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
     setEditPhone4(m.phoneLast4);
     setEditFullPhone(m.fullPhone || '');
     setEditSection(m.section || '');
+    setEditAbcName(m.abcName || '');
+    const yrPledge = (selectedRollYear && selectedRollYear !== 'all' && m.yearStatus?.[selectedRollYear]?.pledgeAmount) || m.pledgeAmount;
+    setEditTargetAmount(yrPledge ? String(yrPledge) : '');
     setEditAvatarUrl(m.avatarUrl || '');
     setEditDependents(m.dependents || []);
   };
@@ -1117,12 +1149,16 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
       });
 
       if (selectedRollYear && selectedRollYear !== 'all') {
+        const parsedEditPledge = editTargetAmount && parseFloat(editTargetAmount) > 0 ? parseFloat(editTargetAmount) : undefined;
         updatedYearStatus[selectedRollYear] = {
           ...(updatedYearStatus[selectedRollYear] || { status: 'active' }),
           section: cleanSection,
+          pledgeAmount: parsedEditPledge,
           updatedAt: nowIso
         };
       }
+
+      const parsedEditPledge = editTargetAmount && parseFloat(editTargetAmount) > 0 ? parseFloat(editTargetAmount) : undefined;
 
       const updatedM: MemberRecord = {
         ...editingMember,
@@ -1134,6 +1170,8 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
         phoneLast4: p4,
         fullPhone: editFullPhone.trim() || undefined,
         section: cleanSection,
+        abcName: editAbcName.trim() || undefined,
+        pledgeAmount: parsedEditPledge,
         avatarUrl: editAvatarUrl || undefined,
         isFamilyHead: true,
         dependents: updatedDeps,
@@ -1272,7 +1310,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
     return counts;
   }, [allowedCampaigns, getScopedMembersForView, members, isOpen]);
 
-  // Filtered members for Member Roll Table with Year-wise and Status filtering
+  // Filtered members for Member Roll Table with Year-wise, ABC, Section, and Status filtering
   const filteredTableMembers = useMemo(() => {
     return members.filter(m => {
       if (!m) return false;
@@ -1284,16 +1322,42 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
         if (rollStatusFilter === 'inactive' && isActiveThisYear) return false;
       }
 
+      if (abcFilter !== 'all') {
+        if ((m.abcName || '').trim() !== abcFilter) return false;
+      }
+
+      if (sectionFilter !== 'all') {
+        if ((m.section || '').trim() !== sectionFilter) return false;
+      }
+
       if (!dirSearch.trim()) return true;
       const q = dirSearch.toLowerCase().trim();
       const matchName = m.name ? m.name.toLowerCase().includes(q) : false;
       const matchId = m.id ? m.id.toLowerCase().includes(q) : false;
       const matchPhone = (m.phoneLast4 && m.phoneLast4.includes(q)) || (m.fullPhone && m.fullPhone.includes(q)) || false;
       const matchSec = m.section ? m.section.toLowerCase().includes(q) : false;
+      const matchAbc = m.abcName ? m.abcName.toLowerCase().includes(q) : false;
       const matchDep = m.dependents ? m.dependents.some(d => (d.name && d.name.toLowerCase().includes(q)) || (d.subId && d.subId.toLowerCase().includes(q))) : false;
-      return matchName || matchId || matchPhone || matchSec || matchDep;
+      return matchName || matchId || matchPhone || matchSec || matchAbc || matchDep;
     });
-  }, [members, dirSearch, selectedRollYear, rollStatusFilter]);
+  }, [members, dirSearch, selectedRollYear, rollStatusFilter, abcFilter, sectionFilter]);
+
+  // Per-member / per-church achieved collection in selectedRollYear
+  const memberAchievedMap = useMemo(() => {
+    const map = new Map<string, number>();
+    transactions.forEach(t => {
+      if (!t || !isConfirmedTransaction(t)) return;
+      if (selectedRollYear !== 'all') {
+        const txYr = t.periodYear || (t.date || t.timestamp || '').slice(0, 4);
+        if (txYr && txYr !== selectedRollYear) return;
+      }
+      const mId = (t.memberId || '').trim().toUpperCase();
+      if (mId) {
+        map.set(mId, (map.get(mId) || 0) + (Number(t.amount) || 0));
+      }
+    });
+    return map;
+  }, [transactions, selectedRollYear]);
 
   const rollYearActiveCount = useMemo(() => {
     if (selectedRollYear === 'all') return members.length;
@@ -1462,6 +1526,19 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
           </div>
           
           <div className="flex items-center gap-1.5 shrink-0 ml-2">
+            {onOpenWorkspaceSelector && (
+              <button
+                type="button"
+                id="open-workspace-selector-btn"
+                onClick={onOpenWorkspaceSelector}
+                className="px-2.5 sm:px-3 py-2 rounded-xl bg-indigo-600/80 hover:bg-indigo-500 text-white border border-indigo-400/30 transition cursor-pointer flex items-center gap-1.5 text-[11px] sm:text-xs font-black shadow-xs whitespace-nowrap"
+                title="Switch Isolated Organization Workspace"
+              >
+                <Building2 className="w-3.5 h-3.5 shrink-0" />
+                <span className="hidden sm:inline">Workspace Selector</span>
+                <span className="sm:hidden">Workspace</span>
+              </button>
+            )}
             <button 
               type="button"
               id="toggle-kumtluang-fullscreen-btn"
@@ -1486,7 +1563,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
         </div>
 
         {/* PROMINENT TOP-LEVEL QR / BAWM FILTER BAR */}
-        <div className="bg-gradient-to-r from-indigo-50/90 via-blue-50/70 to-slate-50 border-b border-indigo-100 px-4 sm:px-6 py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 shrink-0">
+        <div className="bg-gradient-to-r from-indigo-50/90 via-blue-50/70 to-slate-50 border-b border-indigo-100 px-3.5 sm:px-6 py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2 shrink-0">
           <div className="flex items-center gap-2 min-w-0">
             <div className="w-7 h-7 rounded-lg bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-xs">
               <Filter className="w-3.5 h-3.5" />
@@ -1501,8 +1578,8 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
             </div>
           </div>
           
-          <div className="flex items-center gap-2 max-w-lg w-full">
-            <div className="relative flex-1">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2 max-w-2xl w-full">
+            <div className="relative w-full sm:flex-1 min-w-0">
               <select
                 id="active-bawm-dropdown"
                 value={selectedCampaignId}
@@ -1536,37 +1613,174 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
               </div>
             </div>
 
-            {/* SECY / Creator Handover Button */}
             {activeScopedCampaign && (
-              <button
-                type="button"
-                id="btn-kumtluang-transfer"
-                onClick={() => setIsTransferModalOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-2 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white font-black text-xs rounded-xl shadow-xs transition cursor-pointer active:scale-95 shrink-0"
-                title="Creator / SECY nihna mi thar hnenah hlan chhawng rawh (Annual Office Bearer Handover)"
-              >
-                <ArrowRightLeft className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">SECY Handover</span>
-                <span className="sm:hidden">Handover</span>
-              </button>
-            )}
+              <div className="grid grid-cols-3 sm:flex items-center gap-1.5 w-full sm:w-auto shrink-0">
+                {/* SECY / Creator Handover Button */}
+                <button
+                  type="button"
+                  id="btn-kumtluang-transfer"
+                  onClick={() => setIsTransferModalOpen(true)}
+                  className="w-full sm:w-auto justify-center flex items-center gap-1 px-2.5 sm:px-3 py-2 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white font-black text-[11px] sm:text-xs rounded-xl shadow-xs transition cursor-pointer active:scale-95 shrink-0 whitespace-nowrap"
+                  title="Creator / SECY nihna mi thar hnenah hlan chhawng rawh (Annual Office Bearer Handover)"
+                >
+                  <ArrowRightLeft className="w-3.5 h-3.5 shrink-0" />
+                  <span className="hidden sm:inline">SECY Handover</span>
+                  <span className="sm:hidden">Handover</span>
+                </button>
 
-            {/* Authorized Officers & Collector Analytics Button */}
-            {activeScopedCampaign && (
-              <button
-                type="button"
-                id="btn-kumtluang-officers"
-                onClick={() => setIsAuthorizedOfficersOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-2 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white font-black text-xs rounded-xl shadow-xs transition cursor-pointer active:scale-95 shrink-0"
-                title="Authorized Persons Management & Individual Collector Analytics"
-              >
-                <ShieldCheck className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Officers & Collectors</span>
-                <span className="sm:hidden">Officers</span>
-              </button>
+                {/* Authorized Officers & Collector Analytics Button */}
+                <button
+                  type="button"
+                  id="btn-kumtluang-officers"
+                  onClick={() => setIsAuthorizedOfficersOpen(true)}
+                  className="w-full sm:w-auto justify-center flex items-center gap-1 px-2.5 sm:px-3 py-2 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white font-black text-[11px] sm:text-xs rounded-xl shadow-xs transition cursor-pointer active:scale-95 shrink-0 whitespace-nowrap"
+                  title="Authorized Persons Management & Individual Collector Analytics"
+                >
+                  <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
+                  <span className="hidden sm:inline">Officers & Collectors</span>
+                  <span className="sm:hidden">Officers</span>
+                </button>
+
+                {/* Dynamic Category Configurator Toggle Button */}
+                <button
+                  type="button"
+                  id="btn-kumtluang-category-config"
+                  onClick={() => setIsCategoryConfigOpen(prev => !prev)}
+                  className={`w-full sm:w-auto justify-center flex items-center gap-1 px-2.5 sm:px-3 py-2 font-black text-[11px] sm:text-xs rounded-xl shadow-xs transition cursor-pointer active:scale-95 shrink-0 border whitespace-nowrap ${
+                    isCategoryConfigOpen
+                      ? 'bg-indigo-700 text-white border-indigo-800'
+                      : 'bg-white hover:bg-indigo-50 text-indigo-800 border-indigo-300'
+                  }`}
+                  title="Dynamic Category Configurator (Check / Uncheck Bawm Categories & Roll Form Structure)"
+                >
+                  <CheckCircle2 className={`w-3.5 h-3.5 shrink-0 ${isCategoryConfigOpen ? 'text-amber-300' : 'text-indigo-600'}`} />
+                  <span className="hidden md:inline">Bawm Config ({campaignCategories.length})</span>
+                  <span className="md:hidden">Config ({campaignCategories.length})</span>
+                </button>
+              </div>
             )}
           </div>
         </div>
+
+        {/* INLINE DYNAMIC CATEGORY CONFIGURATOR & ROLL STRUCTURE SWITCHER PANEL */}
+        {isCategoryConfigOpen && activeScopedCampaign && (
+          <div className="bg-indigo-950 text-white px-4 sm:px-6 py-3.5 border-b border-indigo-800 space-y-3 animate-fadeIn shrink-0">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 border-b border-indigo-800/80 pb-2.5">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-black uppercase tracking-wider text-amber-300">
+                    ⚙️ Bawm Category Checkboxes & HQRS Roll Structure ({activeScopedCampaign.orgName || activeScopedCampaign.title})
+                  </span>
+                </div>
+                <p className="text-[10.5px] text-indigo-200 mt-0.5">
+                  Pawl lian leh HQRS tan category mamawh chauh <b>Check (✓)</b> la, mamawh loh chu <b>Uncheck</b> rawh. Roll Structure pawh hetah hian thlak nghal theih a ni.
+                </p>
+              </div>
+
+              {/* Roll Structure Switcher */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 w-full md:w-auto gap-1.5 bg-indigo-900/90 p-1 rounded-xl border border-indigo-700 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => handleToggleRollStructureType('standard_member')}
+                  className={`px-2.5 py-1.5 sm:py-1 rounded-lg text-[10.5px] font-black transition cursor-pointer text-center ${
+                    activeScopedCampaign.rollStructureType !== 'hqrs_hierarchy'
+                      ? 'bg-blue-500 text-white shadow-xs'
+                      : 'text-indigo-200 hover:text-white'
+                  }`}
+                >
+                  👤 Mimal / Chhungkua Roll
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleToggleRollStructureType('hqrs_hierarchy')}
+                  className={`px-2.5 py-1.5 sm:py-1 rounded-lg text-[10.5px] font-black transition cursor-pointer text-center ${
+                    activeScopedCampaign.rollStructureType === 'hqrs_hierarchy'
+                      ? 'bg-emerald-500 text-slate-950 shadow-xs'
+                      : 'text-indigo-200 hover:text-white'
+                  }`}
+                >
+                  🏛️ BCM HQRS / Bial / Kohhran Form
+                </button>
+              </div>
+            </div>
+
+            {/* 1-Click Presets & Category Checkboxes */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-[10px] font-bold text-indigo-300 uppercase">Presets:</span>
+                  <button
+                    type="button"
+                    onClick={() => handleApplyCategoryPreset(['Target', 'Thawhlawm', 'Handover'])}
+                    className="text-[10px] font-black px-2.5 py-1 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-200 border border-emerald-400/40 cursor-pointer"
+                  >
+                    🏛️ BCM HQRS (Target, Thawhlawm, Handover)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleApplyCategoryPreset(['Pathian Ram', 'Ramthar', 'Tualchhung', 'Building Fund', 'Krismas'])}
+                    className="text-[10px] font-black px-2.5 py-1 rounded-lg bg-blue-500/20 hover:bg-blue-500/30 text-blue-200 border border-blue-400/40 cursor-pointer"
+                  >
+                    ⛪ Tualchhung Kohhran (5 Heads)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleApplyCategoryPreset(['Membership Fee', 'Kumtluang Runpui', 'Building / Bungrua', 'Relief / Tanpuina'])}
+                    className="text-[10px] font-black px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 border border-amber-400/40 cursor-pointer"
+                  >
+                    🛡️ YMA / NGO (4 Heads)
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsCategoryConfigOpen(false)}
+                  className="text-[10px] font-bold text-indigo-300 hover:text-white underline cursor-pointer"
+                >
+                  Khâr Rawh (Done)
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 gap-1.5">
+                {Array.from(
+                  new Set([
+                    'Target',
+                    'Thawhlawm',
+                    'Handover',
+                    'Pathian Ram',
+                    'Ramthar',
+                    'Tualchhung',
+                    'Building Fund',
+                    'Krismas',
+                    'Relief / Tanpuina',
+                    'Membership Fee',
+                    ...campaignCategories,
+                  ])
+                ).map((cat) => {
+                  const isChecked = campaignCategories.includes(cat);
+                  return (
+                    <label
+                      key={cat}
+                      onClick={() => handleToggleCampaignCategory(cat)}
+                      className={`p-1.5 px-2.5 rounded-xl border text-left transition cursor-pointer flex items-center gap-2 select-none ${
+                        isChecked
+                          ? 'bg-emerald-500 text-slate-950 border-emerald-400 font-black shadow-2xs'
+                          : 'bg-indigo-900/50 text-indigo-200 border-indigo-800 hover:bg-indigo-900 font-medium'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={() => {}}
+                        className="w-3.5 h-3.5 accent-slate-950 rounded cursor-pointer shrink-0"
+                      />
+                      <span className="text-[10.5px] truncate">{cat}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Official Transfer Success Alert */}
         {transferSuccessInfo && (
@@ -1586,9 +1800,9 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
           </div>
         )}
 
-        {/* Tab Navigation - Ultra-Clean Single Row for Mobile & Desktop */}
+        {/* Tab Navigation - 3x2 Ergonomic Grid on Mobile, 6-Col Single Row on Desktop */}
         <div className="p-2 sm:p-3 bg-slate-50/95 border-b border-slate-200 shrink-0 space-y-2">
-          <div className="grid grid-cols-6 gap-1 sm:gap-1.5 w-full bg-slate-200/80 p-1 sm:p-1.5 rounded-2xl sm:rounded-3xl border border-slate-300 shadow-2xs">
+          <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5 w-full bg-slate-200/80 p-1.5 rounded-2xl sm:rounded-3xl border border-slate-300 shadow-2xs">
             {/* Tab 1: Quick Entry (Digit 4) */}
             <button
               type="button"
@@ -2163,14 +2377,53 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
               </div>
 
               <form onSubmit={handleRegisterMember} className="space-y-4 bg-slate-50 p-5 sm:p-6 rounded-3xl border border-slate-200">
-                <div>
-                  <h4 className="text-sm font-black text-slate-900 uppercase tracking-wide flex items-center gap-2">
-                    <UserPlus className="w-4 h-4 text-indigo-600" />
-                    <span>Chhungkaw Hotu & Dependents Registration</span>
-                  </h4>
-                  <p className="text-xs text-slate-500">
-                    Chhungkaw Hotu pui ber hming leh phone hmangin Unique ID a insiam ang a, phone nei lo chhungte tana Sub-ID siam theih a ni.
-                  </p>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-200">
+                  <div>
+                    <h4 className="text-sm font-black text-slate-900 uppercase tracking-wide flex items-center gap-2">
+                      {activeRegisterCampaign?.rollStructureType === 'hqrs_hierarchy' ? (
+                        <>
+                          <Building2 className="w-4 h-4 text-emerald-700" />
+                          <span>BCM HQRS / ABC / Pastor Bial / Kohhran Target Form</span>
+                        </>
+                      ) : (
+                        <>
+                          <UserPlus className="w-4 h-4 text-indigo-600" />
+                          <span>Chhungkaw Hotu & Dependents Registration</span>
+                        </>
+                      )}
+                    </h4>
+                    <p className="text-xs text-slate-500">
+                      {activeRegisterCampaign?.rollStructureType === 'hqrs_hierarchy'
+                        ? 'Mimal detail ziah ngai lovin ABC Hming, Pastor Bial Hming, Kohhran Hming leh Kum 1 Target Amount chauh dah luhna.'
+                        : 'Chhungkaw Hotu pui ber hming leh phone hmangin Unique ID a insiam ang a, phone nei lo chhungte tana Sub-ID siam theih a ni.'}
+                    </p>
+                  </div>
+
+                  {/* Quick Mode Switcher inside Form */}
+                  <div className="flex items-center gap-1 bg-slate-200/90 p-1 rounded-xl shrink-0 self-start sm:self-center">
+                    <button
+                      type="button"
+                      onClick={() => handleToggleRollStructureType('standard_member')}
+                      className={`px-2.5 py-1 rounded-lg text-[10px] font-black transition cursor-pointer ${
+                        activeRegisterCampaign?.rollStructureType !== 'hqrs_hierarchy'
+                          ? 'bg-white text-indigo-950 shadow-2xs'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      👤 Mimal Form
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleToggleRollStructureType('hqrs_hierarchy')}
+                      className={`px-2.5 py-1 rounded-lg text-[10px] font-black transition cursor-pointer ${
+                        activeRegisterCampaign?.rollStructureType === 'hqrs_hierarchy'
+                          ? 'bg-emerald-700 text-white shadow-2xs'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      🏛️ HQRS / Kohhran Form
+                    </button>
+                  </div>
                 </div>
 
                 {/* Target Bawm & Roll Year Selectors */}
@@ -2219,39 +2472,175 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-xs font-bold text-slate-700 block mb-1">
-                      Chhungkaw Hotu Hming (Member Full Name) <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={newHming}
-                      onChange={(e) => setNewHming(e.target.value)}
-                      placeholder="e.g. Rammuanpuia Ralte"
-                      className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-                      required
-                    />
-                  </div>
+                {/* HQRS / ABC / PASTOR BIAL / KOHHRAN HIERARCHY FIELDS */}
+                {activeRegisterCampaign?.rollStructureType === 'hqrs_hierarchy' ? (
+                  <div className="p-4 bg-emerald-50/70 border-2 border-emerald-200 rounded-2xl space-y-3.5">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {/* 1. ABC / Area Council Hming */}
+                      <div>
+                        <label className="text-xs font-black text-emerald-950 block mb-1">
+                          1. ABC (Area Council / Region) Hming
+                        </label>
+                        <select
+                          value={newAbcName}
+                          onChange={(e) => setNewAbcName(e.target.value)}
+                          className="w-full p-2.5 bg-white border border-emerald-300 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-emerald-500 focus:outline-none mb-1.5"
+                        >
+                          <option value="">-- ABC Thlang Rawh (Optional) --</option>
+                          {(activeRegisterCampaign?.definedAbcList && activeRegisterCampaign.definedAbcList.length > 0
+                            ? activeRegisterCampaign.definedAbcList
+                            : ['ABC Lunglei East', 'ABC Lunglei West', 'ABC Aizawl', 'ABC Lawngtlai', 'ABC Siaha']
+                          ).map((abc, i) => (
+                            <option key={i} value={abc}>{abc}</option>
+                          ))}
+                        </select>
+                        <input
+                          type="text"
+                          value={newAbcName}
+                          onChange={(e) => setNewAbcName(e.target.value)}
+                          placeholder="e.g. ABC Lunglei East..."
+                          className="w-full p-2 bg-white border border-emerald-200 rounded-xl text-xs font-bold text-slate-900"
+                        />
+                      </div>
 
-                  <div>
-                    <label className="text-xs font-bold text-slate-700 block mb-1">
-                      Pa Hming (Father / Guardian Name)
-                    </label>
-                    <input
-                      type="text"
-                      value={newFatherName}
-                      onChange={(e) => setNewFatherName(e.target.value)}
-                      placeholder="e.g. C. Lalthanga (Optional)"
-                      className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-                    />
+                      {/* 2. Pastor Bial Hming */}
+                      <div>
+                        <label className="text-xs font-black text-emerald-950 block mb-1">
+                          2. Pastor Bial / Area Hming <span className="text-red-500">*</span>
+                        </label>
+                        <select
+                          value={newSection}
+                          onChange={(e) => setNewSection(e.target.value)}
+                          className="w-full p-2.5 bg-white border border-emerald-300 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-emerald-500 focus:outline-none mb-1.5"
+                        >
+                          <option value="">-- Pastor Bial Thlang Rawh --</option>
+                          {(activeRegisterCampaign?.definedSections && activeRegisterCampaign.definedSections.length > 0
+                            ? activeRegisterCampaign.definedSections
+                            : ['Zobawk Bial', 'Bazar Bial', 'Chanmari Bial', 'Serkawn Bial', 'Rahsiveng Bial']
+                          ).map((sec, idx) => (
+                            <option key={idx} value={sec}>{sec}</option>
+                          ))}
+                        </select>
+                        <input
+                          type="text"
+                          value={newSection}
+                          onChange={(e) => setNewSection(e.target.value)}
+                          placeholder="e.g. Zobawk Pastor Bial..."
+                          className="w-full p-2 bg-white border border-emerald-200 rounded-xl text-xs font-bold text-slate-900"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {/* 3. Kohhran Hming / Unit Hming */}
+                      <div>
+                        <label className="text-xs font-black text-emerald-950 block mb-1">
+                          3. Kohhran Hming / Bial / Unit Hming <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={newHming}
+                          onChange={(e) => setNewHming(e.target.value)}
+                          placeholder="e.g. BCM Ebenezer, Zobawk"
+                          className="w-full p-2.5 bg-white border-2 border-emerald-400 rounded-xl text-sm font-black text-slate-900 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                          required
+                        />
+                      </div>
+
+                      {/* 4. Kum Khat Target Amount (₹) */}
+                      <div>
+                        <label className="text-xs font-black text-emerald-950 block mb-1">
+                          4. Kum Khat Target Amount (₹) <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="any"
+                          value={newTargetAmount}
+                          onChange={(e) => setNewTargetAmount(e.target.value)}
+                          placeholder="e.g. 250000"
+                          className="w-full p-2.5 bg-white border-2 border-amber-400 rounded-xl text-sm font-mono font-black text-emerald-950 focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                        />
+                      </div>
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-xs font-bold text-slate-700 block mb-1">
+                          Chhungkaw Hotu Hming (Member Full Name) <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={newHming}
+                          onChange={(e) => setNewHming(e.target.value)}
+                          placeholder="e.g. Rammuanpuia Ralte"
+                          className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                          required
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-xs font-bold text-slate-700 block mb-1">
+                          Pa Hming (Father / Guardian Name)
+                        </label>
+                        <input
+                          type="text"
+                          value={newFatherName}
+                          onChange={(e) => setNewFatherName(e.target.value)}
+                          placeholder="e.g. C. Lalthanga (Optional)"
+                          className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-xs font-bold text-slate-700 block mb-1">
+                          {activeRegisterCampaign?.sectionLabel || 'Section / Bial / Veng'} (Thlanna)
+                        </label>
+                        <select
+                          value={newSection}
+                          onChange={(e) => setNewSection(e.target.value)}
+                          className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                        >
+                          <option value="">-- Thlang Rawh ({activeRegisterCampaign?.sectionLabel || 'Bial / Section'}) --</option>
+                          {(activeRegisterCampaign?.definedSections && activeRegisterCampaign.definedSections.length > 0
+                            ? activeRegisterCampaign.definedSections
+                            : ['Bial 1 (Vengchhak)', 'Bial 2 (Vengthlang)', 'Bial 3 (Venglai)', 'Bial 4 (Field Veng)', 'General / Khawchhung']
+                          ).map((sec, idx) => (
+                            <option key={idx} value={sec}>
+                              {sec}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="text-xs font-bold text-slate-700 block mb-1">
+                          Target / Pledge Amount (₹ Optional)
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="any"
+                          value={newTargetAmount}
+                          onChange={(e) => setNewTargetAmount(e.target.value)}
+                          placeholder="e.g. 5000 (Optional)"
+                          className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-mono font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 <div>
                   <div className="flex items-center justify-between mb-1">
                     <label className="text-xs font-bold text-slate-700">
-                      Full Phone Number (Digit 10) <span className="text-red-500">*</span>
+                      {activeRegisterCampaign?.rollStructureType === 'hqrs_hierarchy'
+                        ? 'Kohhran Treasurer / Contact Phone (Digit 10 - Optional)'
+                        : 'Full Phone Number (Digit 10)'}
                     </label>
                     <span className="text-[10px] text-indigo-600 font-semibold bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-100">
                       Auto-fills Last 4 Digits
@@ -2267,13 +2656,13 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-start">
                   <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="text-xs font-bold text-slate-700 block">
+                    <div className="flex items-center justify-between mb-1 gap-1">
+                      <label className="text-xs font-bold text-slate-700 truncate">
                         Pawl Code (Prefix) <span className="text-red-500">*</span>
                       </label>
-                      <span className="text-[9.5px] text-emerald-800 font-bold bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded-md flex items-center gap-1 shadow-2xs">
+                      <span className="text-[9.5px] text-emerald-800 font-bold bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded-md flex items-center gap-1 shadow-2xs shrink-0">
                         <Lock className="w-2.5 h-2.5 text-emerald-600" />
                         <span>Predefined</span>
                       </span>
@@ -2298,9 +2687,13 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                   </div>
 
                   <div>
-                    <label className="text-xs font-bold text-slate-700 block mb-1">
-                      Phone No. Last 4 Digits <span className="text-red-500">*</span>
-                    </label>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-xs font-bold text-slate-700 truncate">
+                        {activeRegisterCampaign?.rollStructureType === 'hqrs_hierarchy'
+                          ? 'Kohhran Unique 4-Digit Code *'
+                          : 'Phone No. Last 4 Digits *'}
+                      </label>
+                    </div>
                     <input
                       type="text"
                       maxLength={4}
@@ -2315,31 +2708,14 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
 
                 {/* Preview of generated ID */}
                 <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-2xl flex items-center justify-between text-xs">
-                  <span className="text-indigo-900 font-bold">Auto-Generated Primary ID:</span>
+                  <span className="text-indigo-900 font-bold">
+                    {activeRegisterCampaign?.rollStructureType === 'hqrs_hierarchy'
+                      ? 'Auto-Generated Kohhran / Unit ID:'
+                      : 'Auto-Generated Primary ID:'}
+                  </span>
                   <span className="font-mono font-black text-indigo-950 bg-white px-2.5 py-1 rounded-lg border border-indigo-300">
                     {newOrgCode.toUpperCase() || 'EBE'}-{newPhone4 ? newPhone4.slice(-4) : 'XXXX'}
                   </span>
-                </div>
-
-                <div>
-                  <label className="text-xs font-bold text-slate-700 block mb-1">
-                    {activeRegisterCampaign?.sectionLabel || 'Section / Bial / Veng'} (Thlanna)
-                  </label>
-                  <select
-                    value={newSection}
-                    onChange={(e) => setNewSection(e.target.value)}
-                    className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-                  >
-                    <option value="">-- Thlang Rawh ({activeRegisterCampaign?.sectionLabel || 'Bial / Section'}) --</option>
-                    {(activeRegisterCampaign?.definedSections && activeRegisterCampaign.definedSections.length > 0
-                      ? activeRegisterCampaign.definedSections
-                      : ['Bial 1 (Vengchhak)', 'Bial 2 (Vengthlang)', 'Bial 3 (Venglai)', 'Bial 4 (Field Veng)', 'General / Khawchhung']
-                    ).map((sec, idx) => (
-                      <option key={idx} value={sec}>
-                        {sec}
-                      </option>
-                    ))}
-                  </select>
                 </div>
 
                 {/* Member Profile Photo Upload */}
@@ -2347,7 +2723,11 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                   <div className="flex items-center justify-between">
                     <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
                       <Camera className="w-4 h-4 text-indigo-600" />
-                      <span>Mimal Thlalak / Profile Photo (Optional)</span>
+                      <span>
+                        {activeRegisterCampaign?.rollStructureType === 'hqrs_hierarchy'
+                          ? 'Kohhran / Biak In Thlalak (Optional)'
+                          : 'Mimal Thlalak / Profile Photo (Optional)'}
+                      </span>
                     </label>
                     <span className="text-[10px] text-slate-500 font-medium">Statement Print-ah a lang ang</span>
                   </div>
@@ -2396,67 +2776,69 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                   </div>
                 </div>
 
-                {/* Dependents Addition Section */}
-                <div className="bg-white p-3.5 rounded-2xl border border-slate-200 space-y-2.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-black text-slate-900 uppercase">
-                      + Dependents (Phone nei hrang lo chhungte)
-                    </span>
-                    <span className="text-[10px] text-slate-500 font-semibold">Sub-ID Auto Generate</span>
-                  </div>
-
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={depNameInput}
-                      onChange={(e) => setDepNameInput(e.target.value)}
-                      placeholder="Chhungte Hming (e.g. Lalrinchhani)"
-                      className="flex-1 p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-                    />
-                    <select
-                      value={depRelInput}
-                      onChange={(e) => setDepRelInput(e.target.value)}
-                      className="p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800"
-                    >
-                      <option value="Nupui">Nupui</option>
-                      <option value="Pasal">Pasal</option>
-                      <option value="Fa">Fa</option>
-                      <option value="Nu">Nu</option>
-                      <option value="Pa">Pa</option>
-                      <option value="Nau">Nau</option>
-                    </select>
-                    <button
-                      type="button"
-                      onClick={handleAddDraftDependent}
-                      className="px-3 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition cursor-pointer"
-                    >
-                      Add
-                    </button>
-                  </div>
-
-                  {newDependents.length > 0 && (
-                    <div className="space-y-1.5 pt-1">
-                      {newDependents.map((dep, idx) => (
-                        <div key={idx} className="flex items-center justify-between bg-slate-50 p-2 rounded-lg border border-slate-200 text-xs">
-                          <div className="flex items-center gap-2">
-                            <span className="font-mono text-[10px] font-bold text-indigo-700 bg-indigo-100 px-1.5 py-0.2 rounded">
-                              {newOrgCode || 'EBE'}-{newPhone4.slice(-4) || 'XXXX'}-{String(idx + 1).padStart(2, '0')}
-                            </span>
-                            <span className="font-bold text-slate-900">{dep.name}</span>
-                            <span className="text-[10px] text-slate-500">({dep.relation})</span>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveDraftDependent(idx)}
-                            className="text-rose-600 hover:text-rose-800 p-1 cursor-pointer"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      ))}
+                {/* Dependents Addition Section (Hidden in HQRS Hierarchy mode) */}
+                {activeRegisterCampaign?.rollStructureType !== 'hqrs_hierarchy' && (
+                  <div className="bg-white p-3.5 rounded-2xl border border-slate-200 space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-black text-slate-900 uppercase">
+                        + Dependents (Phone nei hrang lo chhungte)
+                      </span>
+                      <span className="text-[10px] text-slate-500 font-semibold">Sub-ID Auto Generate</span>
                     </div>
-                  )}
-                </div>
+
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={depNameInput}
+                        onChange={(e) => setDepNameInput(e.target.value)}
+                        placeholder="Chhungte Hming (e.g. Lalrinchhani)"
+                        className="flex-1 p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                      />
+                      <select
+                        value={depRelInput}
+                        onChange={(e) => setDepRelInput(e.target.value)}
+                        className="p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800"
+                      >
+                        <option value="Nupui">Nupui</option>
+                        <option value="Pasal">Pasal</option>
+                        <option value="Fa">Fa</option>
+                        <option value="Nu">Nu</option>
+                        <option value="Pa">Pa</option>
+                        <option value="Nau">Nau</option>
+                      </select>
+                      <button
+                        type="button"
+                        onClick={handleAddDraftDependent}
+                        className="px-3 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition cursor-pointer"
+                      >
+                        Add
+                      </button>
+                    </div>
+
+                    {newDependents.length > 0 && (
+                      <div className="space-y-1.5 pt-1">
+                        {newDependents.map((dep, idx) => (
+                          <div key={idx} className="flex items-center justify-between bg-slate-50 p-2 rounded-lg border border-slate-200 text-xs">
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono text-[10px] font-bold text-indigo-700 bg-indigo-100 px-1.5 py-0.2 rounded">
+                                {newOrgCode || 'EBE'}-{newPhone4.slice(-4) || 'XXXX'}-{String(idx + 1).padStart(2, '0')}
+                              </span>
+                              <span className="font-bold text-slate-900">{dep.name}</span>
+                              <span className="text-[10px] text-slate-500">({dep.relation})</span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveDraftDependent(idx)}
+                              className="text-rose-600 hover:text-rose-800 p-1 cursor-pointer"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 <div className="pt-2 flex flex-col sm:flex-row gap-2.5">
                   <button
@@ -2464,7 +2846,11 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                     className="flex-1 py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-xs font-black transition shadow-md shadow-emerald-600/20 flex items-center justify-center gap-2 cursor-pointer active:scale-95"
                   >
                     <UserPlus className="w-4 h-4" />
-                    <span>Member Vawng Rawh (Save & Add Next)</span>
+                    <span>
+                      {activeRegisterCampaign?.rollStructureType === 'hqrs_hierarchy'
+                        ? 'Kohhran & Target Vawng Rawh (Save & Add Next)'
+                        : 'Member Vawng Rawh (Save & Add Next)'}
+                    </span>
                   </button>
                   <button
                     type="button"
@@ -3103,7 +3489,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2 shrink-0">
+                  <div className="flex items-center gap-2 w-full sm:w-auto min-w-0">
                     <label htmlFor="table-quick-qr-filter" className="text-[10.5px] font-bold text-slate-600 shrink-0">
                       Filter QR:
                     </label>
@@ -3112,7 +3498,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                       value={selectedCampaignId}
                       onChange={(e) => setSelectedCampaignId(e.target.value)}
                       disabled={allowedCampaigns.length === 0}
-                      className="px-2.5 py-1 bg-white border border-slate-300 rounded-xl text-xs font-black text-slate-800 focus:outline-none focus:border-indigo-500 cursor-pointer disabled:bg-slate-100 disabled:text-slate-400"
+                      className="flex-1 sm:flex-initial min-w-0 truncate px-2.5 py-1.5 bg-white border border-slate-300 rounded-xl text-xs font-black text-slate-800 focus:outline-none focus:border-indigo-500 cursor-pointer disabled:bg-slate-100 disabled:text-slate-400"
                     >
                       {isPrivilegedUser && (
                         <option value="all">🌐 All Lists ({allMembersList.length})</option>
@@ -3134,12 +3520,12 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
 
                 {/* Year-wise Member Roll (Kum bi) Control Bar */}
                 <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-3 sm:p-3.5 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-sm border border-indigo-800/60">
-                  <div className="flex items-center gap-3 flex-wrap">
-                    <div className="flex items-center gap-2">
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 sm:gap-3 flex-wrap w-full md:w-auto">
+                    <div className="flex items-center gap-2 w-full sm:w-auto">
                       <div className="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-xs">
                         <CalendarDays className="w-4 h-4" />
                       </div>
-                      <div>
+                      <div className="flex-1 sm:flex-initial">
                         <span className="text-[10px] uppercase font-black tracking-wider text-indigo-300 block">
                           Kum bi (Roll Year):
                         </span>
@@ -3147,7 +3533,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                           <select
                             value={selectedRollYear}
                             onChange={(e) => setSelectedRollYear(e.target.value)}
-                            className="bg-indigo-900/90 border border-indigo-400 text-white font-black text-xs px-2.5 py-1 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-400 cursor-pointer shadow-xs"
+                            className="w-full sm:w-auto bg-indigo-900/90 border border-indigo-400 text-white font-black text-xs px-2.5 py-1.5 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-400 cursor-pointer shadow-xs"
                           >
                             {availableRollYearsList.map(yr => (
                               <option key={yr} value={yr} className="bg-slate-900 text-white">
@@ -3164,11 +3550,11 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
 
                     {/* Status Tabs: Active vs Inactive */}
                     {selectedRollYear !== 'all' && (
-                      <div className="flex items-center bg-indigo-900/80 p-0.5 sm:p-1 rounded-xl border border-indigo-800 text-[11px] font-bold">
+                      <div className="grid grid-cols-3 sm:flex items-center bg-indigo-900/80 p-1 rounded-xl border border-indigo-800 text-[11px] font-bold w-full sm:w-auto">
                         <button
                           type="button"
                           onClick={() => setRollStatusFilter('active')}
-                          className={`px-2.5 py-1 rounded-lg transition cursor-pointer ${
+                          className={`px-2 py-1.5 sm:py-1 rounded-lg transition cursor-pointer text-center whitespace-nowrap ${
                             rollStatusFilter === 'active'
                               ? 'bg-emerald-500 text-slate-950 font-black shadow-xs'
                               : 'text-indigo-200 hover:text-white'
@@ -3179,18 +3565,18 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                         <button
                           type="button"
                           onClick={() => setRollStatusFilter('inactive')}
-                          className={`px-2.5 py-1 rounded-lg transition cursor-pointer ${
+                          className={`px-2 py-1.5 sm:py-1 rounded-lg transition cursor-pointer text-center whitespace-nowrap ${
                             rollStatusFilter === 'inactive'
                               ? 'bg-amber-400 text-slate-950 font-black shadow-xs'
                               : 'text-indigo-200 hover:text-white'
                           }`}
                         >
-                          Pem / Inactive ({rollYearInactiveCount})
+                          Pem ({rollYearInactiveCount})
                         </button>
                         <button
                           type="button"
                           onClick={() => setRollStatusFilter('all')}
-                          className={`px-2 py-1 rounded-lg transition cursor-pointer ${
+                          className={`px-2 py-1.5 sm:py-1 rounded-lg transition cursor-pointer text-center whitespace-nowrap ${
                             rollStatusFilter === 'all'
                               ? 'bg-white text-indigo-950 font-black shadow-xs'
                               : 'text-indigo-200 hover:text-white'
@@ -3203,7 +3589,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                   </div>
 
                   {/* Rollover / Annual Copy Button */}
-                  <div className="flex items-center gap-2 shrink-0">
+                  <div className="flex items-center gap-2 shrink-0 w-full md:w-auto">
                     <button
                       type="button"
                       id="btn-open-year-rollover"
@@ -3215,38 +3601,85 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                       className="w-full md:w-auto px-3.5 py-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-black text-xs rounded-xl shadow-xs transition flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
                       title="Kum hmasa a mi kum tharah chhawm rawh (Rollover / Copy forward)"
                     >
-                      <RefreshCw className="w-3.5 h-3.5" />
+                      <RefreshCw className="w-3.5 h-3.5 shrink-0" />
                       <span>Kum Thar Roll Siamna (Rollover)</span>
                     </button>
                   </div>
                 </div>
 
-                {/* Search Bar and Action Counter */}
-                <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
-                  <div className="relative w-full sm:w-80">
-                    <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-                    <input
-                      type="text"
-                      id="member-roll-filter-search-input"
-                      value={dirSearch}
-                      onChange={(e) => setDirSearch(e.target.value)}
-                      placeholder="Phone number / Hming pum / 1234"
-                      className="w-full pl-9 pr-8 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-                    />
-                    {dirSearch && (
-                      <button
-                        type="button"
-                        onClick={() => setDirSearch('')}
-                        className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 cursor-pointer"
+                {/* Search Bar, ABC / Bial Hierarchy Filters, and Action Counter */}
+                <div className="flex flex-col lg:flex-row items-center justify-between gap-3">
+                  <div className="flex flex-col sm:flex-row items-center gap-2 w-full lg:w-auto flex-1">
+                    <div className="relative w-full sm:w-64">
+                      <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                      <input
+                        type="text"
+                        id="member-roll-filter-search-input"
+                        value={dirSearch}
+                        onChange={(e) => setDirSearch(e.target.value)}
+                        placeholder={
+                          activeScopedCampaign?.rollStructureType === 'hqrs_hierarchy'
+                            ? 'Kohhran / Bial / ABC / Code...'
+                            : 'Phone number / Hming pum / 1234'
+                        }
+                        className="w-full pl-9 pr-8 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                      />
+                      {dirSearch && (
+                        <button
+                          type="button"
+                          onClick={() => setDirSearch('')}
+                          className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 cursor-pointer"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+
+                    {/* ABC Filter Dropdown (Shown in HQRS Hierarchy mode or when members have abcName) */}
+                    {(activeScopedCampaign?.rollStructureType === 'hqrs_hierarchy' || members.some(m => m.abcName)) && (
+                      <select
+                        value={abcFilter}
+                        onChange={(e) => setAbcFilter(e.target.value)}
+                        className="w-full sm:w-auto px-2.5 py-2 bg-emerald-50 border border-emerald-300 rounded-xl text-xs font-black text-emerald-950 focus:outline-none"
                       >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
+                        <option value="all">🏛️ All ABC / Regions</option>
+                        {Array.from(
+                          new Set([
+                            ...(activeScopedCampaign?.definedAbcList || []),
+                            ...members.map(m => m.abcName).filter(Boolean) as string[],
+                          ])
+                        ).map((abc, i) => (
+                          <option key={i} value={abc}>{abc}</option>
+                        ))}
+                      </select>
                     )}
+
+                    {/* Pastor Bial / Section Filter Dropdown */}
+                    <select
+                      value={sectionFilter}
+                      onChange={(e) => setSectionFilter(e.target.value)}
+                      className="w-full sm:w-auto px-2.5 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-800 focus:outline-none"
+                    >
+                      <option value="all">📍 All {activeScopedCampaign?.sectionLabel || 'Bial / Sections'}</option>
+                      {Array.from(
+                        new Set([
+                          ...(activeScopedCampaign?.definedSections || []),
+                          ...members.map(m => m.section).filter(Boolean) as string[],
+                        ])
+                      ).map((sec, i) => (
+                        <option key={i} value={sec}>{sec}</option>
+                      ))}
+                    </select>
                   </div>
 
-                  <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end flex-wrap">
-                    <span className="text-[11px] font-bold text-indigo-900 bg-indigo-100 px-3 py-1.5 rounded-xl border border-indigo-200">
-                      {filteredTableMembers.length} {filteredTableMembers.length === 1 ? 'Member' : 'Members'} Listed
+                  <div className="grid grid-cols-2 sm:flex items-center gap-2 w-full lg:w-auto lg:justify-end">
+                    <span className="text-[11px] font-bold text-indigo-900 bg-indigo-100 px-3 py-2 rounded-xl border border-indigo-200 text-center flex items-center justify-center whitespace-nowrap">
+                      {filteredTableMembers.length}{' '}
+                      {activeScopedCampaign?.rollStructureType === 'hqrs_hierarchy'
+                        ? 'Kohhran'
+                        : filteredTableMembers.length === 1
+                        ? 'Member'
+                        : 'Members'}
                     </span>
 
                     <button
@@ -3255,10 +3688,10 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                         setExcelImportInitialMode('paste');
                         setIsExcelImportOpen(true);
                       }}
-                      className="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs cursor-pointer active:scale-95 shrink-0"
+                      className="w-full sm:w-auto px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs cursor-pointer active:scale-95 shrink-0 whitespace-nowrap"
                       title="Paste member list directly from WhatsApp / Notes"
                     >
-                      <FileText className="w-3.5 h-3.5 text-indigo-200" />
+                      <FileText className="w-3.5 h-3.5 text-indigo-200 shrink-0" />
                       <span>📋 Quick Paste</span>
                     </button>
 
@@ -3268,20 +3701,24 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                         setExcelImportInitialMode('file');
                         setIsExcelImportOpen(true);
                       }}
-                      className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs cursor-pointer active:scale-95 shrink-0"
+                      className="w-full sm:w-auto px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs cursor-pointer active:scale-95 shrink-0 whitespace-nowrap"
                       title="Import members from Excel / CSV"
                     >
-                      <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-200" />
+                      <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-200 shrink-0" />
                       <span>📥 Import Excel</span>
                     </button>
 
                     <button
                       type="button"
                       onClick={() => setActiveTab('register_member')}
-                      className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs cursor-pointer active:scale-95 shrink-0"
+                      className="w-full sm:w-auto px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs cursor-pointer active:scale-95 shrink-0 whitespace-nowrap"
                     >
-                      <PlusCircle className="w-3.5 h-3.5" />
-                      <span>+ Add Member</span>
+                      <PlusCircle className="w-3.5 h-3.5 shrink-0" />
+                      <span className="truncate">
+                        {activeScopedCampaign?.rollStructureType === 'hqrs_hierarchy'
+                          ? '+ Add Kohhran'
+                          : '+ Add Member'}
+                      </span>
                     </button>
                   </div>
                 </div>
@@ -3416,13 +3853,27 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                   <table className="w-full text-left border-collapse text-xs">
                     <thead className="bg-slate-100 border-b border-slate-200 text-slate-700 font-black uppercase text-[10px] tracking-wider sticky top-0 z-10">
                       <tr>
-                        <th className="p-3">Member ID</th>
+                        <th className="p-3">
+                          {activeScopedCampaign?.rollStructureType === 'hqrs_hierarchy' ? 'Kohhran Code' : 'Member ID'}
+                        </th>
                         {selectedCampaignId === 'all' && (
                           <th className="p-3">QR / Bawm</th>
                         )}
-                        <th className="p-3">Chhungkaw Hotu & Dependents</th>
-                        <th className="p-3">Phone (Last 4)</th>
-                        <th className="p-3">Section / Bial</th>
+                        <th className="p-3">
+                          {activeScopedCampaign?.rollStructureType === 'hqrs_hierarchy'
+                            ? 'Kohhran / Unit Hming'
+                            : 'Chhungkaw Hotu & Dependents'}
+                        </th>
+                        <th className="p-3">
+                          {activeScopedCampaign?.rollStructureType === 'hqrs_hierarchy'
+                            ? 'ABC & Pastor Bial'
+                            : 'Section / Bial'}
+                        </th>
+                        <th className="p-3">
+                          {activeScopedCampaign?.rollStructureType === 'hqrs_hierarchy' || members.some(m => (m.pledgeAmount || 0) > 0)
+                            ? 'Target & Lut Zat (₹)'
+                            : 'Phone (Last 4)'}
+                        </th>
                         <th className="p-3 text-right">Actions</th>
                       </tr>
                     </thead>
@@ -3430,6 +3881,11 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                       {filteredTableMembers.map(m => {
                         const memberCamp = campaigns.find(c => c.id === m.campaignId);
                         const yearInfo = getMemberYearStatusInfo(m, selectedRollYear);
+                        const targetAmt = (selectedRollYear !== 'all' && m.yearStatus?.[selectedRollYear]?.pledgeAmount) || m.pledgeAmount || 0;
+                        const achievedAmt = memberAchievedMap.get((m.id || '').toUpperCase()) || 0;
+                        const remainingAmt = Math.max(0, targetAmt - achievedAmt);
+                        const pct = targetAmt > 0 ? Math.min(100, Math.round((achievedAmt / targetAmt) * 100)) : 0;
+                        const showTargetCol = activeScopedCampaign?.rollStructureType === 'hqrs_hierarchy' || targetAmt > 0 || members.some(x => (x.pledgeAmount || 0) > 0);
                         return (
                           <tr key={m.id} className="hover:bg-indigo-50/40 transition-colors">
                             <td className="p-3">
@@ -3464,10 +3920,13 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                                 </div>
                                 <div>
                                   <div className="font-bold text-slate-900">{m.name}</div>
-                                  {m.fatherName && (
+                                  {m.fatherName && activeScopedCampaign?.rollStructureType !== 'hqrs_hierarchy' && (
                                     <div className="text-[10px] text-slate-500 font-medium">Pa: {m.fatherName}</div>
                                   )}
-                                  {m.dependents && m.dependents.length > 0 && (
+                                  {m.fullPhone && (
+                                    <div className="text-[10px] text-slate-400 font-mono">📱 {m.fullPhone}</div>
+                                  )}
+                                  {m.dependents && m.dependents.length > 0 && activeScopedCampaign?.rollStructureType !== 'hqrs_hierarchy' && (
                                     <div className="text-[10px] text-slate-500 mt-0.5 space-x-1 flex flex-wrap gap-1">
                                       {m.dependents.map(d => (
                                         <span key={d.subId} className="inline-block bg-slate-100 text-slate-700 px-1.5 py-0.2 rounded border border-slate-200 font-mono">
@@ -3480,16 +3939,59 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                               </div>
                             </td>
 
-                            <td className="p-3 text-slate-600 font-mono font-bold">
-                              {m.fullPhone ? m.fullPhone : `****${m.phoneLast4}`}
+                            <td className="p-3 text-slate-600 font-medium">
+                              <div className="flex flex-col gap-1 items-start">
+                                {m.abcName && (
+                                  <span className="bg-emerald-50 text-emerald-900 border border-emerald-200 px-2 py-0.5 rounded-md text-[10px] font-black">
+                                    🏛️ {m.abcName}
+                                  </span>
+                                )}
+                                {m.section ? (
+                                  <span className="bg-slate-100 text-slate-800 px-2 py-0.5 rounded-md text-[10.5px] font-bold">
+                                    {m.section}
+                                  </span>
+                                ) : '-'}
+                              </div>
                             </td>
 
-                            <td className="p-3 text-slate-600 font-medium">
-                              {m.section ? (
-                                <span className="bg-slate-100 text-slate-800 px-2 py-0.5 rounded-md text-[10.5px]">
-                                  {m.section}
+                            <td className="p-3">
+                              {showTargetCol ? (
+                                targetAmt > 0 ? (
+                                  <div className="space-y-1 min-w-[150px]">
+                                    <div className="flex items-center justify-between text-[10.5px]">
+                                      <span className="font-bold text-slate-500">Target:</span>
+                                      <span className="font-mono font-black text-slate-900">₹{targetAmt.toLocaleString('en-IN')}</span>
+                                    </div>
+                                    <div className="flex items-center justify-between text-[10.5px]">
+                                      <span className="font-bold text-emerald-700">Lut ({pct}%):</span>
+                                      <span className="font-mono font-black text-emerald-700">₹{achievedAmt.toLocaleString('en-IN')}</span>
+                                    </div>
+                                    <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                      <div
+                                        className={`h-full rounded-full ${pct >= 100 ? 'bg-emerald-500' : 'bg-indigo-600'}`}
+                                        style={{ width: `${pct}%` }}
+                                      />
+                                    </div>
+                                    {remainingAmt > 0 && (
+                                      <div className="text-[9.5px] text-amber-800 font-mono font-bold">
+                                        La bang: ₹{remainingAmt.toLocaleString('en-IN')}
+                                      </div>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <div className="text-[10.5px] font-mono text-slate-600">
+                                    {achievedAmt > 0 ? (
+                                      <span className="text-emerald-700 font-black">Lut: ₹{achievedAmt.toLocaleString('en-IN')}</span>
+                                    ) : (
+                                      <span>📱 {m.fullPhone ? m.fullPhone : `****${m.phoneLast4}`}</span>
+                                    )}
+                                  </div>
+                                )
+                              ) : (
+                                <span className="text-slate-600 font-mono font-bold">
+                                  {m.fullPhone ? m.fullPhone : `****${m.phoneLast4}`}
                                 </span>
-                              ) : '-'}
+                              )}
                             </td>
 
                             <td className="p-3 text-right">
@@ -3968,6 +4470,36 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                     value={editPhone4}
                     onChange={(e) => setEditPhone4(e.target.value.replace(/[^0-9]/g, '').slice(0, 4))}
                     className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-mono font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10.5px] font-bold text-slate-700 block mb-1">
+                    ABC / Area Council Hming (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={editAbcName}
+                    onChange={(e) => setEditAbcName(e.target.value)}
+                    placeholder="e.g. ABC Lunglei East"
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-emerald-600"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[10.5px] font-bold text-slate-700 block mb-1">
+                    Kum 1 Target / Pledge Amount (₹)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    value={editTargetAmount}
+                    onChange={(e) => setEditTargetAmount(e.target.value)}
+                    placeholder="e.g. 250000"
+                    className="w-full bg-slate-50 border border-amber-300 rounded-xl p-2 text-xs font-mono font-black text-slate-900 focus:outline-none focus:bg-white focus:border-amber-600"
                   />
                 </div>
               </div>

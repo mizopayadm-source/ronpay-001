@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RONPAY — Organization Treasurer Dashboard</title>
+  <!-- Google Fonts: Plus Jakarta Sans & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+            mono: ['"JetBrains Mono"', 'monospace'],
+          }
+        }
+      }
+    };
+  </script>
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+<body class="bg-slate-50 text-slate-900 font-sans antialiased min-h-screen">
+
+  <!-- Top Organization Workspace Header -->
+  <header class="bg-white border-b border-slate-200 sticky top-0 z-30">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div class="flex items-center gap-3.5">
+        <div class="w-11 h-11 rounded-2xl bg-indigo-600 text-white flex items-center justify-center font-bold text-lg shadow-sm shrink-0">
+          B
+        </div>
+        <div>
+          <div class="flex items-center gap-2 text-xs text-slate-500">
+            <span class="font-semibold text-emerald-700">Isolated Org Workspace</span>
+            <span>&middot;</span>
+            <span class="font-mono font-semibold text-indigo-600">EBEZBK</span>
+            <span>&middot;</span>
+            <span>Zobawk, Lunglei</span>
+          </div>
+          <h1 class="text-lg sm:text-xl font-bold text-slate-900 tracking-tight">
+            BCM Ebenezer Treasury Dashboard
+          </h1>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2.5 self-start sm:self-auto">
+        <button
+          type="button"
+          onclick="exportTableToCSV()"
+          class="px-3.5 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-100 text-xs font-semibold text-slate-700 transition cursor-pointer whitespace-nowrap"
+        >
+          Export CSV Report
+        </button>
+        <button
+          type="button"
+          class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shadow-sm transition cursor-pointer whitespace-nowrap"
+        >
+          + Quick Cash Entry
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Dashboard Container -->
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6">
+
+    <!-- 1. TOP SECTION: 4 RESPONSIVE STATISTIC CARDS -->
+    <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <!-- Card 1: Total Collections -->
+      <div class="bg-white rounded-2xl p-5 shadow-sm border border-slate-200/80 flex flex-col justify-between">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-semibold text-slate-500">Total Collections (Lut)</span>
+          <div class="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+            </svg>
+          </div>
+        </div>
+        <div class="mt-3">
+          <p class="text-2xl font-bold text-slate-900 font-mono tabular-nums">₹1,48,500</p>
+          <p class="text-xs text-emerald-700 font-medium mt-1">+14.2% from last month &middot; 84 inflows</p>
+        </div>
+      </div>
+
+      <!-- Card 2: Active Target & Progress -->
+      <div class="bg-white rounded-2xl p-5 shadow-sm border border-slate-200/80 flex flex-col justify-between">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-semibold text-slate-500">Active Target Goal</span>
+          <div class="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <circle cx="12" cy="12" r="9" />
+              <circle cx="12" cy="12" r="5" />
+              <circle cx="12" cy="12" r="1" />
+            </svg>
+          </div>
+        </div>
+        <div class="mt-3">
+          <div class="flex items-baseline justify-between">
+            <p class="text-2xl font-bold text-slate-900 font-mono tabular-nums">74.2%</p>
+            <span class="text-xs text-slate-500 font-mono tabular-nums">of ₹2,00,000</span>
+          </div>
+          <div class="w-full h-2 bg-slate-100 rounded-full overflow-hidden mt-2">
+            <div class="h-full bg-indigo-600 rounded-full" style="width: 74.2%"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Card 3: Total Paid / Expenses -->
+      <div class="bg-white rounded-2xl p-5 shadow-sm border border-slate-200/80 flex flex-col justify-between">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-semibold text-slate-500">Total Paid (Hmanral)</span>
+          <div class="w-9 h-9 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M7 17L17 7M17 7H8M17 7V16" />
+            </svg>
+          </div>
+        </div>
+        <div class="mt-3">
+          <p class="text-2xl font-bold text-slate-900 font-mono tabular-nums">₹32,400</p>
+          <p class="text-xs text-slate-500 mt-1">12 verified expense vouchers</p>
+        </div>
+      </div>
+
+      <!-- Card 4: Net Treasury Balance -->
+      <div class="bg-gradient-to-br from-slate-900 to-indigo-950 text-white rounded-2xl p-5 shadow-sm flex flex-col justify-between">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-semibold text-indigo-200">Net Treasury Balance</span>
+          <div class="w-9 h-9 rounded-xl bg-white/10 text-emerald-300 flex items-center justify-center">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M21 12V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2h14a2 2 0 002-2v-5zm-4 0a1 1 0 110 2 1 1 0 010-2z" />
+            </svg>
+          </div>
+        </div>
+        <div class="mt-3">
+          <p class="text-2xl font-bold text-white font-mono tabular-nums">₹1,16,100</p>
+          <p class="text-xs text-indigo-200 mt-1 font-mono">UPI: bcm.ebenezer@sbi</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 2. MIDDLE SECTION: VISUAL STATISTICS (CHARTS) -->
+    <section class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <!-- Monthly Revenue Bar/Line Chart (2 Columns on Desktop) -->
+      <div class="lg:col-span-2 bg-white rounded-2xl p-5 sm:p-6 shadow-sm border border-slate-200/80 flex flex-col justify-between">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-4">
+          <div>
+            <h2 class="text-base font-bold text-slate-900">Monthly Revenue & Outflow</h2>
+            <p class="text-xs text-slate-500">Monthly collections received vs. verified treasury expenses (2026)</p>
+          </div>
+          <span class="text-xs font-mono text-slate-500">INR (₹)</span>
+        </div>
+        <div class="relative h-64 sm:h-72 w-full">
+          <canvas id="monthlyRevenueChart"></canvas>
+        </div>
+      </div>
+
+      <!-- Collection Progress Donut Chart (1 Column on Desktop) -->
+      <div class="bg-white rounded-2xl p-5 sm:p-6 shadow-sm border border-slate-200/80 flex flex-col justify-between">
+        <div class="mb-4">
+          <h2 class="text-base font-bold text-slate-900">Collection Progress by Bial</h2>
+          <p class="text-xs text-slate-500">Share of contributions across Bial / Sections</p>
+        </div>
+        <div class="relative h-56 w-full flex items-center justify-center">
+          <canvas id="collectionDonutChart"></canvas>
+        </div>
+        <div class="grid grid-cols-2 gap-2 pt-4 mt-2 border-t border-slate-100 text-xs">
+          <div class="flex items-center justify-between">
+            <span class="text-slate-600">Bial No I</span>
+            <span class="font-mono font-semibold text-slate-900">38%</span>
+          </div>
+          <div class="flex items-center justify-between">
+            <span class="text-slate-600">Bial No II</span>
+            <span class="font-mono font-semibold text-slate-900">27%</span>
+          </div>
+          <div class="flex items-center justify-between">
+            <span class="text-slate-600">Bial No III</span>
+            <span class="font-mono font-semibold text-slate-900">21%</span>
+          </div>
+          <div class="flex items-center justify-between">
+            <span class="text-slate-600">Bial No IV</span>
+            <span class="font-mono font-semibold text-slate-900">14%</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3. BOTTOM SECTION: RESPONSIVE RECORDS & REPORT TABLE -->
+    <section class="bg-white rounded-2xl shadow-sm border border-slate-200/80 overflow-hidden">
+      <div class="p-4 sm:p-6 border-b border-slate-200/80 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h2 class="text-base font-bold text-slate-900">Recent Transactions & Reports</h2>
+          <p class="text-xs text-slate-500">Real-time ledger of member contributions and organization expenditures</p>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2">
+          <div class="flex items-center gap-1 p-1 bg-slate-100 rounded-xl">
+            <button onclick="filterRows('all')" id="btn-all" class="px-3 py-1 rounded-lg text-xs font-semibold bg-white text-slate-900 shadow-sm cursor-pointer">All</button>
+            <button onclick="filterRows('received')" id="btn-received" class="px-3 py-1 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 cursor-pointer">Received</button>
+            <button onclick="filterRows('paid')" id="btn-paid" class="px-3 py-1 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 cursor-pointer">Paid</button>
+          </div>
+          <input
+            type="text"
+            id="searchInput"
+            oninput="filterRows(currentFilter)"
+            placeholder="Search member, Bial, ref..."
+            class="px-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500 focus:bg-white"
+          />
+        </div>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="w-full text-left border-collapse" id="ledgerTable">
+          <thead>
+            <tr class="border-b border-slate-200/80 bg-slate-50/70 text-[11px] font-semibold text-slate-500">
+              <th class="py-3.5 px-4 whitespace-nowrap">Date & Ref</th>
+              <th class="py-3.5 px-4 whitespace-nowrap">Member / Payee</th>
+              <th class="py-3.5 px-4 whitespace-nowrap">Bial / Fund Head</th>
+              <th class="py-3.5 px-4 whitespace-nowrap">Method</th>
+              <th class="py-3.5 px-4 whitespace-nowrap">Status</th>
+              <th class="py-3.5 px-4 text-right whitespace-nowrap">Amount</th>
+            </tr>
+          </thead>
+          <tbody id="ledgerBody" class="divide-y divide-slate-100 text-xs">
+            <!-- Populated by JS -->
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+  </main>
+
+  <script>
+    // 1. Sample Ledger Data
+    const transactions = [
+      { date: '09 Nov 2026', ref: 'EBEZBK-4998', name: 'Dr. Zoramthanga Fanai', section: 'Bial No I', method: 'UPI', status: 'received', amount: 2500 },
+      { date: '08 Nov 2026', ref: 'EBEZBK-8670', name: 'Tholeha Chhakchhuak', section: 'Bial No I', method: 'UPI', status: 'received', amount: 1500 },
+      { date: '07 Nov 2026', ref: 'VCH-2026-104', name: 'Biak In Sound System Repair', section: 'Maintenance Head', method: 'Cash', status: 'paid', amount: 4200 },
+      { date: '06 Nov 2026', ref: 'EBEZBK-2862', name: 'Lalduhawma Fana', section: 'Bial No II', method: 'Cash', status: 'received', amount: 2000 },
+      { date: '04 Nov 2026', ref: 'VCH-2026-103', name: 'PHE Electric & Water Bill', section: 'Utility Bill', method: 'BBPS / UPI', status: 'paid', amount: 1850 },
+      { date: '02 Nov 2026', ref: 'INK-2026-88', name: 'Pathianni Chawhma Thawhlawm', section: 'General Fund', method: 'Cash', status: 'received', amount: 14800 },
+    ];
+
+    let currentFilter = 'all';
+
+    function renderTable() {
+      const tbody = document.getElementById('ledgerBody');
+      const query = (document.getElementById('searchInput').value || '').toLowerCase().trim();
+
+      const filtered = transactions.filter(item => {
+        if (currentFilter !== 'all' && item.status !== currentFilter) return false;
+        if (query) {
+          return (
+            item.name.toLowerCase().includes(query) ||
+            item.ref.toLowerCase().includes(query) ||
+            item.section.toLowerCase().includes(query)
+          );
+        }
+        return true;
+      });
+
+      tbody.innerHTML = filtered.map(item => {
+        const isRec = item.status === 'received';
+        const badgeHtml = isRec
+          ? `<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200/70 font-semibold text-[11px]">Received</span>`
+          : `<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md bg-rose-50 text-rose-700 border border-rose-200/70 font-semibold text-[11px]">Paid</span>`;
+        const amtClass = isRec ? 'text-emerald-700' : 'text-rose-600';
+        const sign = isRec ? '+' : '-';
+
+        return `
+          <tr class="hover:bg-slate-50/80 transition-colors">
+            <td class="py-3.5 px-4 whitespace-nowrap">
+              <span class="font-medium text-slate-900 block font-mono tabular-nums">${item.date}</span>
+              <span class="text-[11px] text-slate-400 font-mono">${item.ref}</span>
+            </td>
+            <td class="py-3.5 px-4 font-semibold text-slate-900 whitespace-nowrap">${item.name}</td>
+            <td class="py-3.5 px-4 text-slate-600 whitespace-nowrap">${item.section}</td>
+            <td class="py-3.5 px-4 font-mono text-slate-600 whitespace-nowrap">${item.method}</td>
+            <td class="py-3.5 px-4 whitespace-nowrap">${badgeHtml}</td>
+            <td class="py-3.5 px-4 text-right font-mono font-bold tabular-nums whitespace-nowrap ${amtClass}">
+              ${sign}₹${item.amount.toLocaleString('en-IN')}
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function filterRows(type) {
+      currentFilter = type;
+      ['all', 'received', 'paid'].forEach(id => {
+        const btn = document.getElementById('btn-' + id);
+        if (id === type) {
+          btn.className = 'px-3 py-1 rounded-lg text-xs font-semibold bg-white text-slate-900 shadow-sm cursor-pointer';
+        } else {
+          btn.className = 'px-3 py-1 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 cursor-pointer';
+        }
+      });
+      renderTable();
+    }
+
+    function exportTableToCSV() {
+      const headers = ['Date', 'Reference', 'Member/Payee', 'Bial/Section', 'Method', 'Status', 'Amount'];
+      const rows = transactions.map(t => [t.date, t.ref, `"${t.name}"`, `"${t.section}"`, t.method, t.status.toUpperCase(), t.amount]);
+      const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'RONPAY_Org_Report.csv';
+      a.click();
+    }
+
+    // 2. Initialize Chart.js Charts
+    window.addEventListener('DOMContentLoaded', () => {
+      renderTable();
+
+      // Monthly Revenue Bar & Line Chart
+      const revCtx = document.getElementById('monthlyRevenueChart').getContext('2d');
+      new Chart(revCtx, {
+        type: 'bar',
+        data: {
+          labels: ['Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov'],
+          datasets: [
+            {
+              label: 'Collections Received (₹)',
+              data: [19500, 22400, 26800, 24100, 27200, 28500],
+              backgroundColor: '#4f46e5',
+              borderRadius: 6,
+              barPercentage: 0.55,
+            },
+            {
+              label: 'Expenses Paid (₹)',
+              data: [4200, 5100, 6800, 4900, 5350, 6050],
+              backgroundColor: '#fb7185',
+              borderRadius: 6,
+              barPercentage: 0.55,
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              position: 'top',
+              labels: { boxWidth: 10, usePointStyle: true, font: { family: 'Plus Jakarta Sans', size: 11 } }
+            }
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              grid: { color: '#f1f5f9' },
+              ticks: { font: { family: 'JetBrains Mono', size: 11 } }
+            },
+            x: {
+              grid: { display: false },
+              ticks: { font: { family: 'JetBrains Mono', size: 11 } }
+            }
+          }
+        }
+      });
+
+      // Collection Progress Donut Chart
+      const donutCtx = document.getElementById('collectionDonutChart').getContext('2d');
+      new Chart(donutCtx, {
+        type: 'doughnut',
+        data: {
+          labels: ['Bial No I', 'Bial No II', 'Bial No III', 'Bial No IV'],
+          datasets: [{
+            data: [38, 27, 21, 14],
+            backgroundColor: ['#4f46e5', '#0d9488', '#f59e0b', '#e11d48'],
+            borderWidth: 0,
+            hoverOffset: 4
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          cutout: '72%',
+          plugins: {
+            legend: { display: false }
+          }
+        }
+      });
+    });
+  </script>
+</body>
+</html>

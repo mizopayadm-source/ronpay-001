@@ -65,10 +65,10 @@ import { calculateHaversineKm, getCampaignCoordinates, formatDistance } from '..
 import { BILL_SERVICES, BCM_EBENEZER_DEFAULT_LOGO, BMP_SHILLONG_DEFAULT_LOGO } from '../data/initialData';
 import { formatDateDDMMYYYY, getCreatorExpiryStatus, isCampaignExpired } from '../utils/date';
 import { Language, TRANSLATIONS, translateDynamicText, getCampaignListTitle } from '../utils/translations';
-import { isCampaignCreator, isConfirmedTransaction, isTransactionForCampaign, getDeletedTransactionIds, DEFAULT_ANNOUNCEMENT_ITEMS, getActiveAuditorGrantsForUser } from '../utils/storage';
+import { isCampaignCreator, isConfirmedTransaction, isTransactionForCampaign, getDeletedTransactionIds, DEFAULT_ANNOUNCEMENT_ITEMS, getActiveAuditorGrantsForUser, getMembers, getStoredExpenses } from '../utils/storage';
 import { fetchTableData } from '../services/SupabaseSync';
 import { canManageCampaignExpenses } from '../utils/rbac';
-import { Megaphone, X as CloseIcon } from 'lucide-react';
+import { Megaphone, X as CloseIcon, PieChart, BarChart3, CheckSquare, ArrowUpRight, ArrowDownRight, FileSpreadsheet } from 'lucide-react';
 
 interface HomeScreenProps {
   onStartScanner: (category?: BawmCategory | 'any') => void;
@@ -253,6 +253,288 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     const isAdminFlag = creatorProfile?.isAdmin === true || creatorProfile?.phone === '9862000001';
     return Boolean(isAdminRole || isAdminFlag);
   }, [isGuestUser, creatorProfile]);
+
+  // Dual-Mode Workspace: 'hybrid' (Personal + Org) vs 'org_only' (Dedicated Organization / Accountant View)
+  const isAccountantOrOrgOnlyProfile = useMemo(() => {
+    if (!creatorProfile || isGuestUser) return false;
+    if (creatorProfile.workspaceMode === 'org_only') return true;
+    const desig = `${creatorProfile.designation || ''} ${creatorProfile.role || ''}`.toLowerCase();
+    if (desig.includes('accountant') || desig.includes('auditor')) return true;
+    return false;
+  }, [creatorProfile, isGuestUser]);
+
+  const [workspaceViewMode, setWorkspaceViewMode] = useState<'hybrid' | 'org_only'>(() => {
+    try {
+      const saved = localStorage.getItem('ronpay_home_workspace_mode');
+      if (saved === 'org_only' || saved === 'hybrid') return saved;
+    } catch {}
+    return 'hybrid';
+  });
+
+  useEffect(() => {
+    if (creatorProfile?.workspaceMode === 'org_only' || isAccountantOrOrgOnlyProfile) {
+      setWorkspaceViewMode('org_only');
+    } else if (creatorProfile?.workspaceMode === 'hybrid') {
+      try {
+        const saved = localStorage.getItem('ronpay_home_workspace_mode');
+        if (!saved) setWorkspaceViewMode('hybrid');
+      } catch {}
+    }
+  }, [creatorProfile?.workspaceMode, creatorProfile?.phone, isAccountantOrOrgOnlyProfile]);
+
+  const toggleWorkspaceViewMode = (nextMode: 'hybrid' | 'org_only') => {
+    setWorkspaceViewMode(nextMode);
+    try {
+      localStorage.setItem('ronpay_home_workspace_mode', nextMode);
+    } catch {}
+  };
+
+  const [selectedOrgCampaignId, setSelectedOrgCampaignId] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem('ronpay_selected_org_campaign_id');
+      if (saved) return saved;
+      if (typeof window !== 'undefined') {
+        const params = new URLSearchParams(window.location.search);
+        const orgParam = params.get('org') || params.get('c') || params.get('campaign') || params.get('bawm');
+        if (orgParam) return orgParam;
+      }
+    } catch {}
+    return '';
+  });
+
+  const handleSelectOrgCampaign = (id: string) => {
+    setSelectedOrgCampaignId(id);
+    try {
+      localStorage.setItem('ronpay_selected_org_campaign_id', id);
+    } catch {}
+  };
+
+  // Organization Campaigns available for the Dedicated Organization Dashboard (Strict zero-leakage scope)
+  const availableOrgCampaigns = useMemo(() => {
+    const kumtluangList = campaignsList.filter(c => c && !c.isVoided && c.category === 'kumtluang');
+
+    // 1. Super Admin sees all kumtluang campaigns
+    if (isAuthorizedAdmin) {
+      return kumtluangList.length > 0 ? kumtluangList : campaignsList.filter(c => c && !c.isVoided);
+    }
+
+    // 2. Authenticated Creator / Officer / Auditor: strictly limited to authorized campaigns
+    if (!isGuestUser && creatorProfile?.phone) {
+      const phone = creatorProfile.phone;
+      const grants = getActiveAuditorGrantsForUser(phone);
+      const grantCampIds = new Set(grants.map(g => String(g.campaignId || g.campaign_id || '').trim()));
+
+      const authorized = kumtluangList.filter(
+        c => isCampaignCreator(c, creatorProfile) || 
+             canManageCampaignExpenses(c, creatorProfile) || 
+             grantCampIds.has(String(c.id).trim())
+      );
+      if (authorized.length > 0) return authorized;
+    }
+
+    // 3. Guest / General Member: Strictly isolate to the selected or requested organization only
+    if (selectedOrgCampaignId) {
+      const matched = kumtluangList.filter(c => c.id === selectedOrgCampaignId || c.orgCode?.toUpperCase() === selectedOrgCampaignId.toUpperCase());
+      if (matched.length > 0) return matched;
+    }
+
+    // Default: strictly single active campaign (e.g. BCM Ebenezer or first available), never the full list of all orgs
+    const defaultCamp = kumtluangList.find(c => c.id === 'cmp-kumtluang-1') || kumtluangList[0];
+    return defaultCamp ? [defaultCamp] : [];
+  }, [campaignsList, isGuestUser, isAuthorizedAdmin, creatorProfile, selectedOrgCampaignId]);
+
+  const activeOrgCampaign = useMemo(() => {
+    if (selectedOrgCampaignId) {
+      const found = availableOrgCampaigns.find(c => c.id === selectedOrgCampaignId || c.orgCode?.toUpperCase() === selectedOrgCampaignId.toUpperCase());
+      if (found) return found;
+    }
+    if (!isGuestUser && creatorProfile?.phone) {
+      const owned = availableOrgCampaigns.find(c => isCampaignCreator(c, creatorProfile));
+      if (owned) return owned;
+    }
+    return availableOrgCampaigns.find(c => c.id === 'cmp-kumtluang-1') || availableOrgCampaigns[0] || null;
+  }, [selectedOrgCampaignId, availableOrgCampaigns, isGuestUser, creatorProfile]);
+
+  // Authorization check for active organization financial reports & administrative controls
+  const isAuthorizedForOrg = useMemo(() => {
+    if (!activeOrgCampaign) return false;
+    if (isAuthorizedAdmin) return true;
+    if (isGuestUser || !creatorProfile?.phone) return false;
+
+    // Creator / Owner of this campaign
+    if (isCampaignCreator(activeOrgCampaign, creatorProfile)) return true;
+
+    // Authorized Officer / Treasurer / Expense Manager
+    if (canManageCampaignExpenses(activeOrgCampaign, creatorProfile)) return true;
+
+    // Active Assigned Auditor for this campaign
+    const phone = creatorProfile.phone;
+    const grants = getActiveAuditorGrantsForUser(phone);
+    const hasAuditGrant = grants.some(
+      g => String(g.campaignId || g.campaign_id || '').trim() === String(activeOrgCampaign.id).trim()
+    );
+    if (hasAuditGrant) return true;
+
+    return false;
+  }, [activeOrgCampaign, isAuthorizedAdmin, isGuestUser, creatorProfile]);
+
+  // Comprehensive Statistics & Reports for the Active Organization Dashboard
+  const orgDashboardStats = useMemo(() => {
+    if (!activeOrgCampaign) return null;
+    const deletedIds = new Set(getDeletedTransactionIds());
+    const validTxns = transactions.filter(tx => {
+      if (!tx || deletedIds.has(tx.id)) return false;
+      if (!isConfirmedTransaction(tx)) return false;
+      return isTransactionForCampaign(tx, activeOrgCampaign);
+    });
+
+    const totalCollections = validTxns.reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0);
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const todayTxns = validTxns.filter(tx => String(tx.date || '').slice(0, 10) === todayStr);
+    const todayTotal = todayTxns.reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0);
+
+    // Members / Church Units in Roll
+    const allMembers = getMembers();
+    const orgPrefix = (activeOrgCampaign.orgCode || '').toUpperCase();
+    const orgMembers = allMembers.filter(m => {
+      if (m.campaignId === activeOrgCampaign.id) return true;
+      if (orgPrefix && m.id && m.id.toUpperCase().startsWith(orgPrefix + '-')) return true;
+      return false;
+    });
+
+    const activeRollMembers = orgMembers.filter(m => !m.isDeactivated);
+    const uniqueSections = new Set(activeRollMembers.map(m => m.section).filter(Boolean));
+    const uniqueAbcs = new Set(activeRollMembers.map(m => m.abcName).filter(Boolean));
+
+    // Calculate Target (Campaign targetAmount or sum of member/church targets)
+    const memberPledgeSum = activeRollMembers.reduce((sum, m) => sum + (Number(m.pledgeAmount) || 0), 0);
+    const activeTarget = Number(activeOrgCampaign.targetAmount) > 0
+      ? Number(activeOrgCampaign.targetAmount)
+      : memberPledgeSum;
+    const targetProgressPct = activeTarget > 0
+      ? Math.min(100, Math.round((totalCollections / activeTarget) * 100))
+      : 100;
+    const targetRemaining = Math.max(0, activeTarget - totalCollections);
+
+    // Expenses (Hmanral)
+    const allExpenses = getStoredExpenses();
+    const orgExpenses = allExpenses.filter(
+      e => e.status !== 'rejected' && (e.campaignId === activeOrgCampaign.id || (!e.campaignId && activeOrgCampaign.id === 'cmp-kumtluang-1'))
+    );
+    const totalExpenses = orgExpenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+    const netBalance = totalCollections - totalExpenses;
+
+    // Category Breakdown (for Collection Progress Donut Chart)
+    const enabledCats = Array.isArray(activeOrgCampaign.enabledCategories) && activeOrgCampaign.enabledCategories.length > 0
+      ? activeOrgCampaign.enabledCategories
+      : (Array.isArray(activeOrgCampaign.subCategories) && activeOrgCampaign.subCategories.length > 0
+          ? activeOrgCampaign.subCategories
+          : ['Pathian Ram', 'Ramthar', 'Tualchhung', 'Building', 'Thawhlawm']);
+
+    const catTotalsMap: Record<string, number> = {};
+    enabledCats.forEach(c => { catTotalsMap[c] = 0; });
+
+    validTxns.forEach(tx => {
+      const allocs = tx.subCategoryBreakdown;
+      if (allocs && typeof allocs === 'object' && Object.keys(allocs).length > 0) {
+        Object.entries(allocs).forEach(([k, val]) => {
+          const amt = Number(val) || 0;
+          if (amt > 0) {
+            catTotalsMap[k] = (catTotalsMap[k] || 0) + amt;
+          }
+        });
+      } else {
+        const sub = tx.subCategory || enabledCats[0] || 'General Collection';
+        catTotalsMap[sub] = (catTotalsMap[sub] || 0) + (Number(tx.amount) || 0);
+      }
+    });
+
+    const palette = ['#4f46e5', '#10b981', '#f59e0b', '#06b6d4', '#ec4899', '#8b5cf6', '#ef4444'];
+    const categoryBreakdown = Object.entries(catTotalsMap)
+      .map(([name, amount], idx) => ({
+        name,
+        amount,
+        pct: totalCollections > 0 ? Math.round((amount / totalCollections) * 100) : 0,
+        color: palette[idx % palette.length],
+      }))
+      .sort((a, b) => b.amount - a.amount);
+
+    // Monthly Revenue (Last 6 Months Bar Chart)
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const now = new Date();
+    const monthlySeries: { label: string; key: string; revenue: number; expense: number }[] = [];
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      monthlySeries.push({
+        label: `${monthNames[d.getMonth()]} '${String(d.getFullYear()).slice(-2)}`,
+        key: ym,
+        revenue: 0,
+        expense: 0,
+      });
+    }
+    validTxns.forEach(tx => {
+      const ym = String(tx.date || tx.timestamp || '').slice(0, 7);
+      const slot = monthlySeries.find(m => m.key === ym);
+      if (slot) slot.revenue += Number(tx.amount) || 0;
+    });
+    orgExpenses.forEach(ex => {
+      const ym = String(ex.date || ex.spentDate || '').slice(0, 7);
+      const slot = monthlySeries.find(m => m.key === ym);
+      if (slot) slot.expense += Number(ex.amount) || 0;
+    });
+    const maxMonthlyVal = Math.max(1000, ...monthlySeries.map(m => Math.max(m.revenue, m.expense)));
+
+    // Combined Recent Transactions (Received) & Expenses (Paid) for Bottom Table
+    const combinedLedger = [
+      ...validTxns.map(tx => {
+        const allocs = tx.subCategoryBreakdown;
+        return {
+          id: tx.id,
+          date: tx.date || tx.timestamp || '',
+          partyName: tx.donorName || 'Member / Contributor',
+          memberCode: tx.memberId || '-',
+          category: allocs && typeof allocs === 'object' && Object.keys(allocs).length > 0
+            ? Object.entries(allocs).filter(([, v]) => Number(v) > 0).map(([k]) => k).join(', ')
+            : (tx.subCategory || 'Collection'),
+          amount: Number(tx.amount) || 0,
+          type: 'Received' as const,
+          reference: tx.utr || tx.transactionId || tx.id.slice(-8).toUpperCase(),
+        };
+      }),
+      ...orgExpenses.map(ex => ({
+        id: ex.id,
+        date: ex.date || ex.spentDate || '',
+        partyName: ex.paidTo || ex.purpose || 'Organization Expense',
+        memberCode: ex.voucherNo || 'VOUCHER',
+        category: ex.head || ex.expenseHead || 'Hmanral / Expense',
+        amount: Number(ex.amount) || 0,
+        type: 'Paid' as const,
+        reference: ex.voucherNo || ex.id.slice(-8).toUpperCase(),
+      })),
+    ].sort((a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime());
+
+    return {
+      totalCollections,
+      todayTotal,
+      todayCount: todayTxns.length,
+      txnCount: validTxns.length,
+      activeTarget,
+      targetProgressPct,
+      targetRemaining,
+      memberCount: activeRollMembers.length,
+      sectionCount: uniqueSections.size,
+      abcCount: uniqueAbcs.size,
+      totalExpenses,
+      expenseCount: orgExpenses.length,
+      netBalance,
+      categoryBreakdown,
+      enabledCats,
+      monthlySeries,
+      maxMonthlyVal,
+      recentLedger: combinedLedger.slice(0, 12),
+    };
+  }, [activeOrgCampaign, transactions]);
 
   // Check if a campaign is active (not expired, voided, completed, cancelled, or archived)
   const isCampaignActive = (c: Campaign): boolean => {
@@ -570,18 +852,38 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-center">
+          <div className="w-full sm:w-auto flex items-center justify-between sm:justify-end gap-1.5 shrink-0 flex-wrap pt-1 sm:pt-0 border-t border-indigo-900/50 sm:border-t-0">
+            {/* Workspace Mode Switcher: Personal + Org vs Dedicated Organization Dashboard */}
+            <button
+              type="button"
+              id="home-workspace-mode-toggle-btn"
+              onClick={() => toggleWorkspaceViewMode(workspaceViewMode === 'org_only' ? 'hybrid' : 'org_only')}
+              className={`flex-1 sm:flex-initial justify-center px-2.5 py-2 sm:py-1.5 rounded-xl font-black text-[11px] sm:text-xs transition cursor-pointer flex items-center gap-1.5 shadow-sm active:scale-95 border whitespace-nowrap ${
+                workspaceViewMode === 'org_only'
+                  ? 'bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-300/60'
+                  : 'bg-slate-800/90 hover:bg-slate-700 text-indigo-200 border-indigo-400/40'
+              }`}
+              title="Switch between Personal + Org View and Dedicated Organization-Only Dashboard"
+            >
+              <Building2 className="w-3.5 h-3.5 text-amber-300 shrink-0" />
+              <span className="truncate">
+                {workspaceViewMode === 'org_only'
+                  ? '🏛️ Org-Only View'
+                  : '🌐 Mimal + Pawl'}
+              </span>
+            </button>
+
             {/* Strictly hidden in Guest Mode as requested */}
             {onOpenMemberships && !isGuestUser && (
               <button
                 type="button"
                 id="home-open-memberships-btn"
                 onClick={onOpenMemberships}
-                className="px-2.5 py-1.5 rounded-xl font-black text-xs transition cursor-pointer flex items-center gap-1.5 shadow-sm bg-indigo-600/90 hover:bg-indigo-500 text-white border border-indigo-400/40 active:scale-95"
+                className="flex-1 sm:flex-initial justify-center px-2.5 py-2 sm:py-1.5 rounded-xl font-black text-[11px] sm:text-xs transition cursor-pointer flex items-center gap-1.5 shadow-sm bg-indigo-600/90 hover:bg-indigo-500 text-white border border-indigo-400/40 active:scale-95 whitespace-nowrap"
                 title="My Memberships & Multi-Group Context"
               >
-                <Layers className="w-3.5 h-3.5 text-amber-300" />
-                <span>Pawl & Bawmte</span>
+                <Layers className="w-3.5 h-3.5 text-amber-300 shrink-0" />
+                <span className="truncate">Pawl & Bawmte</span>
               </button>
             )}
 
@@ -589,13 +891,13 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               type="button"
               id="home-open-login-btn"
               onClick={onOpenLogin}
-              className={`px-3 py-1.5 rounded-xl font-black text-xs transition cursor-pointer flex items-center gap-1.5 shadow-sm active:scale-95 ${
+              className={`flex-1 sm:flex-initial justify-center px-3 py-2 sm:py-1.5 rounded-xl font-black text-[11px] sm:text-xs transition cursor-pointer flex items-center gap-1.5 shadow-sm active:scale-95 whitespace-nowrap ${
                 creatorProfile.isApproved && creatorProfile.phone
                   ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950'
                   : 'bg-amber-400 hover:bg-amber-300 text-slate-950'
               }`}
             >
-              <LogIn className="w-3.5 h-3.5" />
+              <LogIn className="w-3.5 h-3.5 shrink-0" />
               <span>{creatorProfile.isApproved && creatorProfile.phone ? 'Switch / Login' : (language === 'mizo' ? 'Lut Rawh' : 'Login')}</span>
             </button>
           </div>
@@ -678,6 +980,703 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         </div>
       )}
 
+      {/* DEDICATED ORGANIZATION-ONLY WORKSPACE (Role-Based: Public Landing vs Admin Financial Dashboard) */}
+      {workspaceViewMode === 'org_only' && activeOrgCampaign && orgDashboardStats ? (
+        isAuthorizedForOrg ? (
+        <div className="bg-slate-50 rounded-3xl p-3 sm:p-5 border border-slate-200/90 shadow-xs space-y-4 animate-fadeIn">
+          {/* Top Organization Workspace Header & Selector */}
+          <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-200/80 flex flex-col gap-3.5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-indigo-600 to-slate-900 text-white flex items-center justify-center font-black text-lg shadow-sm shrink-0 overflow-hidden border border-indigo-200">
+                  {activeOrgCampaign.imageUrl ? (
+                    <img
+                      src={activeOrgCampaign.imageUrl}
+                      alt={activeOrgCampaign.title}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <Building2 className="w-6 h-6 text-amber-300" />
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-[9.5px] font-black uppercase tracking-wider bg-indigo-50 text-indigo-700 border border-indigo-200 px-2 py-0.5 rounded-md">
+                      🏛️ Organization-Only Workspace
+                    </span>
+                    <span className="text-[9.5px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-md">
+                      {activeOrgCampaign.rollStructureType === 'hqrs_hierarchy' ? 'HQRS / Bial / Kohhran Mode' : 'Member & Family Roll'}
+                    </span>
+                    {activeOrgCampaign.orgCode && (
+                      <span className="text-[9.5px] font-black uppercase bg-slate-900 text-amber-300 px-2 py-0.5 rounded-md font-mono">
+                        [{activeOrgCampaign.orgCode}]
+                      </span>
+                    )}
+                  </div>
+                  <h2 className="text-base sm:text-lg font-black text-slate-900 truncate mt-0.5">
+                    {activeOrgCampaign.title}
+                  </h2>
+                  <p className="text-[11px] text-slate-500 font-medium truncate">
+                    {activeOrgCampaign.subTitle || activeOrgCampaign.location || 'Dedicated Organization & Accountant Financial Dashboard (Ralna/Khawlsak/Rikrum Hidden)'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Organization Switcher & Mode Switcher */}
+              <div className="w-full sm:w-auto flex flex-col sm:items-end gap-2 shrink-0">
+                {availableOrgCampaigns.length > 1 && (
+                  <select
+                    value={activeOrgCampaign.id}
+                    onChange={(e) => handleSelectOrgCampaign(e.target.value)}
+                    className="w-full sm:w-64 bg-slate-50 border border-slate-300 text-slate-800 rounded-xl px-3 py-2 text-xs font-extrabold focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+                  >
+                    {availableOrgCampaigns.map(c => (
+                      <option key={c.id} value={c.id}>
+                        🏛️ {c.title} {c.orgCode ? `[${c.orgCode}]` : ''}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                <div className="grid grid-cols-2 sm:flex items-center gap-1.5 w-full sm:w-auto">
+                  <button
+                    type="button"
+                    onClick={() => toggleWorkspaceViewMode('hybrid')}
+                    className="w-full sm:w-auto justify-center px-2.5 py-2 sm:py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10.5px] font-extrabold border border-slate-300 transition cursor-pointer flex items-center whitespace-nowrap"
+                  >
+                    🌐 Mimal + Pawl View
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onCreateQRClick}
+                    className="w-full sm:w-auto justify-center px-2.5 py-2 sm:py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-[10.5px] font-extrabold shadow-2xs transition cursor-pointer flex items-center gap-1 whitespace-nowrap"
+                  >
+                    <PlusCircle className="w-3.5 h-3.5 shrink-0" />
+                    <span>Bawm Thar / Config</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Enabled Categories Pill Strip & Quick Action Bar */}
+            <div className="pt-2.5 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-[10px] font-black uppercase text-slate-400 mr-1 flex items-center gap-1">
+                  <CheckSquare className="w-3 h-3 text-indigo-600" /> Active Categories:
+                </span>
+                {orgDashboardStats.enabledCats.map((cat) => (
+                  <span
+                    key={cat}
+                    className="text-[10px] font-extrabold bg-indigo-50/90 text-indigo-800 border border-indigo-200/80 px-2 py-0.5 rounded-lg"
+                  >
+                    ✓ {cat}
+                  </span>
+                ))}
+              </div>
+
+              {onOpenMemberRoll && (
+                <div className="grid grid-cols-2 sm:flex items-center gap-2 w-full sm:w-auto">
+                  <button
+                    type="button"
+                    onClick={() => onOpenMemberRoll('quick_entry', activeOrgCampaign.id)}
+                    className="w-full sm:w-auto justify-center px-3 py-2 sm:py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-black shadow-2xs transition cursor-pointer flex items-center gap-1 active:scale-95 whitespace-nowrap"
+                  >
+                    <Zap className="w-3.5 h-3.5 shrink-0" />
+                    <span>Quick Entry</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onOpenMemberRoll('register_member', activeOrgCampaign.id)}
+                    className="w-full sm:w-auto justify-center px-3 py-2 sm:py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-black shadow-2xs transition cursor-pointer flex items-center gap-1 active:scale-95 whitespace-nowrap"
+                  >
+                    <Users className="w-3.5 h-3.5 shrink-0" />
+                    <span className="truncate">
+                      {activeOrgCampaign.rollStructureType === 'hqrs_hierarchy'
+                        ? '+ Bial / Kohhran'
+                        : '+ Member Roll'}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onOpenMemberRoll('expenses', activeOrgCampaign.id)}
+                    className="w-full sm:w-auto justify-center px-3 py-2 sm:py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-[11px] font-black shadow-2xs transition cursor-pointer flex items-center gap-1 active:scale-95 whitespace-nowrap"
+                  >
+                    <Receipt className="w-3.5 h-3.5 shrink-0" />
+                    <span>Hmanral</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onOpenMemberRoll('print_reports', activeOrgCampaign.id)}
+                    className="w-full sm:w-auto justify-center px-3 py-2 sm:py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-[11px] font-black shadow-2xs transition cursor-pointer flex items-center gap-1 active:scale-95 whitespace-nowrap"
+                  >
+                    <FileSpreadsheet className="w-3.5 h-3.5 text-amber-300 shrink-0" />
+                    <span>Statements</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* TOP SECTION: 4 Beautiful Statistic Cards (2x2 on Mobile, 4-col on Desktop) */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3.5">
+            {/* Card 1: Total Collections */}
+            <div className="bg-white rounded-2xl p-3 sm:p-4 shadow-sm border border-slate-200/80 flex flex-col justify-between relative overflow-hidden">
+              <div className="flex items-start justify-between gap-1.5">
+                <div className="min-w-0">
+                  <p className="text-[10px] sm:text-[11px] font-extrabold uppercase tracking-wider text-slate-400 truncate">
+                    Total Collections
+                  </p>
+                  <h3 className="text-base sm:text-2xl font-black text-slate-900 mt-1 tabular-nums truncate">
+                    ₹{orgDashboardStats.totalCollections.toLocaleString('en-IN')}
+                  </h3>
+                </div>
+                <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl sm:rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white flex items-center justify-center shadow-xs shrink-0">
+                  <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5" />
+                </div>
+              </div>
+              <div className="mt-2.5 pt-2 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-[10px] sm:text-[11px]">
+                <span className="font-extrabold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded-md inline-flex items-center gap-0.5 w-fit">
+                  <ArrowUpRight className="w-3 h-3 shrink-0" /> {orgDashboardStats.txnCount} Txns
+                </span>
+                <span className="text-slate-500 font-bold tabular-nums truncate">
+                  Vawiin: ₹{orgDashboardStats.todayTotal.toLocaleString('en-IN')}
+                </span>
+              </div>
+            </div>
+
+            {/* Card 2: Active Targets & Progress */}
+            <div className="bg-white rounded-2xl p-3 sm:p-4 shadow-sm border border-slate-200/80 flex flex-col justify-between relative overflow-hidden">
+              <div className="flex items-start justify-between gap-1.5">
+                <div className="min-w-0">
+                  <p className="text-[10px] sm:text-[11px] font-extrabold uppercase tracking-wider text-slate-400 truncate">
+                    Active Targets
+                  </p>
+                  <h3 className="text-base sm:text-2xl font-black text-indigo-950 mt-1 tabular-nums truncate">
+                    {orgDashboardStats.activeTarget > 0
+                      ? `₹${orgDashboardStats.activeTarget.toLocaleString('en-IN')}`
+                      : 'Open Target'}
+                  </h3>
+                </div>
+                <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl sm:rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 text-white flex items-center justify-center shadow-xs shrink-0">
+                  <PieChart className="w-4 h-4 sm:w-5 sm:h-5" />
+                </div>
+              </div>
+              <div className="mt-2.5 pt-2 border-t border-slate-100 space-y-1.5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-0.5 text-[10px] sm:text-[11px]">
+                  <span className="font-extrabold text-indigo-700 tabular-nums">
+                    Achieved: {orgDashboardStats.targetProgressPct}%
+                  </span>
+                  {orgDashboardStats.activeTarget > 0 && (
+                    <span className="text-slate-500 font-bold tabular-nums truncate">
+                      Bang: ₹{orgDashboardStats.targetRemaining.toLocaleString('en-IN')}
+                    </span>
+                  )}
+                </div>
+                <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-r from-indigo-600 to-emerald-500 rounded-full transition-all duration-500"
+                    style={{ width: `${orgDashboardStats.targetProgressPct}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Card 3: Active Roll (Kohhran / Members) */}
+            <div
+              onClick={() => onOpenMemberRoll && onOpenMemberRoll('members_list', activeOrgCampaign.id)}
+              className="bg-white rounded-2xl p-3 sm:p-4 shadow-sm border border-slate-200/80 flex flex-col justify-between cursor-pointer hover:border-indigo-300 transition"
+            >
+              <div className="flex items-start justify-between gap-1.5">
+                <div className="min-w-0">
+                  <p className="text-[10px] sm:text-[11px] font-extrabold uppercase tracking-wider text-slate-400 truncate">
+                    {activeOrgCampaign.rollStructureType === 'hqrs_hierarchy'
+                      ? 'Kohhran & Bial Roll'
+                      : 'Member Roll'}
+                  </p>
+                  <h3 className="text-base sm:text-2xl font-black text-slate-900 mt-1 tabular-nums truncate">
+                    {orgDashboardStats.memberCount}{' '}
+                    <span className="text-[10px] sm:text-xs font-extrabold text-slate-500">
+                      {activeOrgCampaign.rollStructureType === 'hqrs_hierarchy' ? 'Kohhran' : 'Members'}
+                    </span>
+                  </h3>
+                </div>
+                <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl sm:rounded-2xl bg-gradient-to-br from-blue-500 to-cyan-600 text-white flex items-center justify-center shadow-xs shrink-0">
+                  <Users className="w-4 h-4 sm:w-5 sm:h-5" />
+                </div>
+              </div>
+              <div className="mt-2.5 pt-2 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-[10px] sm:text-[11px]">
+                <span className="font-extrabold text-blue-700 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded-md w-fit">
+                  {orgDashboardStats.sectionCount} Bial
+                </span>
+                <span className="text-indigo-600 font-extrabold flex items-center gap-0.5">
+                  Roll En Rawh <ChevronRight className="w-3 h-3 shrink-0" />
+                </span>
+              </div>
+            </div>
+
+            {/* Card 4: Expenses & Net Balance */}
+            <div
+              onClick={() => onOpenMemberRoll && onOpenMemberRoll('expenses', activeOrgCampaign.id)}
+              className="bg-white rounded-2xl p-3 sm:p-4 shadow-sm border border-slate-200/80 flex flex-col justify-between cursor-pointer hover:border-amber-300 transition"
+            >
+              <div className="flex items-start justify-between gap-1.5">
+                <div className="min-w-0">
+                  <p className="text-[10px] sm:text-[11px] font-extrabold uppercase tracking-wider text-slate-400 truncate">
+                    Net Balance
+                  </p>
+                  <h3 className="text-base sm:text-2xl font-black text-emerald-700 mt-1 tabular-nums truncate">
+                    ₹{orgDashboardStats.netBalance.toLocaleString('en-IN')}
+                  </h3>
+                </div>
+                <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl sm:rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 text-white flex items-center justify-center shadow-xs shrink-0">
+                  <Wallet className="w-4 h-4 sm:w-5 sm:h-5" />
+                </div>
+              </div>
+              <div className="mt-2.5 pt-2 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-[10px] sm:text-[11px]">
+                <span className="font-extrabold text-rose-700 bg-rose-50 border border-rose-200 px-1.5 py-0.5 rounded-md inline-flex items-center gap-0.5 w-fit tabular-nums truncate max-w-full">
+                  <ArrowDownRight className="w-3 h-3 shrink-0" /> ₹{orgDashboardStats.totalExpenses.toLocaleString('en-IN')}
+                </span>
+                <span className="text-slate-500 font-bold">
+                  {orgDashboardStats.expenseCount} Vouchers
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* MIDDLE SECTION: Visual Statistics (Collection Progress Donut/Pie & Monthly Revenue Bar Chart) */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5">
+            {/* Chart 1: Collection Progress & Category Breakdown (Donut Chart) */}
+            <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-200/80 flex flex-col justify-between">
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <h3 className="text-xs sm:text-sm font-black text-slate-900 flex items-center gap-1.5">
+                    <PieChart className="w-4 h-4 text-indigo-600" />
+                    <span>Collection Progress & Category Share</span>
+                  </h3>
+                  <p className="text-[10.5px] text-slate-500 font-medium">
+                    Bawm chhung category hrang hrang atanga pawisa lut zat
+                  </p>
+                </div>
+                <span className="text-[10px] font-black text-indigo-700 bg-indigo-50 border border-indigo-200 px-2.5 py-1 rounded-full">
+                  {orgDashboardStats.targetProgressPct}% Target
+                </span>
+              </div>
+
+              <div className="flex flex-col sm:flex-row items-center gap-4 my-auto py-2">
+                {/* Interactive SVG Donut Chart */}
+                <div className="relative w-36 h-36 shrink-0 flex items-center justify-center">
+                  <svg className="w-36 h-36 -rotate-90" viewBox="0 0 120 120">
+                    <circle cx="60" cy="60" r="46" fill="transparent" stroke="#f1f5f9" strokeWidth="16" />
+                    {(() => {
+                      const circumference = 2 * Math.PI * 46;
+                      let accumulatedPct = 0;
+                      const nonZeroCats = orgDashboardStats.categoryBreakdown.filter(c => c.amount > 0);
+                      if (nonZeroCats.length === 0) {
+                        return (
+                          <circle
+                            cx="60"
+                            cy="60"
+                            r="46"
+                            fill="transparent"
+                            stroke="#4f46e5"
+                            strokeWidth="16"
+                            strokeDasharray={`${(orgDashboardStats.targetProgressPct / 100) * circumference} ${circumference}`}
+                          />
+                        );
+                      }
+                      return nonZeroCats.map((cat) => {
+                        const share = orgDashboardStats.totalCollections > 0 ? cat.amount / orgDashboardStats.totalCollections : 0;
+                        const strokeLen = share * circumference;
+                        const offset = accumulatedPct * circumference;
+                        accumulatedPct += share;
+                        return (
+                          <circle
+                            key={cat.name}
+                            cx="60"
+                            cy="60"
+                            r="46"
+                            fill="transparent"
+                            stroke={cat.color}
+                            strokeWidth="16"
+                            strokeDasharray={`${strokeLen} ${circumference}`}
+                            strokeDashoffset={-offset}
+                          />
+                        );
+                      });
+                    })()}
+                  </svg>
+                  <div className="absolute inset-0 flex flex-col items-center justify-center text-center px-2">
+                    <span className="text-[9.5px] font-extrabold uppercase text-slate-400">Total Lut</span>
+                    <span className="text-xs font-black text-slate-900">
+                      ₹{orgDashboardStats.totalCollections.toLocaleString('en-IN')}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Category Legend & Progress Bars */}
+                <div className="flex-1 w-full space-y-2">
+                  {orgDashboardStats.categoryBreakdown.slice(0, 6).map((cat) => (
+                    <div key={cat.name} className="space-y-1">
+                      <div className="flex items-center justify-between text-[11px]">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span
+                            className="w-2.5 h-2.5 rounded-full shrink-0"
+                            style={{ backgroundColor: cat.color }}
+                          />
+                          <span className="font-extrabold text-slate-700 truncate">{cat.name}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <span className="font-black text-slate-900">
+                            ₹{cat.amount.toLocaleString('en-IN')}
+                          </span>
+                          <span className="text-[9.5px] font-bold text-slate-400">({cat.pct}%)</span>
+                        </div>
+                      </div>
+                      <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                        <div
+                          className="h-full rounded-full transition-all duration-500"
+                          style={{ width: `${Math.max(cat.amount > 0 ? 4 : 0, cat.pct)}%`, backgroundColor: cat.color }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Chart 2: Monthly Revenue & Expense Bar Chart */}
+            <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-200/80 flex flex-col justify-between">
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <h3 className="text-xs sm:text-sm font-black text-slate-900 flex items-center gap-1.5">
+                    <BarChart3 className="w-4 h-4 text-emerald-600" />
+                    <span>Monthly Revenue & Expense Trend</span>
+                  </h3>
+                  <p className="text-[10.5px] text-slate-500 font-medium">
+                    Thla 6 kalta chhung pawisa lut (Received) leh hmanral (Paid)
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 text-[10px] font-extrabold">
+                  <span className="flex items-center gap-1 text-emerald-700">
+                    <span className="w-2.5 h-2.5 rounded-xs bg-emerald-500 inline-block" /> Received
+                  </span>
+                  <span className="flex items-center gap-1 text-rose-600">
+                    <span className="w-2.5 h-2.5 rounded-xs bg-rose-400 inline-block" /> Paid
+                  </span>
+                </div>
+              </div>
+
+              <div className="h-44 flex items-end justify-between gap-2 pt-6 pb-1 px-1 border-b border-slate-100">
+                {orgDashboardStats.monthlySeries.map((m) => {
+                  const revHeightPct = Math.max(
+                    m.revenue > 0 ? 10 : 3,
+                    Math.round((m.revenue / orgDashboardStats.maxMonthlyVal) * 100)
+                  );
+                  const expHeightPct = Math.max(
+                    m.expense > 0 ? 8 : 2,
+                    Math.round((m.expense / orgDashboardStats.maxMonthlyVal) * 100)
+                  );
+                  return (
+                    <div key={m.key} className="flex-1 flex flex-col items-center gap-1.5 h-full justify-end group">
+                      <div className="text-[9px] font-extrabold text-slate-600 truncate max-w-full">
+                        {m.revenue > 0 ? `₹${(m.revenue >= 1000 ? `${(m.revenue / 1000).toFixed(1)}k` : m.revenue)}` : '₹0'}
+                      </div>
+                      <div className="w-full flex items-end justify-center gap-1 h-28">
+                        <div
+                          className="w-3.5 sm:w-5 bg-gradient-to-t from-emerald-600 to-emerald-400 rounded-t-md transition-all duration-500 shadow-2xs"
+                          style={{ height: `${revHeightPct}%` }}
+                          title={`${m.label} Received: ₹${m.revenue.toLocaleString('en-IN')}`}
+                        />
+                        <div
+                          className="w-2.5 sm:w-3.5 bg-gradient-to-t from-rose-500 to-rose-300 rounded-t-md transition-all duration-500"
+                          style={{ height: `${expHeightPct}%` }}
+                          title={`${m.label} Paid: ₹${m.expense.toLocaleString('en-IN')}`}
+                        />
+                      </div>
+                      <span className="text-[10px] font-extrabold text-slate-500">{m.label}</span>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="pt-2.5 flex items-center justify-between text-[11px] text-slate-600">
+                <span className="font-bold">
+                  Total Received: <strong className="text-emerald-700">₹{orgDashboardStats.totalCollections.toLocaleString('en-IN')}</strong>
+                </span>
+                <span className="font-bold">
+                  Total Paid: <strong className="text-rose-600">₹{orgDashboardStats.totalExpenses.toLocaleString('en-IN')}</strong>
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* BOTTOM SECTION: Responsive Records & Report Table */}
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200/80 overflow-hidden">
+            <div className="p-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+              <div>
+                <h3 className="text-xs sm:text-sm font-black text-slate-900 flex items-center gap-1.5">
+                  <FileSpreadsheet className="w-4 h-4 text-indigo-600" />
+                  <span>Recent Transactions & Reports ({activeOrgCampaign.title})</span>
+                </h3>
+                <p className="text-[10.5px] text-slate-500 font-medium">
+                  Pawisa lut (Received) leh hmanral (Paid) chhinchhiahna hnuhnung berte
+                </p>
+              </div>
+              <div className="grid grid-cols-2 sm:flex items-center gap-2 w-full sm:w-auto">
+                {onOpenMemberRoll && (
+                  <button
+                    type="button"
+                    onClick={() => onOpenMemberRoll('print_reports', activeOrgCampaign.id)}
+                    className="w-full sm:w-auto justify-center px-3 py-2 sm:py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-[11px] font-extrabold transition cursor-pointer text-center whitespace-nowrap"
+                  >
+                    🖨️ Print Statement
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={onOpenReports}
+                  className="w-full sm:w-auto justify-center px-3 py-2 sm:py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-[11px] font-extrabold transition cursor-pointer text-center whitespace-nowrap"
+                >
+                  Full Ledger & Excel
+                </button>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse min-w-[600px]">
+                <thead>
+                  <tr className="bg-slate-50/90 border-b border-slate-200/80 text-[10px] font-black uppercase tracking-wider text-slate-500">
+                    <th className="py-2.5 px-4">Date</th>
+                    <th className="py-2.5 px-4">Member / Kohhran / Party</th>
+                    <th className="py-2.5 px-4">Category / Head</th>
+                    <th className="py-2.5 px-4">Status</th>
+                    <th className="py-2.5 px-4 text-right">Amount (₹)</th>
+                    <th className="py-2.5 px-4 text-right">Ref / Code</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-xs">
+                  {orgDashboardStats.recentLedger.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="py-8 text-center text-slate-400 font-bold">
+                        Tun dinhmunah he Bawm-ah hian transaction record a la awm lo.
+                      </td>
+                    </tr>
+                  ) : (
+                    orgDashboardStats.recentLedger.map((row) => (
+                      <tr key={`${row.type}-${row.id}`} className="hover:bg-slate-50/80 transition-colors">
+                        <td className="py-2.5 px-4 font-bold text-slate-600 whitespace-nowrap">
+                          {formatDateDDMMYYYY(row.date)}
+                        </td>
+                        <td className="py-2.5 px-4">
+                          <div className="font-extrabold text-slate-900">{row.partyName}</div>
+                          {row.memberCode && row.memberCode !== '-' && (
+                            <div className="text-[10px] font-mono font-bold text-indigo-600">{row.memberCode}</div>
+                          )}
+                        </td>
+                        <td className="py-2.5 px-4 font-bold text-slate-700">
+                          {row.category}
+                        </td>
+                        <td className="py-2.5 px-4 whitespace-nowrap">
+                          {row.type === 'Received' ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-50 text-emerald-700 border border-emerald-200">
+                              ● Received
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-rose-50 text-rose-700 border border-rose-200">
+                              ● Paid
+                            </span>
+                          )}
+                        </td>
+                        <td className={`py-2.5 px-4 text-right font-black whitespace-nowrap ${
+                          row.type === 'Received' ? 'text-emerald-700' : 'text-rose-600'
+                        }`}>
+                          {row.type === 'Received' ? '+' : '-'}₹{row.amount.toLocaleString('en-IN')}
+                        </td>
+                        <td className="py-2.5 px-4 text-right font-mono text-[10.5px] font-bold text-slate-500 whitespace-nowrap">
+                          {row.reference}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        ) : (
+        /* PUBLIC / GUEST ORGANIZATION PORTAL (Protected: No sensitive statistics, collections, or donor ledgers leaked) */
+        <div className="bg-slate-50 rounded-3xl p-3 sm:p-5 border border-slate-200/90 shadow-xs space-y-4 animate-fadeIn">
+          {/* Public Organization Identity & Welcome Card */}
+          <div className="bg-white rounded-2xl p-4 sm:p-5 shadow-sm border border-slate-200/80 flex flex-col gap-4">
+            <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+              <div className="flex items-start gap-3.5 min-w-0">
+                <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-gradient-to-br from-indigo-600 via-indigo-700 to-slate-900 text-white flex items-center justify-center font-black text-2xl shadow-md shrink-0 overflow-hidden border-2 border-indigo-200">
+                  {activeOrgCampaign.imageUrl ? (
+                    <img
+                      src={activeOrgCampaign.imageUrl}
+                      alt={activeOrgCampaign.title}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <Building2 className="w-9 h-9 text-amber-300" />
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-[10px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-md flex items-center gap-1">
+                      <ShieldCheck className="w-3 h-3 text-emerald-600" /> Official Organization Portal
+                    </span>
+                    {activeOrgCampaign.orgCode && (
+                      <span className="text-[10px] font-black uppercase bg-slate-900 text-amber-300 px-2 py-0.5 rounded-md font-mono">
+                        [{activeOrgCampaign.orgCode}]
+                      </span>
+                    )}
+                  </div>
+                  <h1 className="text-lg sm:text-2xl font-black text-slate-900 mt-1">
+                    {activeOrgCampaign.title}
+                  </h1>
+                  <p className="text-xs sm:text-sm text-slate-600 font-medium mt-0.5">
+                    {activeOrgCampaign.subTitle || activeOrgCampaign.location || 'Official Online Giving & Contribution Portal'}
+                  </p>
+                  {activeOrgCampaign.description && (
+                    <p className="text-xs text-slate-500 mt-2 leading-relaxed bg-slate-50 p-2.5 rounded-xl border border-slate-200/70">
+                      {activeOrgCampaign.description}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* Quick Mode Switcher for users who want standard personal features */}
+              <div className="shrink-0 self-start sm:self-center">
+                <button
+                  type="button"
+                  onClick={() => toggleWorkspaceViewMode('hybrid')}
+                  className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-black border border-slate-300 transition cursor-pointer flex items-center gap-1.5 shadow-2xs whitespace-nowrap active:scale-95"
+                  title="Switch to Personal + Pawl Mode"
+                >
+                  <Globe className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>🌐 Mimal + Pawl Mode</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Target Goal Progress (Safe Public View: Target Goal & Progress % without internal ledger leak) */}
+            {orgDashboardStats.activeTarget > 0 && (
+              <div className="p-3.5 sm:p-4 rounded-2xl bg-gradient-to-r from-indigo-50/80 via-white to-indigo-50/50 border border-indigo-100 shadow-2xs space-y-2">
+                <div className="flex items-center justify-between text-xs sm:text-sm">
+                  <span className="font-extrabold text-indigo-950 flex items-center gap-1.5">
+                    <TrendingUp className="w-4 h-4 text-indigo-600" /> Target / Hmalakna Goal
+                  </span>
+                  <span className="font-black text-indigo-900">
+                    ₹{orgDashboardStats.activeTarget.toLocaleString('en-IN')}
+                  </span>
+                </div>
+                <div className="w-full h-2.5 bg-slate-200/80 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-r from-emerald-500 to-indigo-600 rounded-full transition-all duration-700 shadow-2xs"
+                    style={{ width: `${Math.min(100, Math.max(5, orgDashboardStats.targetProgressPct))}%` }}
+                  />
+                </div>
+                <div className="flex items-center justify-between text-[11px] font-bold text-slate-500">
+                  <span className="text-emerald-700 font-extrabold">{orgDashboardStats.targetProgressPct}% Pek tawh a ni e</span>
+                  <span>Target Goal: ₹{orgDashboardStats.activeTarget.toLocaleString('en-IN')}</span>
+                </div>
+              </div>
+            )}
+
+            {/* Enabled Categories Pill Strip */}
+            <div className="pt-2 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-[10.5px] font-black uppercase text-slate-400 mr-1 flex items-center gap-1">
+                  <CheckSquare className="w-3 h-3 text-indigo-600" /> Thawhlawm / Giving Categories:
+                </span>
+                {orgDashboardStats.enabledCats.map((cat) => (
+                  <span
+                    key={cat}
+                    className="text-[11px] font-extrabold bg-indigo-50 text-indigo-800 border border-indigo-200/80 px-2.5 py-1 rounded-xl"
+                  >
+                    ✓ {cat}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* TWO PRIMARY ACTION BUTTONS (Lian leh Fiah tak) */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+            {/* Button 1: Thawh Rawh / Pekna (Contribute Now) */}
+            <button
+              type="button"
+              onClick={() => onSelectCampaign && onSelectCampaign(activeOrgCampaign)}
+              className="group relative bg-gradient-to-br from-emerald-600 via-emerald-700 to-teal-800 hover:from-emerald-500 hover:to-teal-700 text-white p-5 rounded-2xl shadow-md hover:shadow-lg transition cursor-pointer flex items-center justify-between gap-3 text-left border border-emerald-400/40 active:scale-[0.98]"
+            >
+              <div className="flex items-center gap-3.5 min-w-0">
+                <div className="w-12 h-12 rounded-xl bg-white/15 backdrop-blur-xs flex items-center justify-center shrink-0 border border-white/20 group-hover:scale-110 transition-transform">
+                  <Zap className="w-6 h-6 text-amber-300" />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-black text-base sm:text-lg text-white">⚡ Thawh Rawh / Pekna</span>
+                    <span className="text-[9px] font-black uppercase bg-amber-400 text-slate-950 px-1.5 py-0.2 rounded-md">
+                      DIRECT UPI
+                    </span>
+                  </div>
+                  <p className="text-xs text-emerald-100 font-medium mt-0.5 truncate">
+                    Thawhlawm, Target, emaw pekna online-in thawh nghal rawh
+                  </p>
+                </div>
+              </div>
+              <ArrowRight className="w-5 h-5 text-emerald-200 group-hover:translate-x-1 transition-transform shrink-0" />
+            </button>
+
+            {/* Button 2: Quick Entry / Passbook (Digit 4) */}
+            <button
+              type="button"
+              onClick={() => onOpenMemberRoll && onOpenMemberRoll('quick_entry', activeOrgCampaign.id)}
+              className="group relative bg-gradient-to-br from-indigo-900 via-indigo-950 to-slate-900 hover:from-indigo-800 hover:to-slate-800 text-white p-5 rounded-2xl shadow-md hover:shadow-lg transition cursor-pointer flex items-center justify-between gap-3 text-left border border-indigo-400/30 active:scale-[0.98]"
+            >
+              <div className="flex items-center gap-3.5 min-w-0">
+                <div className="w-12 h-12 rounded-xl bg-indigo-500/20 backdrop-blur-xs flex items-center justify-center shrink-0 border border-indigo-400/30 group-hover:scale-110 transition-transform">
+                  <Receipt className="w-6 h-6 text-indigo-300" />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-black text-base sm:text-lg text-white">📖 Quick Entry (Digit 4)</span>
+                    <span className="text-[9px] font-black uppercase bg-indigo-500 text-white px-1.5 py-0.2 rounded-md font-mono">
+                      PASSBOOK
+                    </span>
+                  </div>
+                  <p className="text-xs text-indigo-200 font-medium mt-0.5 truncate">
+                    Digit 4 chauh chhu lutin i mimal slip leh record en rawh
+                  </p>
+                </div>
+              </div>
+              <ArrowRight className="w-5 h-5 text-indigo-300 group-hover:translate-x-1 transition-transform shrink-0" />
+            </button>
+          </div>
+
+          {/* Security & Confidentiality Notice + Officer Login Portal */}
+          <div className="bg-white rounded-2xl p-4 sm:p-5 shadow-xs border border-slate-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-slate-600">
+            <div className="flex items-start gap-2.5 min-w-0">
+              <Info className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
+              <p className="leading-relaxed">
+                He Bawm portal hi <strong className="text-slate-900">{activeOrgCampaign.title}</strong> pual liau liauva siam a ni a. Sum dinhmun chipchiar leh management tools hi Authorized Officers (Treasurer / Accountant / Auditor) tan chauha venghim a ni.
+              </p>
+            </div>
+            {onOpenLogin && (
+              <button
+                type="button"
+                onClick={onOpenLogin}
+                className="shrink-0 px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-amber-300 text-xs font-black shadow-xs transition cursor-pointer flex items-center justify-center gap-1.5 whitespace-nowrap active:scale-95 border border-slate-800"
+              >
+                <Lock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                <span>🔐 Officer / Treasurer Login</span>
+              </button>
+            )}
+          </div>
+        </div>
+        )
+      ) : (
+      <>
       {/* 1. Money Transfer, Quick Actions & UPI */}
       <div className="bg-white p-3.5 rounded-2xl shadow-xs border border-indigo-100/80">
         <div className="flex justify-between items-center mb-2.5">
@@ -1724,6 +2723,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           </div>
         )}
       </div>
+      </>
+      )}
 
       <CampaignTransferModal
         isOpen={isTransferModalOpen}

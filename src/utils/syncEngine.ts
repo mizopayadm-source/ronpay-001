@@ -344,35 +344,23 @@ export async function syncAllWithServer(forceAuthoritative: boolean = false): Pr
           });
 
           const memMap = new Map<string, any>();
-          
-          // Seed authoritative server members first
+
+          // Seed authoritative server/Supabase members first
           for (const sm of cleanServerMembers) {
             memMap.set(String(sm.id).toLowerCase().trim(), sm);
           }
 
-          // Merge local members intelligently preserving user edits and strictly respecting deletions
+          // Only let a local member override a server member if local has a strictly newer updatedAt timestamp
           for (const lm of localMembers) {
             const k = String(lm.id).toLowerCase().trim();
             if (deletedMemIds.has(k)) continue;
 
-            if (!memMap.has(k)) {
-              memMap.set(k, lm);
-            } else {
+            if (memMap.has(k)) {
               const existing = memMap.get(k);
-              const localTime = new Date(lm.updatedAt || lm.createdAt || 0).getTime();
-              const serverTime = new Date(existing.updatedAt || existing.createdAt || 0).getTime();
-              if (localTime >= serverTime) {
+              const localTime = lm.updatedAt ? new Date(lm.updatedAt).getTime() : 0;
+              const serverTime = existing.updatedAt ? new Date(existing.updatedAt).getTime() : 0;
+              if (localTime > serverTime) {
                 memMap.set(k, { ...existing, ...lm });
-              } else {
-                // Keep server record, but if local record has edited name/section, preserve local user edits
-                memMap.set(k, {
-                  ...existing,
-                  name: (lm.updatedAt && lm.name) ? lm.name : existing.name,
-                  section: (lm.section !== undefined && lm.section !== null) ? lm.section : existing.section,
-                  fullPhone: lm.fullPhone || existing.fullPhone,
-                  dependents: (lm.dependents && lm.dependents.length > 0) ? lm.dependents : existing.dependents,
-                  updatedAt: lm.updatedAt || existing.updatedAt
-                });
               }
             }
           }

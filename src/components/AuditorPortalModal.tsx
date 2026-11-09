@@ -185,9 +185,13 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
     const activeGrants = getActiveAuditorGrantsForUser(phone);
     const grantCampIds = new Set(activeGrants.map(g => String(g.campaignId || g.campaign_id || '').trim()));
     const filtered = mergedList.filter(
-      c => grantCampIds.has(String(c.id).trim()) || isCampaignCreator(c, creatorProfile || null) || (campaign && c.id === campaign.id)
+      c => grantCampIds.has(String(c.id).trim()) || isCampaignCreator(c, creatorProfile || null)
     );
-    return filtered.length > 0 ? filtered : (campaign ? [campaign] : []);
+    if (filtered.length > 0) return filtered;
+    if (campaign && (grantCampIds.has(String(campaign.id).trim()) || isCampaignCreator(campaign, creatorProfile || null))) {
+      return [campaign];
+    }
+    return campaign ? [campaign] : [];
   }, [campaigns, campaign, isAdmin, creatorProfile, tick]);
 
   // Sign & Lock inputs
