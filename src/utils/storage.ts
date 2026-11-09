@@ -38,22 +38,54 @@ export const PERMANENTLY_PURGED_CAMPAIGN_IDS = new Set([
   'cmp-1790613933759',
   'cmp-1790611183923',
   'cmp-1790611018907',
-  'cmp-1790610970360'
+  'cmp-1790610970360',
+  'cmp-1794157985311'
+]);
+
+export const RESTORED_EXPIRED_CAMPAIGN_IDS = new Set([
+  'cmp-1787917594696',
+  'cmp-1788526889943',
+  'cmp-1788262396368',
+  'cmp-1792691263771',
+  'cmp-1789722801941',
+  'cmp-1789722668042',
+  'cmp-1789722498375',
+  'cmp-1789722358527',
+  'cmp-khawlsak-3',
+  'cmp-ralna-2',
+  'cmp-ralna-1',
+  'cmp-rikrum-1',
+  'cmp-1787569484926',
+  'cmp-khawlsak-2',
+  'cmp-khawlsak-1'
 ]);
 
 export const getDeletedCampaignIds = (): Set<string> => {
   const result = new Set<string>();
   for (const id of PERMANENTLY_PURGED_CAMPAIGN_IDS) {
-    if (id) result.add(id.toLowerCase().trim());
+    const clean = id ? id.toLowerCase().trim() : '';
+    if (clean && !RESTORED_EXPIRED_CAMPAIGN_IDS.has(clean)) {
+      result.add(clean);
+    }
   }
   try {
     const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(DELETED_CAMPAIGN_IDS_KEY) : null;
     if (raw) {
       const arr = JSON.parse(raw);
       if (Array.isArray(arr)) {
+        let cleaned = false;
         arr.forEach(id => {
-          if (id) result.add(String(id).toLowerCase().trim());
+          const clean = String(id).toLowerCase().trim();
+          if (RESTORED_EXPIRED_CAMPAIGN_IDS.has(clean)) {
+            cleaned = true;
+          } else if (clean) {
+            result.add(clean);
+          }
         });
+        if (cleaned && typeof localStorage !== 'undefined') {
+          const filtered = arr.filter(id => !RESTORED_EXPIRED_CAMPAIGN_IDS.has(String(id).toLowerCase().trim()));
+          localStorage.setItem(DELETED_CAMPAIGN_IDS_KEY, JSON.stringify(filtered));
+        }
       }
     }
   } catch (e) {}

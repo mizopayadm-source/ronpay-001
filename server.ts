@@ -4559,11 +4559,13 @@ function autoHealDatabase(db: DatabaseSchema): boolean {
     }
   }
 
-  // Clean up purged test/deleted campaigns
-  const PURGED_CAMPAIGNS = new Set(['cmp-1787545326556', 'cmp-chk-mu6on2s6', 'cmp-chk-mu6ojr7t', 'cmp-chhungkaw-2', 'cmp-chhungkaw-1', 'cmp-kumtluang-ymavt']);
+  // Clean up purged synthetic test campaigns (keep valid expired Ralna/Khawlsak campaigns intact)
+  const PURGED_CAMPAIGNS = new Set([
+    'cmp-1787545326556', 'cmp-chk-mu6on2s6', 'cmp-chk-mu6ojr7t', 'cmp-chhungkaw-2', 'cmp-chhungkaw-1', 'cmp-kumtluang-ymavt', 'cmp-1794157985311'
+  ]);
   if (Array.isArray(db.campaigns)) {
     const beforeCampLen = db.campaigns.length;
-    db.campaigns = db.campaigns.filter(c => !PURGED_CAMPAIGNS.has(String(c.id || '').toLowerCase().trim()));
+    db.campaigns = db.campaigns.filter(c => c && c.id && !PURGED_CAMPAIGNS.has(String(c.id).toLowerCase().trim()));
     if (db.campaigns.length !== beforeCampLen) changed = true;
   }
   if (!Array.isArray(db.deletedCampaignIds)) db.deletedCampaignIds = [];
@@ -4572,6 +4574,31 @@ function autoHealDatabase(db: DatabaseSchema): boolean {
       db.deletedCampaignIds.push(pc);
       changed = true;
     }
+  }
+
+  // Cascade purged campaigns deletion directly to Supabase cloud
+  const sbConfig = (db as any).supabaseConfig || {};
+  const sbUrl = sbConfig.url || process.env.VITE_SUPABASE_URL || 'https://aqrplcmpealgruduwnhw.supabase.co';
+  const sbKey = sbConfig.anonKey || process.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable__zS5fiKvBI5u6HYgour64g_g_tJj5WL';
+  if (sbUrl && sbKey && PURGED_CAMPAIGNS.size > 0) {
+    fetch(`${sbUrl}/rest/v1/campaigns?id=in.(${Array.from(PURGED_CAMPAIGNS).join(',')})`, {
+      method: 'DELETE',
+      headers: {
+        'apikey': sbKey,
+        'Authorization': `Bearer ${sbKey}`
+      }
+    }).catch(() => {});
+  }
+
+  // Reassign any transactions associated with purged campaigns to main BCM Ebenezer campaign
+  if (Array.isArray(db.transactions)) {
+    db.transactions.forEach((t: any) => {
+      if (t && t.campaignId && PURGED_CAMPAIGNS.has(String(t.campaignId).toLowerCase().trim())) {
+        t.campaignId = 'cmp-kumtluang-1';
+        t.campaignTitle = 'BCM Ebenezer, Zobawk';
+        changed = true;
+      }
+    });
   }
 
   // Clean up purged test members (do NOT purge BCM/EBE members!)
