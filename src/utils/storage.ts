@@ -5832,17 +5832,84 @@ export const reviewModificationRequest = (
   }
 };
 
+export const normalizeAuditorKey = (auditorPhone?: string, auditorName?: string): string => {
+  const cleanPhone = String(auditorPhone || '').replace(/\D/g, '').slice(-10);
+  if (cleanPhone.length === 10) return cleanPhone;
+  const slug = String(auditorName || 'auditor').toLowerCase().trim().replace(/\s+/g, '_');
+  return slug || 'auditor';
+};
+
 export const markRecordAuditVerification = (
   recordId: string,
   recordType: 'transaction' | 'expense',
   mark: 'verified' | 'flagged' | undefined,
   auditorName: string,
   queryNote?: string,
-  forceUnlock?: boolean
+  forceUnlock?: boolean,
+  auditorPhone?: string
 ): boolean => {
   const nowIso = new Date().toISOString();
   const cleanId = String(recordId).toLowerCase().trim();
   const isClearing = mark === undefined;
+  const profile = getStoredCreatorProfile();
+  const effPhone = auditorPhone || profile?.phone || '';
+  const effName = auditorName || profile?.name || 'Auditor';
+  const aKey = normalizeAuditorKey(effPhone, effName);
+
+  const computeMultiAuditorState = (rec: any) => {
+    const existingMap: Record<string, any> = {
+      ...(rec.metadata?.auditor_verifications || {}),
+      ...(rec.auditor_verifications || {})
+    };
+    if (isClearing) {
+      existingMap[aKey] = {
+        auditorKey: aKey,
+        auditorPhone: effPhone,
+        auditorName: effName,
+        mark: 'unchecked',
+        query: '',
+        markedAt: nowIso
+      };
+    } else {
+      existingMap[aKey] = {
+        auditorKey: aKey,
+        auditorPhone: effPhone,
+        auditorName: effName,
+        mark,
+        query: mark === 'flagged' ? (queryNote !== undefined ? queryNote : (existingMap[aKey]?.query || rec.audit_query || '')) : '',
+        markedAt: nowIso
+      };
+    }
+
+    const activeEntries = Object.values(existingMap).filter((v: any) => v && (v.mark === 'verified' || v.mark === 'flagged'));
+    const flaggedEntries = activeEntries.filter((v: any) => v.mark === 'flagged');
+    const verifiedEntries = activeEntries.filter((v: any) => v.mark === 'verified');
+
+    let resolvedMark: 'verified' | 'flagged' | undefined = undefined;
+    let resolvedQuery: string | undefined = undefined;
+    let resolvedMarkedBy: string | undefined = undefined;
+    let resolvedMarkedAt: string | undefined = undefined;
+
+    if (flaggedEntries.length > 0) {
+      resolvedMark = 'flagged';
+      resolvedQuery = flaggedEntries.map((f: any) => `${f.auditorName}: ${f.query || 'Query'}`).join(' | ');
+      resolvedMarkedBy = flaggedEntries.map((f: any) => f.auditorName).join(', ');
+      resolvedMarkedAt = nowIso;
+    } else if (verifiedEntries.length > 0) {
+      resolvedMark = 'verified';
+      resolvedMarkedBy = verifiedEntries.map((v: any) => v.auditorName).join(', ');
+      resolvedMarkedAt = nowIso;
+    }
+
+    return {
+      existingMap,
+      resolvedMark,
+      resolvedQuery,
+      resolvedMarkedBy,
+      resolvedMarkedAt
+    };
+  };
+
   try {
     if (recordType === 'transaction') {
       const txs = getStoredTransactions();
@@ -5850,19 +5917,31 @@ export const markRecordAuditVerification = (
       const updated = txs.map(t => {
         if (String(t.id).toLowerCase().trim() === cleanId) {
           const shouldUnlock = isClearing || forceUnlock;
+          const { existingMap, resolvedMark, resolvedQuery, resolvedMarkedBy, resolvedMarkedAt } = computeMultiAuditorState(t);
+          const nextMeta = {
+            ...(t.metadata || {}),
+            audit_mark: resolvedMark || null,
+            audit_query: resolvedQuery || null,
+            audit_marked_by: resolvedMarkedBy || null,
+            audit_marked_at: resolvedMarkedAt || null,
+            auditor_verifications: existingMap,
+            is_locked: shouldUnlock ? false : Boolean(t.is_locked)
+          };
           modifiedTx = {
             ...t,
-            audit_mark: mark,
-            audit_query: isClearing ? undefined : (queryNote !== undefined ? queryNote : t.audit_query),
-            audit_marked_by: mark ? auditorName : undefined,
-            audit_marked_at: mark ? nowIso : undefined,
+            audit_mark: resolvedMark,
+            audit_query: resolvedQuery,
+            audit_marked_by: resolvedMarkedBy,
+            audit_marked_at: resolvedMarkedAt,
+            auditor_verifications: existingMap,
             is_locked: shouldUnlock ? false : Boolean(t.is_locked),
             locked_by: shouldUnlock ? undefined : t.locked_by,
             locked_at: shouldUnlock ? undefined : t.locked_at,
             audit_date: shouldUnlock ? undefined : t.audit_date,
             audit_period: shouldUnlock ? undefined : t.audit_period,
             isSynced: false,
-            updatedAt: nowIso
+            updatedAt: nowIso,
+            metadata: nextMeta
           };
           return modifiedTx;
         }
@@ -5874,6 +5953,20 @@ export const markRecordAuditVerification = (
         import('../services/SupabaseSync').then(({ upsertTransaction }) => {
           upsertTransaction(txToSync).catch(() => {});
         }).catch(() => {});
+        safeApiFetch('/api/audit/sync-action', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            recordId: cleanId,
+            recordType: 'transaction',
+            auditorKey: aKey,
+            auditorName: effName,
+            auditorPhone: effPhone,
+            mark: isClearing ? 'unchecked' : mark,
+            query: queryNote,
+            forceUnlock: Boolean(isClearing || forceUnlock)
+          })
+        }).catch(() => {});
       }
     } else {
       const exps = getStoredExpenses();
@@ -5881,18 +5974,30 @@ export const markRecordAuditVerification = (
       const updated = exps.map(e => {
         if (String(e.id).toLowerCase().trim() === cleanId) {
           const shouldUnlock = isClearing || forceUnlock;
+          const { existingMap, resolvedMark, resolvedQuery, resolvedMarkedBy, resolvedMarkedAt } = computeMultiAuditorState(e);
+          const nextMeta = {
+            ...(e.metadata || {}),
+            audit_mark: resolvedMark || null,
+            audit_query: resolvedQuery || null,
+            audit_marked_by: resolvedMarkedBy || null,
+            audit_marked_at: resolvedMarkedAt || null,
+            auditor_verifications: existingMap,
+            is_locked: shouldUnlock ? false : Boolean(e.is_locked)
+          };
           modifiedExp = {
             ...e,
-            audit_mark: mark,
-            audit_query: isClearing ? undefined : (queryNote !== undefined ? queryNote : e.audit_query),
-            audit_marked_by: mark ? auditorName : undefined,
-            audit_marked_at: mark ? nowIso : undefined,
+            audit_mark: resolvedMark,
+            audit_query: resolvedQuery,
+            audit_marked_by: resolvedMarkedBy,
+            audit_marked_at: resolvedMarkedAt,
+            auditor_verifications: existingMap,
             is_locked: shouldUnlock ? false : Boolean(e.is_locked),
             locked_by: shouldUnlock ? undefined : e.locked_by,
             locked_at: shouldUnlock ? undefined : e.locked_at,
             audit_date: shouldUnlock ? undefined : e.audit_date,
             audit_period: shouldUnlock ? undefined : e.audit_period,
-            updatedAt: nowIso
+            updatedAt: nowIso,
+            metadata: nextMeta
           };
           return modifiedExp;
         }
@@ -5903,6 +6008,20 @@ export const markRecordAuditVerification = (
         const expToSync = modifiedExp;
         import('../services/SupabaseSync').then(({ upsertExpense }) => {
           upsertExpense(expToSync).catch(() => {});
+        }).catch(() => {});
+        safeApiFetch('/api/audit/sync-action', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            recordId: cleanId,
+            recordType: 'expense',
+            auditorKey: aKey,
+            auditorName: effName,
+            auditorPhone: effPhone,
+            mark: isClearing ? 'unchecked' : mark,
+            query: queryNote,
+            forceUnlock: Boolean(isClearing || forceUnlock)
+          })
         }).catch(() => {});
       }
     }
@@ -5917,37 +6036,152 @@ export const lockCampaignAuditPeriod = (
   campaignId: string,
   auditor: string | { name: string; phone?: string },
   periodLabel: string,
-  notes?: string
-): { lockedCount: number; lockedTransactionsCount: number; lockedExpensesCount: number } => {
+  notes?: string,
+  options?: { isDualAuditMode?: boolean; totalActiveAuditors?: number; forceFinalLock?: boolean }
+): {
+  lockedCount: number;
+  lockedTransactionsCount: number;
+  lockedExpensesCount: number;
+  isAwaitingCoAuditor?: boolean;
+  requiredAuditors?: number;
+  signedAuditors?: string[];
+} => {
   let txCount = 0;
   let expCount = 0;
   const nowIso = new Date().toISOString();
   const cleanCampId = String(campaignId).toLowerCase().trim();
+  const profile = getStoredCreatorProfile();
   const auditorName = typeof auditor === 'string' ? auditor : auditor.name;
-  const auditorPhone = typeof auditor === 'string' ? 'N/A' : (auditor.phone || 'N/A');
+  const auditorPhone = typeof auditor === 'string' ? (profile?.phone || '') : (auditor.phone || profile?.phone || '');
+  const aKey = normalizeAuditorKey(auditorPhone, auditorName);
+
+  const camps = getStoredCampaigns();
+  const targetCamp = camps.find(c => String(c.id).toLowerCase().trim() === cleanCampId);
+
+  // Determine active appointed auditors for this campaign
+  const allGrants = getStoredAuditorGrants().filter(
+    g => String(g.campaignId || g.campaign_id || '').toLowerCase().trim() === cleanCampId && g.status === 'active'
+  );
+  const uniqueGrantKeys = new Set(allGrants.map(g => normalizeAuditorKey(g.auditorPhone || g.auditor_phone, g.auditorName || g.auditor_name)));
+  const totalAuditors = options?.totalActiveAuditors ?? Math.max(1, uniqueGrantKeys.size);
+  const isDualMode = options?.isDualAuditMode ?? (totalAuditors >= 2 || Boolean(targetCamp?.requireDualAuditorConsensus));
+
+  // Record this auditor's sign-off in campaign.auditSignOffs
+  const prevSignOffs = Array.isArray(targetCamp?.auditSignOffs) ? [...targetCamp!.auditSignOffs!] : [];
+  const signMap = new Map<string, any>();
+  for (const s of prevSignOffs) {
+    if (s && s.auditorKey) signMap.set(String(s.auditorKey), s);
+  }
+  signMap.set(aKey, {
+    auditorKey: aKey,
+    auditorPhone: auditorPhone || 'N/A',
+    auditorName,
+    auditPeriod: periodLabel,
+    signedAt: nowIso,
+    notes: notes || ''
+  });
+  const mergedSignOffs = Array.from(signMap.values());
+  const signedAuditorNames = mergedSignOffs.map(s => s.auditorName);
+
+  // If Dual Audit Mode is active and only 1 auditor has signed so far (unless Admin forces final lock),
+  // save the 1st Auditor's sign-off without locking records away from the 2nd Co-Auditor!
+  const shouldWaitForCoAuditor = isDualMode && mergedSignOffs.length < 2 && !options?.forceFinalLock;
+
+  if (shouldWaitForCoAuditor && targetCamp) {
+    const partialCamp: Campaign = {
+      ...targetCamp,
+      auditSignOffs: mergedSignOffs,
+      lastAuditPeriod: periodLabel,
+      lastAuditNotes: notes || targetCamp.lastAuditNotes,
+      updatedAt: nowIso,
+      metadata: {
+        ...(targetCamp.metadata || {}),
+        auditSignOffs: mergedSignOffs
+      }
+    };
+    saveCampaign(partialCamp);
+    safeApiFetch('/api/audit/sync-action', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ campaign: partialCamp })
+    }).catch(() => {});
+
+    recordAuditLog(
+      'Co-Auditor First Sign-Off Recorded (1/2)',
+      `Auditor ${auditorName} (${auditorPhone || 'N/A'}) signed off period [${periodLabel}] in campaign ${campaignId}. Waiting for Co-Auditor sign-off to finalize lock.`,
+      'campaign',
+      campaignId,
+      auditorName
+    );
+
+    return {
+      lockedCount: 0,
+      lockedTransactionsCount: 0,
+      lockedExpensesCount: 0,
+      isAwaitingCoAuditor: true,
+      requiredAuditors: Math.max(2, totalAuditors),
+      signedAuditors: signedAuditorNames
+    };
+  }
+
+  const finalLockedByLabel = signedAuditorNames.length > 1 ? signedAuditorNames.join(' & ') : auditorName;
 
   // 1. Lock matching transactions
   try {
     const txs = getStoredTransactions();
     let txChanged = false;
     const lockedTxsToSync: Transaction[] = [];
+    const syncActionItems: any[] = [];
     const updatedTxs = txs.map(t => {
       if (String(t.campaignId).toLowerCase().trim() === cleanCampId) {
         if (!t.is_locked) txCount++;
         txChanged = true;
+        const existingMap: Record<string, any> = {
+          ...(t.metadata?.auditor_verifications || {}),
+          ...(t.auditor_verifications || {})
+        };
+        if (!existingMap[aKey] || existingMap[aKey].mark !== 'flagged') {
+          existingMap[aKey] = {
+            auditorKey: aKey,
+            auditorPhone,
+            auditorName,
+            mark: 'verified',
+            query: '',
+            markedAt: nowIso
+          };
+        }
         const lockedItem: Transaction = {
           ...t,
           is_locked: true,
           audit_date: nowIso,
-          locked_by: auditorName,
+          locked_by: finalLockedByLabel,
           audit_period: periodLabel,
           audit_notes: notes || t.audit_notes,
           audit_mark: t.audit_mark || 'verified',
+          auditor_verifications: existingMap,
           unlock_expires_at: undefined,
           isSynced: false,
-          updatedAt: nowIso
+          updatedAt: nowIso,
+          metadata: {
+            ...(t.metadata || {}),
+            is_locked: true,
+            audit_date: nowIso,
+            locked_by: finalLockedByLabel,
+            audit_period: periodLabel,
+            audit_notes: notes || t.audit_notes,
+            audit_mark: t.audit_mark || 'verified',
+            auditor_verifications: existingMap
+          }
         };
         lockedTxsToSync.push(lockedItem);
+        syncActionItems.push({
+          recordId: t.id,
+          recordType: 'transaction',
+          auditorKey: aKey,
+          auditorName,
+          auditorPhone,
+          mark: t.audit_mark || 'verified'
+        });
         return lockedItem;
       }
       return t;
@@ -5971,16 +6205,41 @@ export const lockCampaignAuditPeriod = (
       if (String(e.campaignId).toLowerCase().trim() === cleanCampId) {
         if (!e.is_locked) expCount++;
         expChanged = true;
+        const existingMap: Record<string, any> = {
+          ...(e.metadata?.auditor_verifications || {}),
+          ...(e.auditor_verifications || {})
+        };
+        if (!existingMap[aKey] || existingMap[aKey].mark !== 'flagged') {
+          existingMap[aKey] = {
+            auditorKey: aKey,
+            auditorPhone,
+            auditorName,
+            mark: 'verified',
+            query: '',
+            markedAt: nowIso
+          };
+        }
         const lockedExp: KumtluangExpense = {
           ...e,
           is_locked: true,
           audit_date: nowIso,
-          locked_by: auditorName,
+          locked_by: finalLockedByLabel,
           audit_period: periodLabel,
           audit_notes: notes || e.audit_notes,
           audit_mark: e.audit_mark || 'verified',
+          auditor_verifications: existingMap,
           unlock_expires_at: undefined,
-          updatedAt: nowIso
+          updatedAt: nowIso,
+          metadata: {
+            ...(e.metadata || {}),
+            is_locked: true,
+            audit_date: nowIso,
+            locked_by: finalLockedByLabel,
+            audit_period: periodLabel,
+            audit_notes: notes || e.audit_notes,
+            audit_mark: e.audit_mark || 'verified',
+            auditor_verifications: existingMap
+          }
         };
         lockedExpsToSync.push(lockedExp);
         return lockedExp;
@@ -5997,35 +6256,51 @@ export const lockCampaignAuditPeriod = (
     console.error('Failed to lock expenses for audit:', e);
   }
 
-  // 3. Update campaign metadata with audit timestamp and auditor info
+  // 3. Update campaign metadata with audit timestamp, sign-offs, and auditor info
   try {
-    const camps = getStoredCampaigns();
-    const targetCamp = camps.find(c => String(c.id).toLowerCase().trim() === cleanCampId);
     if (targetCamp) {
       const updatedCamp: Campaign = {
         ...targetCamp,
+        auditSignOffs: mergedSignOffs,
         lastAuditedAt: nowIso,
-        lastAuditedBy: auditorName,
+        lastAuditedBy: finalLockedByLabel,
         lastAuditPeriod: periodLabel,
+        lastAuditNotes: notes || targetCamp.lastAuditNotes,
         updatedAt: nowIso,
+        metadata: {
+          ...(targetCamp.metadata || {}),
+          auditSignOffs: mergedSignOffs,
+          lastAuditedAt: nowIso,
+          lastAuditedBy: finalLockedByLabel,
+          lastAuditPeriod: periodLabel,
+          lastAuditNotes: notes || targetCamp.lastAuditNotes
+        }
       };
       saveCampaign(updatedCamp);
+      safeApiFetch('/api/audit/sync-action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ campaign: updatedCamp })
+      }).catch(() => {});
     }
   } catch {}
 
   // 4. Record immutable audit log
   recordAuditLog(
     'Financial Audit Signed & Locked',
-    `Auditor ${auditorName} (${auditorPhone}) signed off and locked ${txCount + expCount} financial records for period [${periodLabel}] in campaign ${campaignId}. Notes: ${notes || 'None'}.`,
+    `Auditor ${finalLockedByLabel} (${auditorPhone || 'N/A'}) signed off and locked ${txCount + expCount} financial records for period [${periodLabel}] in campaign ${campaignId}. Notes: ${notes || 'None'}.`,
     'campaign',
     campaignId,
-    auditorName
+    finalLockedByLabel
   );
 
   return { 
     lockedCount: txCount + expCount,
     lockedTransactionsCount: txCount,
-    lockedExpensesCount: expCount 
+    lockedExpensesCount: expCount,
+    isAwaitingCoAuditor: false,
+    requiredAuditors: totalAuditors,
+    signedAuditors: signedAuditorNames
   };
 };
 

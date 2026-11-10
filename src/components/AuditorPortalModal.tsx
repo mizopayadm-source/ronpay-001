@@ -24,13 +24,17 @@ import {
   ChevronDown,
   ChevronUp,
   Users,
+  UserPlus,
   FolderTree
 } from 'lucide-react';
-import { Campaign, CreatorProfile, KumtluangExpense } from '../types';
+import { Campaign, CreatorProfile, KumtluangExpense, AuditorAccessGrant } from '../types';
 import { 
   getStoredCampaigns,
   getStoredTransactions, 
   getStoredExpenses, 
+  getStoredAuditorGrants,
+  saveAuditorGrant,
+  normalizeAuditorKey,
   lockCampaignAuditPeriod, 
   checkAuditorAccessForCampaign,
   getActiveAuditorGrantsForUser,
@@ -48,7 +52,7 @@ import {
   isConfirmedTransaction
 } from '../utils/storage';
 import { syncAllWithServer, RONPAY_SYNC_EVENT } from '../utils/syncEngine';
-import { fetchOpeningBalanceFromSupabase, fetchTableData } from '../services/SupabaseSync';
+import { fetchOpeningBalanceFromSupabase } from '../services/SupabaseSync';
 import { fetchExpensesFromFirestore } from '../services/firestoreSync';
 import { formatDateDDMMYYYY } from '../utils/date';
 import { printHtmlSafely, getTransactionHead, getTransactionMonthYear, getHeadSortPriority } from '../utils/export';
@@ -101,6 +105,7 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
   const [tick, setTick] = useState<number>(0);
   const [isSyncingPortal, setIsSyncingPortal] = useState<boolean>(false);
   const [liveOpeningBalance, setLiveOpeningBalance] = useState<number | null>(null);
+  const [showDiscrepancyPanel, setShowDiscrepancyPanel] = useState<boolean>(false);
 
   const handleSyncPortalData = async () => {
     setIsSyncingPortal(true);
@@ -115,11 +120,6 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
               }
             })
           : Promise.resolve(),
-        fetchTableData<KumtluangExpense>('expenses').then(fresh => {
-          if (Array.isArray(fresh) && fresh.length > 0) {
-            saveStoredExpenses(fresh, true);
-          }
-        }),
         fetchExpensesFromFirestore(true)
       ]);
       setTick(t => t + 1);
@@ -139,8 +139,14 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
 
     const onSyncEvent = () => setTick(t => t + 1);
     window.addEventListener(RONPAY_SYNC_EVENT, onSyncEvent);
+    window.addEventListener('ronpay_transactions_updated', onSyncEvent);
+    window.addEventListener('ronpay_expenses_updated', onSyncEvent);
+    window.addEventListener('ronpay_campaigns_updated', onSyncEvent);
     return () => {
       window.removeEventListener(RONPAY_SYNC_EVENT, onSyncEvent);
+      window.removeEventListener('ronpay_transactions_updated', onSyncEvent);
+      window.removeEventListener('ronpay_expenses_updated', onSyncEvent);
+      window.removeEventListener('ronpay_campaigns_updated', onSyncEvent);
     };
   }, [isOpen, campaign?.id]);
 
@@ -194,14 +200,75 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
     return campaign ? [campaign] : [];
   }, [campaigns, campaign, isAdmin, creatorProfile, tick]);
 
+  // Active Auditor Grant & Appointed Audit Period (Hun Bi Tiam)
+  const activeGrant = useMemo(() => {
+    if (accessInfo?.grant) return accessInfo.grant;
+    const phone = creatorProfile?.phone || creatorProfile?.phoneNumber || '';
+    if (!phone || !campaign?.id) return null;
+    const grants = getActiveAuditorGrantsForUser(phone);
+    return grants.find(g => String(g.campaignId || g.campaign_id || '').trim() === String(campaign.id).trim()) || null;
+  }, [accessInfo, creatorProfile, campaign]);
+
+  // All active appointed auditors for this campaign (supports Optional 1 or 2+ Co-Auditors)
+  const appointedAuditors = useMemo(() => {
+    if (!campaign?.id) return [];
+    const campId = String(campaign.id).toLowerCase().trim();
+    const allGrants = getStoredAuditorGrants().filter(
+      g => String(g.campaignId || g.campaign_id || '').toLowerCase().trim() === campId && g.status === 'active'
+    );
+    const map = new Map<string, { auditorKey: string; auditorName: string; auditorPhone: string; auditPeriod?: string }>();
+    allGrants.forEach(g => {
+      const ph = g.auditorPhone || g.auditor_phone || '';
+      const nm = g.auditorName || g.auditor_name || 'Auditor';
+      const key = normalizeAuditorKey(ph, nm);
+      if (!map.has(key)) {
+        map.set(key, {
+          auditorKey: key,
+          auditorName: nm,
+          auditorPhone: ph,
+          auditPeriod: g.auditPeriod || g.audit_period
+        });
+      }
+    });
+    return Array.from(map.values());
+  }, [campaign?.id, tick]);
+
+  const isDualAuditMode = useMemo(() => {
+    return appointedAuditors.length >= 2 || Boolean(campaign?.requireDualAuditorConsensus);
+  }, [appointedAuditors, campaign?.requireDualAuditorConsensus]);
+
+  const appointedFromDate = activeGrant?.auditFromDate || '';
+  const appointedToDate = activeGrant?.auditToDate || '';
+  const appointedPeriodLabel = activeGrant?.auditPeriod || (appointedFromDate && appointedToDate ? `${formatDateDDMMYYYY(appointedFromDate)} – ${formatDateDDMMYYYY(appointedToDate)}` : '');
+
+  const isRestrictedAuditor = useMemo(() => {
+    if (isAdmin) return false;
+    return Boolean(appointedFromDate || appointedToDate || (activeGrant?.auditPeriod && activeGrant.auditPeriod !== 'Hun Chhung Zawng (All Records)'));
+  }, [isAdmin, appointedFromDate, appointedToDate, activeGrant]);
+
   // Sign & Lock inputs
-  const [auditPeriod, setAuditPeriod] = useState<string>(`FY ${new Date().getFullYear() - 1}-${new Date().getFullYear()}`);
+  const [auditPeriod, setAuditPeriod] = useState<string>(() => {
+    return appointedPeriodLabel || `FY ${new Date().getFullYear() - 1}-${new Date().getFullYear()}`;
+  });
   const [auditorName, setAuditorName] = useState<string>(creatorProfile?.name || 'Auditor');
   const [auditorPhone, setAuditorPhone] = useState<string>(creatorProfile?.phone || creatorProfile?.phoneNumber || '');
   const [auditNotes, setAuditNotes] = useState<string>('Accounts and vouchers verified with bank statements and receipts.');
   const [isConfirmingLock, setIsConfirmingLock] = useState<boolean>(false);
   const [isLocking, setIsLocking] = useState<boolean>(false);
   const [lockToast, setLockToast] = useState<string | null>(null);
+  const [showDiscrepancyDrawer, setShowDiscrepancyDrawer] = useState<boolean>(false);
+  const [showQuickAssignDrawer, setShowQuickAssignDrawer] = useState<boolean>(false);
+  const [qaMode, setQaMode] = useState<'single' | 'dual'>('single');
+  const [qaName1, setQaName1] = useState<string>('');
+  const [qaPhone1, setQaPhone1] = useState<string>('');
+  const [qaPin1, setQaPin1] = useState<string>('1234');
+  const [qaName2, setQaName2] = useState<string>('');
+  const [qaPhone2, setQaPhone2] = useState<string>('');
+  const [qaPin2, setQaPin2] = useState<string>('1234');
+
+  const currentAuditorKey = useMemo(() => {
+    return normalizeAuditorKey(auditorPhone || creatorProfile?.phone, auditorName || creatorProfile?.name);
+  }, [auditorPhone, auditorName, creatorProfile]);
 
   // Flag query input state
   const [flaggingRecordId, setFlaggingRecordId] = useState<string | null>(null);
@@ -217,7 +284,9 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
   useEffect(() => {
     if (campaign) {
       setChecklist(campaign.auditChecklist || DEFAULT_CHECKLIST);
-      if (campaign.lastAuditPeriod) {
+      if (appointedPeriodLabel) {
+        setAuditPeriod(appointedPeriodLabel);
+      } else if (campaign.lastAuditPeriod) {
         setAuditPeriod(campaign.lastAuditPeriod);
       }
       if (campaign.auditReconciliation) {
@@ -238,7 +307,20 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
         setReconcileNotesInput('');
       }
     }
-  }, [campaign?.id]);
+  }, [campaign?.id, appointedPeriodLabel]);
+
+  useEffect(() => {
+    if (isRestrictedAuditor) {
+      if (appointedFromDate && appointedToDate) {
+        setCbPreset('custom');
+        setCbFromDate(appointedFromDate);
+        setCbToDate(appointedToDate);
+      }
+      if (appointedPeriodLabel) {
+        setAuditPeriod(appointedPeriodLabel);
+      }
+    }
+  }, [isRestrictedAuditor, appointedFromDate, appointedToDate, appointedPeriodLabel]);
 
   useEffect(() => {
     const grantName = accessInfo?.grant?.auditorName || accessInfo?.grant?.auditor_name;
@@ -274,29 +356,52 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
     currentMark: 'verified' | 'flagged' | null | undefined,
     desiredMark: 'verified' | 'flagged',
     queryText?: string,
-    isCurrentlyLocked?: boolean
+    isCurrentlyLocked?: boolean,
+    itemAuditCategory?: 'audited' | 'unaudited' | 'flagged',
+    itemIsoDate?: string
   ) => {
     if (!canAudit) return;
 
-    // If record is locked after submission: ADMIN can modify/toggle it; Auditor cannot
-    if (isCurrentlyLocked && !isAdmin) {
-      setLockToast('🔒 He record hi Audit Submit & Lock tawh a ni a, Admin chiahin a khawih nawn thei.');
-      setTimeout(() => setLockToast(null), 3500);
-      return;
+    // Appointed Period Boundary Validation: If Creator set an audit window, prevent auditing records outside it
+    if (isRestrictedAuditor && itemIsoDate) {
+      const d = itemIsoDate.slice(0, 10);
+      if (appointedFromDate && d && d < appointedFromDate) {
+        setLockToast(`⚠️ He record (${formatDateDDMMYYYY(d)}) hi Creator-in audit tura a ruatsa hun bi (${appointedPeriodLabel}) pawn a mi a ni.`);
+        setTimeout(() => setLockToast(null), 4000);
+        return;
+      }
+      if (appointedToDate && d && d > appointedToDate) {
+        setLockToast(`⚠️ He record (${formatDateDDMMYYYY(d)}) hi Creator-in audit tura a ruatsa hun bi (${appointedPeriodLabel}) pawn a mi a ni.`);
+        setTimeout(() => setLockToast(null), 4000);
+        return;
+      }
     }
 
-    // Toggle: if already has this desired mark (or is verified/locked and user clicks 'verified'), toggle it off to undefined!
-    const isAlreadyVerified = currentMark === 'verified' || (Boolean(isCurrentlyLocked) && desiredMark === 'verified');
-    const isAlreadyFlagged = currentMark === 'flagged' && desiredMark === 'flagged';
+    // Look up this auditor's personal mark when Dual Audit Mode is active so Auditor 2 clicking '✓ Dik'
+    // adds their verification instead of undoing Auditor 1's verification!
+    const cleanTargetId = String(targetId).toLowerCase().trim();
+    const targetObj: any = targetType === 'transaction'
+      ? getStoredTransactions().find(t => String(t.id).toLowerCase().trim() === cleanTargetId)
+      : getStoredExpenses().find(e => String(e.id).toLowerCase().trim() === cleanTargetId);
+    const verMap: Record<string, any> = {
+      ...(targetObj?.metadata?.auditor_verifications || {}),
+      ...(targetObj?.auditor_verifications || {})
+    };
+    const myEntry = verMap[currentAuditorKey];
+
+    const isAlreadyVerified = isDualAuditMode && Object.keys(verMap).length > 0
+      ? myEntry?.mark === 'verified'
+      : (currentMark === 'verified' || itemAuditCategory === 'audited' || Boolean(isCurrentlyLocked));
+    const isAlreadyFlagged = isDualAuditMode && Object.keys(verMap).length > 0
+      ? myEntry?.mark === 'flagged'
+      : (currentMark === 'flagged' || itemAuditCategory === 'flagged');
 
     let nextMark: 'verified' | 'flagged' | undefined = desiredMark;
     if (desiredMark === 'verified' && isAlreadyVerified && queryText === undefined) {
-      nextMark = undefined; // toggle off (undo / clear mark)
+      nextMark = undefined; // toggle off (undo / uncheck / clear mark)
     } else if (desiredMark === 'flagged' && isAlreadyFlagged && queryText === undefined) {
       nextMark = undefined; // toggle off (clear flag)
     }
-
-    const shouldUnlock = nextMark === undefined || (Boolean(isCurrentlyLocked) && isAdmin);
 
     const ok = markRecordAuditVerification(
       targetId,
@@ -304,16 +409,20 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
       nextMark,
       auditorName || creatorProfile?.name || 'Auditor',
       nextMark === 'flagged' ? (queryText || 'Enfiah ngai / Query awm') : '',
-      shouldUnlock
+      true, // forceUnlock = true, allowing check/uncheck/undo before final period lock
+      auditorPhone || creatorProfile?.phone || ''
     );
+
     if (ok) {
       setTick(t => t + 1);
       setFlaggingRecordId(null);
       setFlagQueryText('');
       if (nextMark === undefined) {
-        setLockToast('↩️ Audit chhinchhiahna sut (Clear) a ni e.');
-        setTimeout(() => setLockToast(null), 2500);
+        setLockToast('↩️ Audit chhinchhiahna sut (Unchecked / Undo) a ni e (Server-ah sync nghal a ni).');
+      } else if (nextMark === 'verified') {
+        setLockToast('✓ Record hi Audited (Dik) tiin chhinchhiah & Server-ah sync nghal a ni e.');
       }
+      setTimeout(() => setLockToast(null), 2500);
       if (onRecordsUpdated) onRecordsUpdated();
     }
   };
@@ -338,21 +447,26 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
     if (!canAudit) return;
     const records = targetType === 'transaction' ? allTransactions : allExpenses;
     let count = 0;
+    const effPhone = auditorPhone || creatorProfile?.phone || '';
     records.forEach(r => {
-      if (r.audit_mark !== 'verified') {
+      const verMap = { ...(r.metadata?.auditor_verifications || {}), ...(r.auditor_verifications || {}) };
+      const myMark = verMap[currentAuditorKey]?.mark;
+      if (isDualAuditMode ? myMark !== 'verified' : r.audit_mark !== 'verified') {
         markRecordAuditVerification(
           r.id,
           targetType,
           'verified',
           auditorName || creatorProfile?.name || 'Auditor',
-          ''
+          '',
+          true,
+          effPhone
         );
         count++;
       }
     });
     if (count > 0) {
       setTick(t => t + 1);
-      setLockToast(`✅ Record ${count} chu '✓ Dik (Verified)' tiin chhinchhiah nghal vek a ni e.`);
+      setLockToast(`✅ Record ${count} chu '${auditorName}' hmingin '✓ Dik (Verified)' tiin chhinchhiah & Server-ah sync nghal a ni e.`);
       if (onRecordsUpdated) onRecordsUpdated();
       setTimeout(() => setLockToast(null), 3500);
     }
@@ -662,9 +776,20 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
     document.body.removeChild(link);
   };
 
-  // Filtered transactions
+  // Filtered transactions (restricted to appointed audit period for appointed auditors)
   const filteredTransactions = useMemo(() => {
     return allTransactions.filter(t => {
+      if (isRestrictedAuditor) {
+        const rawDate = String(t.timestamp || t.date || t.createdAt || '').trim();
+        const itemIso = rawDate.length >= 10 && /^\d{4}-\d{2}-\d{2}/.test(rawDate)
+          ? rawDate.slice(0, 10)
+          : (() => {
+              const d = new Date(rawDate);
+              return !isNaN(d.getTime()) ? d.toISOString().slice(0, 10) : '';
+            })();
+        if (appointedFromDate && itemIso && itemIso < appointedFromDate) return false;
+        if (appointedToDate && itemIso && itemIso > appointedToDate) return false;
+      }
       if (filterLockStatus === 'locked' && !t.is_locked) return false;
       if (filterLockStatus === 'unlocked' && t.is_locked) return false;
       if (filterLockStatus === 'verified' && t.audit_mark !== 'verified') return false;
@@ -679,11 +804,22 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
       }
       return true;
     });
-  }, [allTransactions, filterLockStatus, searchQuery]);
+  }, [allTransactions, filterLockStatus, searchQuery, isRestrictedAuditor, appointedFromDate, appointedToDate]);
 
-  // Filtered expenses
+  // Filtered expenses (restricted to appointed audit period for appointed auditors)
   const filteredExpenses = useMemo(() => {
     return allExpenses.filter(e => {
+      if (isRestrictedAuditor) {
+        const rawDate = String(e.spentDate || e.date || e.createdAt || '').trim();
+        const itemIso = rawDate.length >= 10 && /^\d{4}-\d{2}-\d{2}/.test(rawDate)
+          ? rawDate.slice(0, 10)
+          : (() => {
+              const d = new Date(rawDate);
+              return !isNaN(d.getTime()) ? d.toISOString().slice(0, 10) : '';
+            })();
+        if (appointedFromDate && itemIso && itemIso < appointedFromDate) return false;
+        if (appointedToDate && itemIso && itemIso > appointedToDate) return false;
+      }
       if (filterLockStatus === 'locked' && !e.is_locked) return false;
       if (filterLockStatus === 'unlocked' && e.is_locked) return false;
       if (filterLockStatus === 'verified' && e.audit_mark !== 'verified') return false;
@@ -699,7 +835,7 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
       }
       return true;
     });
-  }, [allExpenses, filterLockStatus, searchQuery]);
+  }, [allExpenses, filterLockStatus, searchQuery, isRestrictedAuditor, appointedFromDate, appointedToDate]);
 
   // Group filtered transactions by Head / Category + Month (Monthly) for Head-wise Inflow Auditing
   const inflowHeadGroups = useMemo(() => {
@@ -778,7 +914,11 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
     let effTo = '';
     let rangeLabel = 'Hun Chhung Zawng (All Time)';
 
-    if (cbPreset === 'today') {
+    if (isRestrictedAuditor) {
+      effFrom = appointedFromDate || '';
+      effTo = appointedToDate || '';
+      rangeLabel = appointedPeriodLabel || (effFrom && effTo ? `${formatDateDDMMYYYY(effFrom)} – ${formatDateDDMMYYYY(effTo)}` : 'Appointed Audit Period');
+    } else if (cbPreset === 'today') {
       effFrom = toDateStr(now);
       effTo = effFrom;
       rangeLabel = `Vawiin (${formatDateDDMMYYYY(effFrom)})`;
@@ -1102,43 +1242,187 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
       filteredPayments,
       receiptHeadGroups
     };
-  }, [allTransactions, allExpenses, campaign, cbPreset, cbFromDate, cbToDate, cbAuditFilter, searchQuery, effectiveOpeningBalance]);
+  }, [allTransactions, allExpenses, campaign, cbPreset, cbFromDate, cbToDate, cbAuditFilter, searchQuery, effectiveOpeningBalance, isRestrictedAuditor, appointedFromDate, appointedToDate, appointedPeriodLabel]);
+
+  // Dual / Co-Auditor Consensus, Progress & Discrepancy Engine
+  const dualAuditSummary = useMemo(() => {
+    const freshCamp = campaign
+      ? getStoredCampaigns().find(c => String(c.id).toLowerCase().trim() === String(campaign.id).toLowerCase().trim()) || campaign
+      : null;
+    const signOffs = Array.isArray(freshCamp?.auditSignOffs)
+      ? freshCamp!.auditSignOffs!
+      : Array.isArray((freshCamp as any)?.metadata?.auditSignOffs)
+      ? (freshCamp as any).metadata.auditSignOffs
+      : [];
+    const signOffMap = new Map<string, any>();
+    signOffs.forEach((s: any) => {
+      if (s && s.auditorKey) signOffMap.set(String(s.auditorKey), s);
+    });
+
+    const auditorStatsMap = new Map<string, {
+      auditorKey: string;
+      auditorName: string;
+      auditorPhone: string;
+      verifiedCount: number;
+      flaggedCount: number;
+      hasSignedOff: boolean;
+      signedAt?: string;
+    }>();
+
+    appointedAuditors.forEach(a => {
+      const s = signOffMap.get(a.auditorKey);
+      auditorStatsMap.set(a.auditorKey, {
+        auditorKey: a.auditorKey,
+        auditorName: a.auditorName,
+        auditorPhone: a.auditorPhone,
+        verifiedCount: 0,
+        flaggedCount: 0,
+        hasSignedOff: Boolean(s),
+        signedAt: s?.signedAt
+      });
+    });
+
+    signOffs.forEach((s: any) => {
+      if (s && s.auditorKey && !auditorStatsMap.has(String(s.auditorKey))) {
+        auditorStatsMap.set(String(s.auditorKey), {
+          auditorKey: String(s.auditorKey),
+          auditorName: s.auditorName || 'Auditor',
+          auditorPhone: s.auditorPhone || '',
+          verifiedCount: 0,
+          flaggedCount: 0,
+          hasSignedOff: true,
+          signedAt: s.signedAt
+        });
+      }
+    });
+
+    let consensusVerifiedCount = 0;
+    let partialVerifiedCount = 0;
+    const discrepancyItems: Array<{
+      id: string;
+      recordType: 'transaction' | 'expense';
+      title: string;
+      amount: number;
+      displayDate: string;
+      reason: string;
+      verifications: Array<{ auditorKey: string; auditorName: string; mark: string; query?: string }>;
+    }> = [];
+
+    const inspectRecord = (rec: any, recordType: 'transaction' | 'expense') => {
+      const verMap: Record<string, any> = {
+        ...(rec.metadata?.auditor_verifications || {}),
+        ...(rec.auditor_verifications || {})
+      };
+      const activeEntries = Object.values(verMap).filter((v: any) => v && (v.mark === 'verified' || v.mark === 'flagged'));
+      activeEntries.forEach((v: any) => {
+        const k = String(v.auditorKey || normalizeAuditorKey(v.auditorPhone, v.auditorName));
+        const st = auditorStatsMap.get(k) || {
+          auditorKey: k,
+          auditorName: v.auditorName || 'Auditor',
+          auditorPhone: v.auditorPhone || '',
+          verifiedCount: 0,
+          flaggedCount: 0,
+          hasSignedOff: signOffMap.has(k),
+          signedAt: signOffMap.get(k)?.signedAt
+        };
+        if (v.mark === 'verified') st.verifiedCount += 1;
+        if (v.mark === 'flagged') st.flaggedCount += 1;
+        auditorStatsMap.set(k, st);
+      });
+
+      const verCnt = activeEntries.filter((v: any) => v.mark === 'verified').length;
+      const flagCnt = activeEntries.filter((v: any) => v.mark === 'flagged').length;
+
+      if (verCnt > 0 && flagCnt > 0) {
+        // Explicit disagreement between Auditor 1 and Auditor 2!
+        discrepancyItems.push({
+          id: rec.id,
+          recordType,
+          title: recordType === 'transaction' ? (rec.donorName || 'Receipt') : (rec.head || rec.paidTo || 'Voucher'),
+          amount: Number(rec.amount) || 0,
+          displayDate: formatDateDDMMYYYY(rec.timestamp || rec.spentDate || rec.date || rec.createdAt || ''),
+          reason: 'Auditor pahnih chhinchhiah dan a inang lo (Pakhatin Dik a ti a, pakhatin Query a siam)',
+          verifications: activeEntries as any
+        });
+      } else if (flagCnt > 0) {
+        discrepancyItems.push({
+          id: rec.id,
+          recordType,
+          title: recordType === 'transaction' ? (rec.donorName || 'Receipt') : (rec.head || rec.paidTo || 'Voucher'),
+          amount: Number(rec.amount) || 0,
+          displayDate: formatDateDDMMYYYY(rec.timestamp || rec.spentDate || rec.date || rec.createdAt || ''),
+          reason: activeEntries.map((f: any) => `${f.auditorName}: ${f.query || 'Query'}`).join(' | '),
+          verifications: activeEntries as any
+        });
+      } else if (verCnt >= 2) {
+        consensusVerifiedCount += 1;
+      } else if (verCnt === 1) {
+        partialVerifiedCount += 1;
+      }
+    };
+
+    cashBookAuditData.inRangeTxs.forEach(t => inspectRecord(t, 'transaction'));
+    cashBookAuditData.inRangeExps.forEach(e => inspectRecord(e, 'expense'));
+
+    const auditorsList = Array.from(auditorStatsMap.values());
+    const signedCount = auditorsList.filter(a => a.hasSignedOff).length;
+
+    return {
+      auditorsList,
+      signOffs,
+      signedCount,
+      consensusVerifiedCount,
+      partialVerifiedCount,
+      discrepancyItems,
+      hasDiscrepancies: discrepancyItems.length > 0,
+      isJointFinalized: isDualAuditMode ? signedCount >= 2 && discrepancyItems.length === 0 : Boolean(freshCamp?.lastAuditedAt)
+    };
+  }, [cashBookAuditData.inRangeTxs, cashBookAuditData.inRangeExps, appointedAuditors, campaign, isDualAuditMode, tick]);
 
   // Verify all unaudited Receipts & Payments within the currently selected Cash Book date range
   const handleVerifySelectedRange = () => {
     if (!canAudit) return;
     let verifiedCnt = 0;
+    const effPhone = auditorPhone || creatorProfile?.phone || '';
     cashBookAuditData.inRangeTxs.forEach(t => {
-      if (t.audit_mark !== 'verified') {
+      const verMap = { ...(t.metadata?.auditor_verifications || {}), ...(t.auditor_verifications || {}) };
+      const myMark = verMap[currentAuditorKey]?.mark;
+      if (isDualAuditMode ? myMark !== 'verified' : t.audit_mark !== 'verified') {
         markRecordAuditVerification(
           t.id,
           'transaction',
           'verified',
           auditorName || creatorProfile?.name || 'Auditor',
-          ''
+          '',
+          true,
+          effPhone
         );
         verifiedCnt++;
       }
     });
     cashBookAuditData.inRangeExps.forEach(e => {
-      if (e.audit_mark !== 'verified') {
+      const verMap = { ...(e.metadata?.auditor_verifications || {}), ...(e.auditor_verifications || {}) };
+      const myMark = verMap[currentAuditorKey]?.mark;
+      if (isDualAuditMode ? myMark !== 'verified' : e.audit_mark !== 'verified') {
         markRecordAuditVerification(
           e.id,
           'expense',
           'verified',
           auditorName || creatorProfile?.name || 'Auditor',
-          ''
+          '',
+          true,
+          effPhone
         );
         verifiedCnt++;
       }
     });
     if (verifiedCnt > 0) {
       setTick(t => t + 1);
-      setLockToast(`✅ Selected Range (${cashBookAuditData.rangeLabel}) chhunga record ${verifiedCnt} chu '✓ Audited' tiin chhinchhiah vek a ni e!`);
+      setLockToast(`✅ Selected Range (${cashBookAuditData.rangeLabel}) chhunga record ${verifiedCnt} chu '${auditorName}' hmingin '✓ Audited' tiin chhinchhiah & Server-ah sync nghal a ni e!`);
       if (onRecordsUpdated) onRecordsUpdated();
       setTimeout(() => setLockToast(null), 4000);
     } else {
-      setLockToast(`ℹ️ He range chhunga record zawng zawng hi Audited vek a ni tawh e.`);
+      setLockToast(`ℹ️ He range chhunga record zawng zawng hi i hmingin Audited vek a ni tawh e.`);
       setTimeout(() => setLockToast(null), 3000);
     }
   };
@@ -1146,53 +1430,11 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
   // Sign & Lock all Receipts & Payments within the currently selected Cash Book date range
   const handleLockSelectedRange = () => {
     if (!canAudit || !campaign) return;
-    const nowIso = new Date().toISOString();
-    const who = auditorName.trim() || creatorProfile?.name || 'Auditor';
-    const txIdsInRange = new Set(cashBookAuditData.inRangeTxs.map(t => String(t.id).toLowerCase().trim()));
-    const expIdsInRange = new Set(cashBookAuditData.inRangeExps.map(e => String(e.id).toLowerCase().trim()));
-
-    const allStoredTxs = getStoredTransactions();
-    const changedTxs: any[] = [];
-    allStoredTxs.forEach(t => {
-      if (t && t.id && txIdsInRange.has(String(t.id).toLowerCase().trim())) {
-        const updated = {
-          ...t,
-          audit_mark: 'verified' as const,
-          audited_by: who,
-          audited_at: nowIso,
-          is_locked: true,
-          locked_by: who,
-          locked_at: nowIso,
-          isSynced: false,
-          updatedAt: nowIso
-        };
-        changedTxs.push(updated);
-      }
-    });
-    if (changedTxs.length > 0) {
-      saveMultipleTransactions(changedTxs);
-    }
-
-    const allStoredExps = getStoredExpenses();
-    let expChanged = false;
-    const updatedExps = allStoredExps.map(e => {
-      if (e && e.id && expIdsInRange.has(String(e.id).toLowerCase().trim())) {
-        expChanged = true;
-        return {
-          ...e,
-          audit_mark: 'verified' as const,
-          audited_by: who,
-          audited_at: nowIso,
-          is_locked: true,
-          locked_by: who,
-          locked_at: nowIso,
-          updatedAt: nowIso
-        };
-      }
-      return e;
-    });
-    if (expChanged) {
-      saveStoredExpenses(updatedExps);
+    if (isDualAuditMode && dualAuditSummary.hasDiscrepancies) {
+      setShowDiscrepancyDrawer(true);
+      setLockToast(`⚠️ Auditor pahnih chhinchhiah inmil lo / Query (${dualAuditSummary.discrepancyItems.length}) a awm! Lock hmain enfiah phawt rawh u.`);
+      setTimeout(() => setLockToast(null), 5000);
+      return;
     }
 
     const periodStr = cashBookAuditData.effFrom || cashBookAuditData.effTo
@@ -1200,18 +1442,31 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
       : auditPeriod;
     setAuditPeriod(periodStr);
 
-    saveCampaign({
-      ...campaign,
-      lastAuditedAt: nowIso,
-      lastAuditedBy: who,
-      lastAuditPeriod: periodStr,
-      lastAuditNotes: auditNotes || `Cash Book (${periodStr}) verified and locked.`
+    // Ensure all items in range are marked verified by the current auditor first
+    const effPhone = auditorPhone.trim() || creatorProfile?.phone || '';
+    const effName = auditorName.trim() || creatorProfile?.name || 'Auditor';
+    cashBookAuditData.inRangeTxs.forEach(t => {
+      markRecordAuditVerification(t.id, 'transaction', 'verified', effName, '', true, effPhone);
+    });
+    cashBookAuditData.inRangeExps.forEach(e => {
+      markRecordAuditVerification(e.id, 'expense', 'verified', effName, '', true, effPhone);
     });
 
+    const result = lockCampaignAuditPeriod(
+      campaign.id,
+      { name: effName, phone: effPhone },
+      periodStr,
+      auditNotes || `Cash Book (${periodStr}) verified and locked.`
+    );
+
     setTick(t => t + 1);
-    setLockToast(`🔒 Cash Book Range (${periodStr}) chhunga Receipts (${changedTxs.length}) leh Payments (${expIdsInRange.size}) chu Audit & Lock fel vek a ni e!`);
+    if (result.isAwaitingCoAuditor) {
+      setLockToast(`✍️ Co-Auditor Sign-Off (1/${result.requiredAuditors}) chhinchhiah & Server-ah sync a ni e! Auditor 2-na in a Sign veleh Final Audited Report & Lock a tlang nghal ang.`);
+    } else {
+      setLockToast(`🔒 Cash Book Range (${periodStr}) chhunga Receipts leh Payments zawng zawng Audit & Lock fel vek a ni e!`);
+    }
     if (onRecordsUpdated) onRecordsUpdated();
-    setTimeout(() => setLockToast(null), 4500);
+    setTimeout(() => setLockToast(null), 5000);
   };
 
   // Print Official Audited Cash Book (Receipts & Payments) for Selected Range
@@ -1268,6 +1523,19 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
     `).join('');
 
     const totalSideBalance = cashBookAuditData.openingBalance + cashBookAuditData.periodReceiptsTotal;
+    const auditorSignaturesHtml = dualAuditSummary.auditorsList.length >= 2
+      ? dualAuditSummary.auditorsList.map((aud, idx) => `
+          <div class="sig-box">
+            <strong>${aud.auditorName}</strong><br/>
+            <span style="color:#64748b;font-size:10px;">Sum Endiktu (Auditor ${idx + 1}) • Ph: ${aud.auditorPhone || 'N/A'}</span>
+          </div>
+        `).join('')
+      : `
+          <div class="sig-box">
+            <strong>${auditorName}</strong><br/>
+            <span style="color:#64748b;font-size:10px;">Sum Endiktu (Auditor) • Ph: ${auditorPhone || 'N/A'}</span>
+          </div>
+        `;
 
     const html = `
       <!DOCTYPE html>
@@ -1291,7 +1559,7 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
           th, td { border-bottom: 1px solid #e2e8f0; padding: 5px 6px; text-align: left; vertical-align: top; }
           th { background: #f1f5f9; font-size: 9.5px; text-transform: uppercase; font-weight: 800; color: #334155; }
           .total-row { background: #f8fafc; border-top: 2px solid #0f172a; font-weight: 900; font-size: 11.5px; padding: 8px 10px; display: flex; justify-content: space-between; }
-          .sig-row { margin-top: 28px; display: flex; justify-content: space-between; align-items: flex-end; }
+          .sig-row { margin-top: 28px; display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; }
           .sig-box { width: 220px; border-top: 1px solid #0f172a; padding-top: 6px; text-align: center; font-size: 11px; }
         </style>
       </head>
@@ -1361,10 +1629,7 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
             <strong>Treasurer / Bawm Vawngtu</strong><br/>
             <span style="color:#64748b;font-size:10px;">${(campaign as any)?.createdByName || campaign?.createdBy || 'Treasurer'}</span>
           </div>
-          <div class="sig-box">
-            <strong>${auditorName}</strong><br/>
-            <span style="color:#64748b;font-size:10px;">Sum Endiktu (Auditor) • Ph: ${auditorPhone || 'N/A'}</span>
-          </div>
+          ${auditorSignaturesHtml}
         </div>
       </body>
       </html>
@@ -1377,20 +1642,31 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
   // Handle Sign & Lock Action
   const handleExecuteLock = () => {
     if (!campaign || !canAudit) return;
+    if (isDualAuditMode && dualAuditSummary.hasDiscrepancies) {
+      setIsConfirmingLock(false);
+      setShowDiscrepancyDrawer(true);
+      setLockToast(`⚠️ Auditor pahnih chhinchhiah inmil lo / Query (${dualAuditSummary.discrepancyItems.length}) a awm! Lock hmain enfiah phawt rawh u.`);
+      setTimeout(() => setLockToast(null), 5000);
+      return;
+    }
     setIsLocking(true);
     try {
       const result = lockCampaignAuditPeriod(
         campaign.id,
-        auditorName.trim(),
+        { name: auditorName.trim(), phone: auditorPhone.trim() },
         auditPeriod.trim(),
         auditNotes.trim()
       );
 
       setTick(t => t + 1);
       setIsConfirmingLock(false);
-      setLockToast(`✅ Audit nemngheh fel a ni e! Record ${result.lockedTransactionsCount + result.lockedExpensesCount} Lock nghal a ni.`);
+      if (result.isAwaitingCoAuditor) {
+        setLockToast(`✍️ Co-Auditor Sign-Off (1/${result.requiredAuditors}) chhinchhiah & Server-ah sync a ni e! Auditor 2-na in a Sign veleh Final Audited Report & Lock a tlang nghal ang.`);
+      } else {
+        setLockToast(`✅ Audit nemngheh fel a ni e! Record ${result.lockedTransactionsCount + result.lockedExpensesCount} Lock nghal a ni.`);
+      }
       if (onRecordsUpdated) onRecordsUpdated();
-      setTimeout(() => setLockToast(null), 4000);
+      setTimeout(() => setLockToast(null), 5000);
     } catch (err: any) {
       setLockToast(`⚠️ ${err?.message || 'Lock operation failed'}`);
     } finally {
@@ -1400,6 +1676,24 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
 
   // Generate & Print Official Audit Certificate
   const handlePrintCertificate = () => {
+    const certSignaturesHtml = dualAuditSummary.auditorsList.length >= 2
+      ? dualAuditSummary.auditorsList.map((aud, idx) => `
+          <div class="sig-box">
+            <div style="font-weight: 700; color: #0f172a;">${aud.auditorName}</div>
+            <div style="color: #64748b;">Sum Endiktu (Auditor ${idx + 1})</div>
+            <div style="color: #64748b; font-size: 11px;">Phone: ${aud.auditorPhone || 'N/A'}</div>
+            <div style="color: #94a3b8; font-size: 10px; margin-top: 4px;">${aud.hasSignedOff ? '✓ Signed & Verified' : `Date: ${formatDateDDMMYYYY(new Date().toISOString())}`}</div>
+          </div>
+        `).join('')
+      : `
+          <div class="sig-box">
+            <div style="font-weight: 700; color: #0f172a;">${auditorName}</div>
+            <div style="color: #64748b;">Sum Endiktu (Auditor)</div>
+            <div style="color: #64748b; font-size: 11px;">Phone: ${auditorPhone || 'N/A'}</div>
+            <div style="color: #94a3b8; font-size: 10px; margin-top: 4px;">Date: ${formatDateDDMMYYYY(new Date().toISOString())}</div>
+          </div>
+        `;
+
     const certHtml = `
       <!DOCTYPE html>
       <html>
@@ -1423,8 +1717,8 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
           .cert-statement { border: 1.5px dashed #cbd5e1; border-radius: 12px; padding: 20px; background: #ffffff; margin-bottom: 28px; }
           .cert-title { font-size: 14px; font-weight: 800; text-transform: uppercase; color: #0f172a; margin-bottom: 10px; }
           .cert-body { font-size: 13px; color: #334155; line-height: 1.7; }
-          .signature-section { margin-top: 40px; display: flex; justify-content: space-between; align-items: flex-end; }
-          .sig-box { width: 220px; border-top: 1px solid #0f172a; padding-top: 8px; text-align: center; font-size: 12px; }
+          .signature-section { margin-top: 40px; display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; }
+          .sig-box { width: 200px; border-top: 1px solid #0f172a; padding-top: 8px; text-align: center; font-size: 12px; }
           .seal-box { border: 2px solid #059669; border-radius: 50%; width: 95px; height: 95px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; color: #059669; font-size: 9px; font-weight: 900; letter-spacing: 0.5px; transform: rotate(-8deg); }
         </style>
       </head>
@@ -1456,7 +1750,7 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
         <div class="cert-statement">
           <div class="cert-title">⚖️ Auditor's Verification & Compliance Report</div>
           <div class="cert-body">
-            He lehkha hmang hian <strong>${campaign.title}</strong> accounts hi <strong>${auditPeriod}</strong> chhung a tan enfiah a, audit fel a ni tih ka nemnghet e. 
+            He lehkha hmang hian <strong>${campaign.title}</strong> accounts hi <strong>${auditPeriod}</strong> chhung a tan enfiah a, audit fel a ni tih ${dualAuditSummary.auditorsList.length >= 2 ? 'kan' : 'ka'} nemnghet e. 
             Receipt, voucher leh financial transaction zawng zawngte hi uluk taka endik a ni a, accounts record te hi a dik tawk a ni tih hriatpui a ni.
             <br><br>
             <strong>Auditor Observations / Notes:</strong><br>
@@ -1476,12 +1770,7 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
             <div style="font-size: 10px; color: #64748b; margin-top: 6px;">Certified via RonPay Audit Engine</div>
           </div>
 
-          <div class="sig-box">
-            <div style="font-weight: 700; color: #0f172a;">${auditorName}</div>
-            <div style="color: #64748b;">Sum Endiktu (Auditor)</div>
-            <div style="color: #64748b; font-size: 11px;">Phone: ${auditorPhone || 'N/A'}</div>
-            <div style="color: #94a3b8; font-size: 10px; margin-top: 4px;">Date: ${formatDateDDMMYYYY(new Date().toISOString())}</div>
-          </div>
+          ${certSignaturesHtml}
         </div>
       </body>
       </html>
@@ -1589,6 +1878,406 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
             </div>
           </div>
         )}
+
+        {/* Creator-Appointed Audit Period Boundary Banner */}
+        {isRestrictedAuditor && (
+          <div className="bg-indigo-900 border-b border-indigo-700 px-3 sm:px-5 py-2 text-indigo-50 text-xs flex items-center justify-between gap-2 shrink-0 shadow-inner">
+            <div className="flex items-center gap-2 flex-wrap min-w-0">
+              <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-indigo-800 border border-indigo-600 text-indigo-200 font-black text-[10px] uppercase shrink-0">
+                <Calendar className="w-3 h-3 text-amber-400" />
+                <span>Audit Hun Bi Tiam</span>
+              </div>
+              <span className="font-bold text-amber-300">
+                {appointedPeriodLabel || (appointedFromDate && appointedToDate ? `${formatDateDDMMYYYY(appointedFromDate)} – ${formatDateDDMMYYYY(appointedToDate)}` : 'Hun Bi Bituk')}
+              </span>
+              <span className="text-[11px] text-indigo-200/90 hidden sm:inline">
+                (Creator in he hun chhunga record chiah hi audit tura a ruat che a ni a, hun bi pawn lam chu lock/restrict a ni e)
+              </span>
+            </div>
+            <div className="shrink-0 flex items-center gap-1">
+              <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
+                ✓ Active Scope
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* Dual / Co-Auditor Remote Synchronization, Mode Selector & Quick Assign Bar (Always Visible) */}
+        <div className="bg-slate-900/95 border-b border-slate-700 px-3 sm:px-5 py-2 text-white text-xs shrink-0 space-y-2">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <div className="flex items-center gap-2 flex-wrap">
+                {/* Mode Badge or Toggle for Admin/Creator */}
+                {isAdmin ? (
+                  <div className="inline-flex rounded-xl bg-slate-800 p-0.5 border border-slate-600">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setQaMode('single');
+                        if (campaign) {
+                          saveCampaign({
+                            ...campaign,
+                            requireDualAuditorConsensus: false,
+                            metadata: { ...(campaign.metadata || {}), requireDualAuditorConsensus: false }
+                          });
+                        }
+                        setTick(t => t + 1);
+                        setLockToast('👤 Single Auditor Mode (Mi 1) thlan a ni e.');
+                        setTimeout(() => setLockToast(null), 2500);
+                      }}
+                      className={`px-2.5 py-1 rounded-lg text-[10px] font-black transition cursor-pointer flex items-center gap-1 ${
+                        !isDualAuditMode && qaMode === 'single'
+                          ? 'bg-amber-500 text-slate-950 shadow-2xs'
+                          : 'text-slate-300 hover:text-white'
+                      }`}
+                    >
+                      <span>👤 Mi 1 (Single Auditor)</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setQaMode('dual');
+                        if (campaign) {
+                          saveCampaign({
+                            ...campaign,
+                            requireDualAuditorConsensus: true,
+                            metadata: { ...(campaign.metadata || {}), requireDualAuditorConsensus: true }
+                          });
+                        }
+                        if (appointedAuditors.length < 2) {
+                          setShowQuickAssignDrawer(true);
+                        }
+                        setTick(t => t + 1);
+                        setLockToast('👥 Co-Auditor Mode (Mi 2 — Joint Consensus) thlan a ni e!');
+                        setTimeout(() => setLockToast(null), 3000);
+                      }}
+                      className={`px-2.5 py-1 rounded-lg text-[10px] font-black transition cursor-pointer flex items-center gap-1 ${
+                        isDualAuditMode || qaMode === 'dual'
+                          ? 'bg-emerald-500 text-slate-950 shadow-2xs'
+                          : 'text-slate-300 hover:text-white'
+                      }`}
+                    >
+                      <span>👥 Mi 2 (Co-Auditors)</span>
+                    </button>
+                  </div>
+                ) : (
+                  <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-lg border flex items-center gap-1 ${
+                    isDualAuditMode
+                      ? 'bg-indigo-500/20 text-indigo-300 border-indigo-400/40'
+                      : 'bg-slate-800 text-slate-300 border-slate-600'
+                  }`}>
+                    <Users className="w-3 h-3 text-indigo-400" />
+                    <span>{isDualAuditMode ? `Co-Auditor Mode (${appointedAuditors.length} Auditors)` : 'Single Auditor Mode'}</span>
+                  </span>
+                )}
+
+                {isAdmin && (
+                  <button
+                    type="button"
+                    onClick={() => setShowQuickAssignDrawer(prev => !prev)}
+                    className="px-2.5 py-1 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-black text-[10px] flex items-center gap-1 cursor-pointer shadow-2xs"
+                  >
+                    <UserPlus className="w-3 h-3" />
+                    <span>{showQuickAssignDrawer ? 'Form Khâr Rawh' : '+ Auditor Ruat Rawh (Mi 1 / Mi 2)'}</span>
+                  </button>
+                )}
+
+                {/* Per-Auditor Live Status Pills */}
+                {dualAuditSummary.auditorsList.map((aud, idx) => {
+                  const isMe = aud.auditorKey === currentAuditorKey;
+                  return (
+                    <div
+                      key={aud.auditorKey}
+                      className={`px-2.5 py-0.5 rounded-xl border text-[10.5px] flex items-center gap-1.5 ${
+                        aud.hasSignedOff
+                          ? 'bg-emerald-950/80 border-emerald-500/50 text-emerald-200'
+                          : isMe
+                          ? 'bg-indigo-950/90 border-indigo-400/60 text-white'
+                          : 'bg-slate-800/90 border-slate-700 text-slate-300'
+                      }`}
+                    >
+                      <span className="font-black">
+                        {idx + 1}. {aud.auditorName}{isMe ? ' (Nangmah)' : ''}
+                      </span>
+                      <span className="text-emerald-400 font-bold">✓{aud.verifiedCount}</span>
+                      {aud.flaggedCount > 0 && <span className="text-rose-400 font-bold">⚠️{aud.flaggedCount}</span>}
+                      {aud.hasSignedOff ? (
+                        <span className="px-1.5 py-0.2 rounded bg-emerald-500/30 text-emerald-200 font-black text-[9px]">
+                          SIGNED ✓
+                        </span>
+                      ) : (
+                        <span className="text-[9.5px] text-slate-400">⏳ Auditing</span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Consensus & Discrepancy Summary Badges */}
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {isDualAuditMode && (
+                  <>
+                    <span
+                      title="Auditor pahnih ten '✓ Dik' tia an nemngheh rual tawh zat"
+                      className="px-2 py-0.5 rounded-lg bg-emerald-500/20 border border-emerald-400/30 text-emerald-300 font-black text-[10px]"
+                    >
+                      ✓✓ Pahnih Inang: {dualAuditSummary.consensusVerifiedCount}
+                    </span>
+                    {dualAuditSummary.partialVerifiedCount > 0 && (
+                      <span
+                        title="Auditor pakhat chauhin a la endik zat (Auditor lehlam endik nghah mek)"
+                        className="px-2 py-0.5 rounded-lg bg-amber-500/20 border border-amber-400/30 text-amber-300 font-bold text-[10px]"
+                      >
+                        ⏳ 1/2 Checked: {dualAuditSummary.partialVerifiedCount}
+                      </span>
+                    )}
+                  </>
+                )}
+
+                {dualAuditSummary.hasDiscrepancies ? (
+                  <button
+                    type="button"
+                    onClick={() => setShowDiscrepancyDrawer(prev => !prev)}
+                    className="px-2.5 py-0.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-black text-[10px] flex items-center gap-1 cursor-pointer shadow-xs animate-pulse"
+                  >
+                    <AlertCircle className="w-3 h-3" />
+                    <span>⚡ Inang Lo / Query ({dualAuditSummary.discrepancyItems.length}) — Enfiah Rawh</span>
+                  </button>
+                ) : isDualAuditMode && dualAuditSummary.isJointFinalized ? (
+                  <span className="px-2.5 py-0.5 rounded-lg bg-emerald-600 text-white font-black text-[10px] flex items-center gap-1">
+                    <CheckCircle2 className="w-3 h-3" />
+                    <span>✓✓ Final Joint Audited</span>
+                  </span>
+                ) : null}
+              </div>
+            </div>
+
+            {/* Collapsible Discrepancy / Mismatch Drawer when Auditors disagree or raise queries */}
+            {showDiscrepancyDrawer && dualAuditSummary.hasDiscrepancies && (
+              <div className="bg-rose-950/90 border border-rose-500/50 rounded-xl p-2.5 space-y-2 text-[11px]">
+                <div className="flex items-center justify-between">
+                  <span className="font-black text-rose-200 flex items-center gap-1.5">
+                    <AlertCircle className="w-3.5 h-3.5 text-rose-400" />
+                    <span>Auditor Pahnih Hmuhchhuah Inang Lo / Query Awmte ({dualAuditSummary.discrepancyItems.length} items):</span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setShowDiscrepancyDrawer(false)}
+                    className="text-[10px] text-rose-300 hover:text-white underline cursor-pointer"
+                  >
+                    Khâr Rawh
+                  </button>
+                </div>
+                <div className="max-h-36 overflow-y-auto divide-y divide-rose-800/60">
+                  {dualAuditSummary.discrepancyItems.map(item => (
+                    <div key={item.id} className="py-1.5 flex items-center justify-between gap-2 flex-wrap">
+                      <div>
+                        <span className="font-black text-white">{item.title}</span>
+                        <span className="text-rose-300 ml-1.5 font-mono">₹{item.amount.toLocaleString('en-IN')}</span>
+                        <span className="text-rose-300/80 ml-1.5">({item.displayDate})</span>
+                        <div className="text-[10px] text-amber-300 font-semibold">{item.reason}</div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSearchQuery(item.id);
+                          setActiveTab(item.recordType === 'transaction' ? 'transactions' : 'expenses');
+                          setShowDiscrepancyDrawer(false);
+                        }}
+                        className="px-2 py-1 rounded-lg bg-white text-rose-900 font-black text-[10px] hover:bg-rose-100 cursor-pointer shrink-0"
+                      >
+                        Enfiah &amp; Siamrem →
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Quick Inline Auditor Appointment Drawer (Single or Co-Auditor) */}
+            {isAdmin && showQuickAssignDrawer && (
+              <div className="bg-slate-800 border border-amber-500/40 rounded-2xl p-3 space-y-2.5 text-xs">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <div className="font-black text-amber-300 flex items-center gap-1.5">
+                    <UserPlus className="w-4 h-4 text-amber-400" />
+                    <span>Auditor Ruatna Awlsam — {qaMode === 'dual' || isDualAuditMode ? '👥 Co-Auditors (Mi 2 Ruatna)' : '👤 Single Auditor (Mi 1 Ruatna)'}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setQaMode(prev => prev === 'single' ? 'dual' : 'single')}
+                      className="text-[10px] font-black px-2 py-0.5 rounded-lg bg-indigo-500/30 hover:bg-indigo-500/50 text-indigo-200 border border-indigo-400/30 cursor-pointer"
+                    >
+                      {qaMode === 'dual' ? '👤 Mi 1 Chauh Ruat Duh Chuan Click Rawh' : '👥 Mi 2 (Co-Auditor) Ruat Duh Chuan Click Rawh'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowQuickAssignDrawer(false)}
+                      className="text-[10px] text-slate-300 hover:text-white underline cursor-pointer"
+                    >
+                      Khâr Rawh
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <input
+                    type="text"
+                    value={qaName1}
+                    onChange={e => setQaName1(e.target.value)}
+                    placeholder="Auditor 1 Hming *"
+                    className="px-2.5 py-1.5 rounded-xl bg-slate-900 border border-slate-600 text-white text-xs font-bold"
+                  />
+                  <input
+                    type="tel"
+                    maxLength={10}
+                    value={qaPhone1}
+                    onChange={e => setQaPhone1(e.target.value.replace(/\D/g, '').slice(-10))}
+                    placeholder="Auditor 1 Phone (10 digit) *"
+                    className="px-2.5 py-1.5 rounded-xl bg-slate-900 border border-slate-600 text-white text-xs font-mono font-bold"
+                  />
+                  <input
+                    type="text"
+                    maxLength={6}
+                    value={qaPin1}
+                    onChange={e => setQaPin1(e.target.value.replace(/\s+/g, ''))}
+                    placeholder="PIN (Default: 1234)"
+                    className="px-2.5 py-1.5 rounded-xl bg-slate-900 border border-slate-600 text-amber-300 text-xs font-mono font-black"
+                  />
+                </div>
+
+                {(qaMode === 'dual' || isDualAuditMode) && (
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 border-t border-slate-700">
+                    <input
+                      type="text"
+                      value={qaName2}
+                      onChange={e => setQaName2(e.target.value)}
+                      placeholder="Auditor 2 (Co-Auditor) Hming"
+                      className="px-2.5 py-1.5 rounded-xl bg-slate-900 border border-emerald-600/60 text-white text-xs font-bold"
+                    />
+                    <input
+                      type="tel"
+                      maxLength={10}
+                      value={qaPhone2}
+                      onChange={e => setQaPhone2(e.target.value.replace(/\D/g, '').slice(-10))}
+                      placeholder="Auditor 2 Phone (10 digit)"
+                      className="px-2.5 py-1.5 rounded-xl bg-slate-900 border border-emerald-600/60 text-white text-xs font-mono font-bold"
+                    />
+                    <input
+                      type="text"
+                      maxLength={6}
+                      value={qaPin2}
+                      onChange={e => setQaPin2(e.target.value.replace(/\s+/g, ''))}
+                      placeholder="PIN (Default: 1234)"
+                      className="px-2.5 py-1.5 rounded-xl bg-slate-900 border border-emerald-600/60 text-emerald-300 text-xs font-mono font-black"
+                    />
+                  </div>
+                )}
+
+                <div className="flex items-center justify-between gap-2 flex-wrap pt-1">
+                  <span className="text-[10.5px] text-slate-300">
+                    Audit Hun Bi: <strong className="text-amber-300">{cashBookAuditData.rangeLabel}</strong> (Darkar 72 / Ni 3 Access)
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!campaign) return;
+                      const n1 = qaName1.trim();
+                      const p1 = qaPhone1.replace(/\D/g, '').slice(-10);
+                      if (!n1 || p1.length < 10) {
+                        setLockToast('⚠️ Auditor 1 Hming leh 10-digit Phone Number chhu lut phawt rawh.');
+                        setTimeout(() => setLockToast(null), 3500);
+                        return;
+                      }
+                      const now = new Date();
+                      const exp = new Date(now.getTime() + 72 * 60 * 60 * 1000).toISOString();
+                      const g1: AuditorAccessGrant = {
+                        id: `GRANT_${Date.now()}_A1`,
+                        auditorName: n1,
+                        auditor_name: n1,
+                        auditorPhone: p1,
+                        auditor_phone: p1,
+                        pin: qaPin1.trim() || '1234',
+                        campaignId: campaign.id,
+                        campaign_id: campaign.id,
+                        campaignTitle: campaign.title,
+                        campaign_title: campaign.title,
+                        grantedBy: creatorProfile?.name || 'Creator',
+                        granted_by: creatorProfile?.name || 'Creator',
+                        grantedAt: now.toISOString(),
+                        granted_at: now.toISOString(),
+                        expiresAt: exp,
+                        expires_at: exp,
+                        status: 'active',
+                        auditPeriod: cashBookAuditData.rangeLabel,
+                        audit_period: cashBookAuditData.rangeLabel,
+                        auditFromDate: cashBookAuditData.effFrom || '',
+                        audit_from_date: cashBookAuditData.effFrom || '',
+                        auditToDate: cashBookAuditData.effTo || '',
+                        audit_to_date: cashBookAuditData.effTo || ''
+                      };
+                      saveAuditorGrant(g1);
+
+                      const n2 = qaName2.trim();
+                      const p2 = qaPhone2.replace(/\D/g, '').slice(-10);
+                      if ((qaMode === 'dual' || isDualAuditMode) && n2 && p2.length === 10) {
+                        const g2: AuditorAccessGrant = {
+                          id: `GRANT_${Date.now() + 1}_A2`,
+                          auditorName: n2,
+                          auditor_name: n2,
+                          auditorPhone: p2,
+                          auditor_phone: p2,
+                          pin: qaPin2.trim() || '1234',
+                          campaignId: campaign.id,
+                          campaign_id: campaign.id,
+                          campaignTitle: campaign.title,
+                          campaign_title: campaign.title,
+                          grantedBy: creatorProfile?.name || 'Creator',
+                          granted_by: creatorProfile?.name || 'Creator',
+                          grantedAt: now.toISOString(),
+                          granted_at: now.toISOString(),
+                          expiresAt: exp,
+                          expires_at: exp,
+                          status: 'active',
+                          auditPeriod: cashBookAuditData.rangeLabel,
+                          audit_period: cashBookAuditData.rangeLabel,
+                          auditFromDate: cashBookAuditData.effFrom || '',
+                          audit_from_date: cashBookAuditData.effFrom || '',
+                          auditToDate: cashBookAuditData.effTo || '',
+                          audit_to_date: cashBookAuditData.effTo || ''
+                        };
+                        saveAuditorGrant(g2);
+                      }
+
+                      const updatedGrants = getStoredAuditorGrants(campaign.id);
+                      const isDualNow = qaMode === 'dual' || updatedGrants.filter(g => g.status === 'active').length >= 2;
+                      saveCampaign({
+                        ...campaign,
+                        auditorGrants: updatedGrants,
+                        requireDualAuditorConsensus: isDualNow,
+                        metadata: {
+                          ...(campaign.metadata || {}),
+                          auditorGrants: updatedGrants,
+                          requireDualAuditorConsensus: isDualNow
+                        }
+                      });
+                      setQaName1('');
+                      setQaPhone1('');
+                      setQaName2('');
+                      setQaPhone2('');
+                      setShowQuickAssignDrawer(false);
+                      setTick(t => t + 1);
+                      setLockToast(`✅ Auditor ruat fel & Server-ah sync nghal a ni e!`);
+                      if (onRecordsUpdated) onRecordsUpdated();
+                      setTimeout(() => setLockToast(null), 4000);
+                    }}
+                    className="px-3.5 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs cursor-pointer"
+                  >
+                    ✓ Save &amp; Access Pe Rawh
+                  </button>
+                </div>
+              </div>
+            )}
+        </div>
 
         {/* Toast */}
         {lockToast && (
@@ -2239,6 +2928,7 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                                             <button
                                               type="button"
                                               onClick={() => {
+                                                const effPhone = auditorPhone || creatorProfile?.phone || '';
                                                 grp.items.forEach(item => {
                                                   if (item.auditCategory !== 'audited') {
                                                     markRecordAuditVerification(
@@ -2246,7 +2936,9 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                                                       'transaction',
                                                       'verified',
                                                       auditorName || creatorProfile?.name || 'Auditor',
-                                                      ''
+                                                      '',
+                                                      true,
+                                                      effPhone
                                                     );
                                                   }
                                                 });
@@ -2261,11 +2953,7 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                                             <button
                                               type="button"
                                               onClick={() => {
-                                                if (grp.items.some(i => i.is_locked) && !isAdmin) {
-                                                  setLockToast('🔒 He Head chhunga record hi Lock tawh a ni a, Admin chiahin a khawih nawn thei.');
-                                                  setTimeout(() => setLockToast(null), 3500);
-                                                  return;
-                                                }
+                                                const effPhone = auditorPhone || creatorProfile?.phone || '';
                                                 grp.items.forEach(item => {
                                                   markRecordAuditVerification(
                                                     item.id,
@@ -2273,7 +2961,8 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                                                     undefined,
                                                     auditorName || creatorProfile?.name || 'Auditor',
                                                     '',
-                                                    true
+                                                    true,
+                                                    effPhone
                                                   );
                                                 });
                                                 setTick(t => t + 1);
@@ -2317,13 +3006,12 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                                             <button
                                               type="button"
                                               onClick={() => handleMarkItem('transaction', r.id, r.audit_mark, 'verified', undefined, r.is_locked)}
-                                              title={r.is_locked && !isAdmin ? "Audit Submit & Lock tawh a ni (Admin chiahin a khawih theih)" : (r.auditCategory === 'audited' ? "Audit tawh a ni (Click nawn la, sut rawh)" : "Audit / Dik tiin chhinchhiah rawh")}
-                                              disabled={r.is_locked && !isAdmin}
+                                              title={r.auditCategory === 'audited' ? "Audit tawh a ni (Click la sut rawh / uncheck)" : "Audit / Dik tiin chhinchhiah rawh"}
                                               className={`px-1.5 py-0.5 rounded text-[9.5px] font-black border transition cursor-pointer ${
                                                 r.auditCategory === 'audited'
                                                   ? 'bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700'
                                                   : 'bg-white text-emerald-700 border-emerald-300 hover:bg-emerald-50'
-                                              } ${r.is_locked && !isAdmin ? 'opacity-60 cursor-not-allowed' : ''}`}
+                                              }`}
                                             >
                                               ✓ Dik
                                             </button>
@@ -2384,13 +3072,12 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                                         <button
                                           type="button"
                                           onClick={() => handleMarkItem('transaction', r.id, r.audit_mark, 'verified', undefined, r.is_locked)}
-                                          title={r.is_locked && !isAdmin ? "Audit Submit & Lock tawh a ni (Admin chiahin a khawih theih)" : (r.auditCategory === 'audited' ? "Audit tawh a ni (Click nawn la, sut rawh)" : "Audit / Dik tiin chhinchhiah rawh")}
-                                          disabled={r.is_locked && !isAdmin}
+                                          title={r.auditCategory === 'audited' ? "Audit tawh a ni (Click la sut rawh / uncheck)" : "Audit / Dik tiin chhinchhiah rawh"}
                                           className={`px-2 py-1 rounded-lg text-[10px] font-black border transition cursor-pointer ${
                                             r.auditCategory === 'audited'
                                               ? 'bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700'
                                               : 'bg-white text-emerald-700 border-emerald-300 hover:bg-emerald-50'
-                                          } ${r.is_locked && !isAdmin ? 'opacity-60 cursor-not-allowed' : ''}`}
+                                          }`}
                                         >
                                           ✓ Dik
                                         </button>
@@ -2515,13 +3202,12 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                                         <button
                                           type="button"
                                           onClick={() => handleMarkItem('expense', p.id, p.audit_mark, 'verified', undefined, p.is_locked)}
-                                          title={p.is_locked && !isAdmin ? "Audit Submit & Lock tawh a ni (Admin chiahin a khawih theih)" : (p.auditCategory === 'audited' ? "Audit tawh a ni (Click nawn la, sut rawh)" : "Audit / Dik tiin chhinchhiah rawh")}
-                                          disabled={p.is_locked && !isAdmin}
+                                          title={p.auditCategory === 'audited' ? "Audit tawh a ni (Click la sut rawh / uncheck)" : "Audit / Dik tiin chhinchhiah rawh"}
                                           className={`px-2 py-1 rounded-lg text-[10px] font-black border transition cursor-pointer ${
                                             p.auditCategory === 'audited'
                                               ? 'bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700'
                                               : 'bg-white text-emerald-700 border-emerald-300 hover:bg-emerald-50'
-                                          } ${p.is_locked && !isAdmin ? 'opacity-60 cursor-not-allowed' : ''}`}
+                                          }`}
                                         >
                                           ✓ Dik
                                         </button>
@@ -2669,12 +3355,11 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                                           <button
                                             type="button"
                                             onClick={() => handleMarkItem('transaction', item.id, item.audit_mark, 'verified', undefined, item.is_locked)}
-                                            disabled={item.is_locked && !isAdmin}
                                             className={`px-1.5 py-0.5 rounded text-[9.5px] font-black border transition cursor-pointer ${
                                               item.auditCategory === 'audited'
                                                 ? 'bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700'
                                                 : 'bg-white text-emerald-700 border-emerald-300 hover:bg-emerald-50'
-                                            } ${item.is_locked && !isAdmin ? 'opacity-60 cursor-not-allowed' : ''}`}
+                                            }`}
                                           >
                                             ✓ Dik
                                           </button>
@@ -2767,13 +3452,12 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                                   <button
                                     type="button"
                                     onClick={() => handleMarkItem(item.recordType, item.id, item.audit_mark, 'verified', undefined, item.is_locked)}
-                                    title={item.is_locked && !isAdmin ? "Audit Submit & Lock tawh a ni (Admin chiahin a khawih theih)" : (item.auditCategory === 'audited' ? "Audit tawh a ni (Click nawn la, sut rawh)" : "Audit / Dik tiin chhinchhiah rawh")}
-                                    disabled={item.is_locked && !isAdmin}
+                                    title={item.auditCategory === 'audited' ? "Audit tawh a ni (Click la sut rawh / uncheck)" : "Audit / Dik tiin chhinchhiah rawh"}
                                     className={`px-2 py-1 rounded-lg text-[10px] font-black border transition cursor-pointer ${
                                       item.auditCategory === 'audited'
                                         ? 'bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700'
                                         : 'bg-white text-emerald-700 border-emerald-300 hover:bg-emerald-50'
-                                    } ${item.is_locked && !isAdmin ? 'opacity-60 cursor-not-allowed' : ''}`}
+                                    }`}
                                   >
                                     ✓ Dik
                                   </button>
@@ -3633,6 +4317,7 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                                     <button
                                       type="button"
                                       onClick={() => {
+                                        const effPhone = auditorPhone || creatorProfile?.phone || '';
                                         grp.items.forEach(t => {
                                           if (t.audit_mark !== 'verified') {
                                             markRecordAuditVerification(
@@ -3640,7 +4325,9 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                                               'transaction',
                                               'verified',
                                               auditorName || creatorProfile?.name || 'Auditor',
-                                              ''
+                                              '',
+                                              true,
+                                              effPhone
                                             );
                                           }
                                         });
@@ -3657,11 +4344,7 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                                     <button
                                       type="button"
                                       onClick={() => {
-                                        if (grp.items.some(i => i.is_locked) && !isAdmin) {
-                                          setLockToast('🔒 He Head chhunga record hi Lock tawh a ni a, Admin chiahin a khawih nawn thei.');
-                                          setTimeout(() => setLockToast(null), 3500);
-                                          return;
-                                        }
+                                        const effPhone = auditorPhone || creatorProfile?.phone || '';
                                         grp.items.forEach(t => {
                                           markRecordAuditVerification(
                                             t.id,
@@ -3669,7 +4352,8 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                                             undefined,
                                             auditorName || creatorProfile?.name || 'Auditor',
                                             '',
-                                            true
+                                            true,
+                                            effPhone
                                           );
                                         });
                                         setTick(t => t + 1);
@@ -3725,13 +4409,12 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                                         <button
                                           type="button"
                                           onClick={() => handleMarkItem('transaction', tx.id, tx.audit_mark, 'verified', undefined, tx.is_locked)}
-                                          title={tx.is_locked && !isAdmin ? "Audit Submit & Lock tawh a ni (Admin chiahin a khawih theih)" : (tx.audit_mark === 'verified' ? "Audit tawh a ni (Click nawn la, sut rawh)" : "Audit / Dik tiin chhinchhiah rawh")}
-                                          disabled={tx.is_locked && !isAdmin}
+                                          title={tx.audit_mark === 'verified' ? "Audit tawh a ni (Click la sut rawh / uncheck)" : "Audit / Dik tiin chhinchhiah rawh"}
                                           className={`px-2 py-1 rounded-lg text-[10px] font-black border transition cursor-pointer ${
                                             tx.audit_mark === 'verified'
                                               ? 'bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700'
                                               : 'bg-white text-emerald-700 border-emerald-300 hover:bg-emerald-50'
-                                          } ${tx.is_locked && !isAdmin ? 'opacity-60 cursor-not-allowed' : ''}`}
+                                          }`}
                                         >
                                           ✓ Dik
                                         </button>
@@ -3871,13 +4554,12 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                                 <button
                                   type="button"
                                   onClick={() => handleMarkItem('transaction', tx.id, tx.audit_mark, 'verified', undefined, tx.is_locked)}
-                                  title={tx.is_locked && !isAdmin ? "Audit Submit & Lock tawh a ni (Admin chiahin a khawih theih)" : (tx.audit_mark === 'verified' ? "Audit tawh a ni (Click nawn la, sut rawh)" : "Audit / Dik tiin chhinchhiah rawh")}
-                                  disabled={tx.is_locked && !isAdmin}
+                                  title={tx.audit_mark === 'verified' ? "Audit tawh a ni (Click la sut rawh / uncheck)" : "Audit / Dik tiin chhinchhiah rawh"}
                                   className={`text-[10px] font-bold px-2 py-0.5 rounded-lg border transition cursor-pointer ${
                                     tx.audit_mark === 'verified'
                                       ? 'bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700'
                                       : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-200'
-                                  } ${tx.is_locked && !isAdmin ? 'opacity-60 cursor-not-allowed' : ''}`}
+                                  }`}
                                 >
                                   ✓ Dik
                                 </button>
@@ -4394,14 +5076,28 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                   )}
                 </div>
 
-                <div className="flex items-end justify-between pt-4">
+                <div className="flex items-end justify-between pt-4 flex-wrap gap-4">
                   <div className="text-[11px] text-slate-500 space-y-0.5">
                     <div>Date: <span className="font-bold text-slate-800">{formatDateDDMMYYYY(new Date().toISOString())}</span></div>
                     <div>Digital Stamp: <span className="text-emerald-700 font-bold">RONPAY VERIFIED</span></div>
                   </div>
-                  <div className="text-right border-t border-slate-900 pt-1.5 min-w-[160px]">
-                    <div className="font-bold text-xs text-slate-900">{auditorName}</div>
-                    <div className="text-[10px] text-slate-500">Sum Endiktu (Auditor)</div>
+                  <div className="flex items-end gap-4 flex-wrap">
+                    {dualAuditSummary.auditorsList.length >= 2 ? (
+                      dualAuditSummary.auditorsList.map((aud, idx) => (
+                        <div key={aud.auditorKey} className="text-right border-t border-slate-900 pt-1.5 min-w-[140px]">
+                          <div className="font-bold text-xs text-slate-900">{aud.auditorName}</div>
+                          <div className="text-[10px] text-slate-500">Sum Endiktu (Auditor {idx + 1})</div>
+                          <div className="text-[9.5px] font-bold text-emerald-700">
+                            {aud.hasSignedOff ? '✓ Signed & Verified' : '⏳ Pending Sign-off'}
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-right border-t border-slate-900 pt-1.5 min-w-[160px]">
+                        <div className="font-bold text-xs text-slate-900">{auditorName}</div>
+                        <div className="text-[10px] text-slate-500">Sum Endiktu (Auditor)</div>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

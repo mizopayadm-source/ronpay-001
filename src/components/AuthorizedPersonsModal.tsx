@@ -94,9 +94,17 @@ export const AuthorizedPersonsModal: React.FC<AuthorizedPersonsModalProps> = ({
   // Auditor Temporary Grants state
   const [auditorGrants, setAuditorGrants] = useState<AuditorAccessGrant[]>([]);
   const [isAddAuditorOpen, setIsAddAuditorOpen] = useState<boolean>(false);
+  const [auditAppointmentMode, setAuditAppointmentMode] = useState<'single' | 'dual'>(() => {
+    const activeCount = (campaign?.auditorGrants || []).filter(g => g.status === 'active').length;
+    return campaign?.requireDualAuditorConsensus || activeCount >= 2 ? 'dual' : 'single';
+  });
   const [auditorNameInput, setAuditorNameInput] = useState<string>('');
   const [auditorPhoneInput, setAuditorPhoneInput] = useState<string>('');
   const [auditorPinInput, setAuditorPinInput] = useState<string>('1234');
+  // Optional 2nd Auditor (Co-Auditor) inputs when Dual Mode is chosen
+  const [coAuditorNameInput, setCoAuditorNameInput] = useState<string>('');
+  const [coAuditorPhoneInput, setCoAuditorPhoneInput] = useState<string>('');
+  const [coAuditorPinInput, setCoAuditorPinInput] = useState<string>('1234');
   const [auditorDurationHours, setAuditorDurationHours] = useState<number>(48);
   const [auditorNotesInput, setAuditorNotesInput] = useState<string>('');
   const [auditorMemberSearch, setAuditorMemberSearch] = useState<string>('');
@@ -105,6 +113,49 @@ export const AuthorizedPersonsModal: React.FC<AuthorizedPersonsModalProps> = ({
   const [copiedGrantId, setCopiedGrantId] = useState<string | null>(null);
   const [isAuditorPortalOpen, setIsAuditorPortalOpen] = useState<boolean>(false);
   const [auditorTick, setAuditorTick] = useState<number>(0);
+
+  // Appointed Audit Period (Hun Bi Tiam) states for Auditor
+  const nowForFy = useMemo(() => new Date(), []);
+  const fyCurrStart = nowForFy.getMonth() >= 3 ? nowForFy.getFullYear() : nowForFy.getFullYear() - 1;
+  const defaultFyLabel = `FY ${fyCurrStart - 1}-${fyCurrStart}`;
+  const defaultFromDate = `${fyCurrStart - 1}-04-01`;
+  const defaultToDate = `${fyCurrStart}-03-31`;
+
+  const [auditorPeriodPreset, setAuditorPeriodPreset] = useState<string>('fy_prev');
+  const [auditorPeriodLabel, setAuditorPeriodLabel] = useState<string>(defaultFyLabel);
+  const [auditorFromDate, setAuditorFromDate] = useState<string>(defaultFromDate);
+  const [auditorToDate, setAuditorToDate] = useState<string>(defaultToDate);
+
+  const handleSelectAuditPeriodPreset = (preset: string) => {
+    setAuditorPeriodPreset(preset);
+    if (preset === 'fy_prev') {
+      const lbl = `FY ${fyCurrStart - 1}-${fyCurrStart}`;
+      setAuditorPeriodLabel(lbl);
+      setAuditorFromDate(`${fyCurrStart - 1}-04-01`);
+      setAuditorToDate(`${fyCurrStart}-03-31`);
+    } else if (preset === 'fy_curr') {
+      const lbl = `FY ${fyCurrStart}-${fyCurrStart + 1}`;
+      setAuditorPeriodLabel(lbl);
+      setAuditorFromDate(`${fyCurrStart}-04-01`);
+      setAuditorToDate(`${fyCurrStart + 1}-03-31`);
+    } else if (preset === 'cy_prev') {
+      const y = nowForFy.getFullYear() - 1;
+      setAuditorPeriodLabel(`Kum ${y}`);
+      setAuditorFromDate(`${y}-01-01`);
+      setAuditorToDate(`${y}-12-31`);
+    } else if (preset === 'cy_curr') {
+      const y = nowForFy.getFullYear();
+      setAuditorPeriodLabel(`Kum ${y}`);
+      setAuditorFromDate(`${y}-01-01`);
+      setAuditorToDate(`${y}-12-31`);
+    } else if (preset === 'all') {
+      setAuditorPeriodLabel('Hun Chhung Zawng (All Records)');
+      setAuditorFromDate('');
+      setAuditorToDate('');
+    } else if (preset === 'custom') {
+      setAuditorPeriodLabel('Custom Date Range');
+    }
+  };
 
   useEffect(() => {
     if (campaign?.id) {
@@ -839,6 +890,9 @@ export const AuthorizedPersonsModal: React.FC<AuthorizedPersonsModalProps> = ({
     const phone = grant.auditorPhone || grant.auditor_phone || '';
     const pin = grant.pin || '1234';
     const expStr = formatDateTimeDDMMYYYY(grant.expiresAt || grant.expires_at || '');
+    const periodStr = grant.auditPeriod 
+      ? `${grant.auditPeriod}${grant.auditFromDate && grant.auditToDate ? ` (${formatDateDDMMYYYY(grant.auditFromDate)} – ${formatDateDDMMYYYY(grant.auditToDate)})` : ''}`
+      : 'Hun Chhung Zawng (All Records)';
     return [
       `⚖️ *RONPAY - SUM ENDIKTU (AUDITOR) RUATNA*`,
       ``,
@@ -849,6 +903,7 @@ export const AuthorizedPersonsModal: React.FC<AuthorizedPersonsModalProps> = ({
       `• App Link: ${appOrigin}/?view=app`,
       `• Login Phone: *+91 ${phone}*`,
       `• Security MPIN: *${pin}* (SMS OTP *123456* pawh a hman theih)`,
+      `• Audit Hun Bi Tiam: *${periodStr}*`,
       `• Access Tawp Hun: *${expStr}*`,
       ``,
       `📌 *Luh Dan:* RonPay App-ah khan i Phone Number (+91 ${phone}) leh Security MPIN (${pin}) hmangin Sign-In la, Home Screen-a *"Online Sum Endiktu (Auditor Portal)"* banner hmetin accounts enfiahna, Sign & Lock, leh Audit Certificate print-na i hmang thei nghal ang.`
@@ -924,7 +979,28 @@ export const AuthorizedPersonsModal: React.FC<AuthorizedPersonsModalProps> = ({
     const now = new Date();
     const expiresAt = new Date(now.getTime() + auditorDurationHours * 60 * 60 * 1000).toISOString();
 
-    // Check if an active grant already exists for this phone on this campaign; if so, update it
+    // Check if Co-Auditor (2nd Auditor) is also filled in Dual Mode
+    const hasCoAuditorInput = auditAppointmentMode === 'dual' && (coAuditorNameInput.trim() !== '' || coAuditorPhoneInput.trim() !== '');
+    const cleanCoName = coAuditorNameInput.trim();
+    const cleanCoPhone = coAuditorPhoneInput.replace(/\D/g, '').slice(-10);
+    const cleanCoPin = coAuditorPinInput.trim() || '1234';
+
+    if (hasCoAuditorInput) {
+      if (!cleanCoName) {
+        showToast('⚠️ Auditor 2-na (Co-Auditor) hming ziah luh a ngai e.');
+        return;
+      }
+      if (cleanCoPhone.length < 10) {
+        showToast('⚠️ Auditor 2-na (Co-Auditor) phone number (10 digit) dik ziah luh a ngai e.');
+        return;
+      }
+      if (cleanCoPhone === cleanPhone) {
+        showToast('⚠️ Auditor 1 leh Auditor 2 phone number a inang thei lo.');
+        return;
+      }
+    }
+
+    // Check if an active grant already exists for Auditor 1 phone on this campaign; if so, update it
     const existingGrant = auditorGrants.find(
       g => String(g.auditorPhone || g.auditor_phone || '').replace(/\D/g, '').slice(-10) === cleanPhone
     );
@@ -950,15 +1026,69 @@ export const AuthorizedPersonsModal: React.FC<AuthorizedPersonsModalProps> = ({
       expiresAt: expiresAt,
       expires_at: expiresAt,
       status: 'active',
+      auditPeriod: auditorPeriodLabel || defaultFyLabel,
+      audit_period: auditorPeriodLabel || defaultFyLabel,
+      auditFromDate: auditorFromDate || '',
+      audit_from_date: auditorFromDate || '',
+      auditToDate: auditorToDate || '',
+      audit_to_date: auditorToDate || '',
       notes: auditorNotesInput.trim() || `Financial Audit Access (${auditorDurationHours} Hours)`,
       permissions: ['AUDIT_FINANCIAL_REPORTS', 'MANAGE_AUDITOR_GRANTS']
     };
 
     saveAuditorGrant(newGrant);
+
+    if (hasCoAuditorInput) {
+      const existingCoGrant = auditorGrants.find(
+        g => String(g.auditorPhone || g.auditor_phone || '').replace(/\D/g, '').slice(-10) === cleanCoPhone
+      );
+      const coGrant: AuditorAccessGrant = {
+        id: existingCoGrant ? existingCoGrant.id : `GRANT_${Date.now() + 1}_${Math.random().toString(36).substring(2, 6).toUpperCase()}`,
+        auditorName: cleanCoName,
+        auditor_name: cleanCoName,
+        auditorPhone: cleanCoPhone,
+        auditor_phone: cleanCoPhone,
+        pin: cleanCoPin,
+        campaignId: campaign.id,
+        campaign_id: campaign.id,
+        campaignTitle: campaign.title,
+        campaign_title: campaign.title,
+        grantedBy: creatorProfile?.name || 'Creator',
+        granted_by: creatorProfile?.name || 'Creator',
+        grantedByName: creatorProfile?.name || 'Creator',
+        grantedAt: now.toISOString(),
+        granted_at: now.toISOString(),
+        expiresAt: expiresAt,
+        expires_at: expiresAt,
+        status: 'active',
+        auditPeriod: auditorPeriodLabel || defaultFyLabel,
+        audit_period: auditorPeriodLabel || defaultFyLabel,
+        auditFromDate: auditorFromDate || '',
+        audit_from_date: auditorFromDate || '',
+        auditToDate: auditorToDate || '',
+        audit_to_date: auditorToDate || '',
+        notes: auditorNotesInput.trim() || `Co-Auditor Financial Audit Access (${auditorDurationHours} Hours)`,
+        permissions: ['AUDIT_FINANCIAL_REPORTS', 'MANAGE_AUDITOR_GRANTS']
+      };
+      saveAuditorGrant(coGrant);
+    }
+
     const updatedGrants = getStoredAuditorGrants(campaign.id);
+    const isNowDual = auditAppointmentMode === 'dual' || updatedGrants.filter(g => g.status === 'active').length >= 2;
+    const updatedCamp: Campaign = {
+      ...campaign,
+      auditorGrants: updatedGrants,
+      requireDualAuditorConsensus: isNowDual,
+      metadata: {
+        ...(campaign.metadata || {}),
+        auditorGrants: updatedGrants,
+        requireDualAuditorConsensus: isNowDual
+      }
+    };
+    saveCampaign(updatedCamp);
     setAuditorGrants(updatedGrants);
     if (onCampaignUpdated) {
-      onCampaignUpdated({ ...campaign, auditorGrants: updatedGrants });
+      onCampaignUpdated(updatedCamp);
     }
     setAuditorTick(t => t + 1);
     setIsAddAuditorOpen(false);
@@ -966,8 +1096,19 @@ export const AuthorizedPersonsModal: React.FC<AuthorizedPersonsModalProps> = ({
     setAuditorNameInput('');
     setAuditorPhoneInput('');
     setAuditorPinInput('1234');
+    setCoAuditorNameInput('');
+    setCoAuditorPhoneInput('');
+    setCoAuditorPinInput('1234');
     setAuditorNotesInput('');
-    showToast(`✅ Auditor ${trimmedName} (+91 ${cleanPhone}, PIN: ${cleanPin}) ruat fel a ni a, Cloud/Browser dangah sync nghal a ni e!`);
+    setAuditorPeriodPreset('fy_prev');
+    setAuditorPeriodLabel(defaultFyLabel);
+    setAuditorFromDate(defaultFromDate);
+    setAuditorToDate(defaultToDate);
+    if (hasCoAuditorInput) {
+      showToast(`✅ Co-Auditors 2 (${trimmedName} & ${cleanCoName}, Period: ${auditorPeriodLabel}) ruat fel a ni e!`);
+    } else {
+      showToast(`✅ Auditor ${trimmedName} (+91 ${cleanPhone}, Period: ${auditorPeriodLabel}) ruat fel a ni e!`);
+    }
   };
 
   const handleRevokeGrant = (grantId: string) => {
@@ -1631,17 +1772,106 @@ export const AuthorizedPersonsModal: React.FC<AuthorizedPersonsModalProps> = ({
                 </button>
               </div>
 
+              {/* Optional Single vs. Co-Auditor (Mi 1 emaw Mi 2 Ruatna) Mode Selector Card */}
+              <div className="bg-slate-900 text-white rounded-2xl p-3.5 sm:p-4 border border-slate-700 space-y-3 shadow-xs">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <Users className="w-4 h-4 text-amber-400 shrink-0" />
+                      <h4 className="font-black text-xs sm:text-sm text-white">
+                        Audit Kalphung Thlanna: Mi 1 (Single) vs. Mi 2 (Co-Auditor Mode)
+                      </h4>
+                      <span className="text-[9.5px] font-black uppercase px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-400/30">
+                        Optional
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-300 mt-0.5">
+                      Auditor 1 chauh ruat emaw, Auditor 2 (Co-Auditors) hmun hran leh hun hrana endik a Joint Audited Report chhuah turin hetah hian thlang rawh.
+                    </p>
+                  </div>
+
+                  <div className="inline-flex rounded-xl bg-slate-800 p-1 border border-slate-700 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAuditAppointmentMode('single');
+                        if (campaign) {
+                          const updatedCamp: Campaign = {
+                            ...campaign,
+                            requireDualAuditorConsensus: false,
+                            metadata: { ...(campaign.metadata || {}), requireDualAuditorConsensus: false }
+                          };
+                          saveCampaign(updatedCamp);
+                          if (onCampaignUpdated) onCampaignUpdated(updatedCamp);
+                        }
+                        showToast('👤 Single Auditor Mode (Mi 1) thlan a ni e.');
+                      }}
+                      className={`px-3 py-1.5 rounded-lg text-[11px] font-black transition cursor-pointer flex items-center gap-1.5 ${
+                        auditAppointmentMode === 'single'
+                          ? 'bg-amber-500 text-slate-950 shadow-2xs'
+                          : 'text-slate-300 hover:text-white'
+                      }`}
+                    >
+                      <span>👤 Mi 1 (Single Auditor)</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAuditAppointmentMode('dual');
+                        if (campaign) {
+                          const updatedCamp: Campaign = {
+                            ...campaign,
+                            requireDualAuditorConsensus: true,
+                            metadata: { ...(campaign.metadata || {}), requireDualAuditorConsensus: true }
+                          };
+                          saveCampaign(updatedCamp);
+                          if (onCampaignUpdated) onCampaignUpdated(updatedCamp);
+                        }
+                        setIsAddAuditorOpen(true);
+                        showToast('👥 Co-Auditor Mode (Mi 2 — Joint Consensus) thlan a ni e!');
+                      }}
+                      className={`px-3 py-1.5 rounded-lg text-[11px] font-black transition cursor-pointer flex items-center gap-1.5 ${
+                        auditAppointmentMode === 'dual'
+                          ? 'bg-emerald-500 text-slate-950 shadow-2xs'
+                          : 'text-slate-300 hover:text-white'
+                      }`}
+                    >
+                      <span>👥 Mi 2 (Co-Auditors)</span>
+                    </button>
+                  </div>
+                </div>
+
+                {auditAppointmentMode === 'dual' && (
+                  <div className="bg-slate-800/90 border border-emerald-500/30 rounded-xl p-2.5 text-[11px] text-emerald-200 flex items-start gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                    <div>
+                      <strong>👥 Co-Auditor Mode (Mi 2) Active:</strong> Auditor pahnih te hian hmun hran leh hun inang lo aṭang pawhin an phone/computer ve ve aṭangin an audit thei ang. An pahnih chhinchhiahna (`✓ Dik` / `⚠️ Query`) chu Server-ah a in-merge zel ang a, an pahniha an Sign veleh <strong>Joint Audited Report &amp; Certificate</strong> a chhuak ang.
+                    </div>
+                  </div>
+                )}
+              </div>
+
               {/* Add Auditor Form */}
               {isAddAuditorOpen && (
                 <form onSubmit={handleCreateAuditorGrant} className="bg-white border border-amber-300 rounded-2xl p-4 sm:p-5 space-y-4 shadow-sm animate-fadeIn">
-                  <div className="flex items-center justify-between border-b border-amber-100 pb-2.5">
+                  <div className="flex items-center justify-between border-b border-amber-100 pb-2.5 flex-wrap gap-2">
                     <h4 className="font-black text-xs uppercase tracking-wider text-slate-800 flex items-center gap-2">
                       <UserCheck className="w-4 h-4 text-amber-600" />
-                      <span>Auditor Thar Ruatna Form</span>
+                      <span>{auditAppointmentMode === 'dual' ? 'Co-Auditors (Mi 2) Ruatna Form' : 'Auditor Thar Ruatna Form'}</span>
                     </h4>
-                    <span className="text-[10px] text-amber-700 font-bold bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
-                      Member Roll Emaw External Auditor
-                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setAuditAppointmentMode(prev => prev === 'single' ? 'dual' : 'single')}
+                        className={`text-[10px] font-black px-2.5 py-1 rounded-full border cursor-pointer transition ${
+                          auditAppointmentMode === 'dual'
+                            ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
+                            : 'bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100'
+                        }`}
+                      >
+                        {auditAppointmentMode === 'dual' ? '👥 Mi 2 Ruat Rualna (Active)' : '+ Mi 2 (Co-Auditor) Ruat Tel Duh Chuan Click Rawh'}
+                      </button>
+                    </div>
                   </div>
 
                   {/* Optional Quick-Pick from Member Roll */}
@@ -1798,6 +2028,73 @@ export const AuthorizedPersonsModal: React.FC<AuthorizedPersonsModalProps> = ({
                     </div>
                   </div>
 
+                  {/* Optional 2nd Auditor (Co-Auditor) Row when Dual Mode is active */}
+                  {auditAppointmentMode === 'dual' && (
+                    <div className="bg-emerald-50/70 border border-emerald-300 rounded-2xl p-3.5 space-y-3">
+                      <div className="flex items-center justify-between flex-wrap gap-1">
+                        <span className="text-xs font-black text-emerald-950 flex items-center gap-1.5">
+                          <Users className="w-4 h-4 text-emerald-700" />
+                          <span>Auditor 2-na (Co-Auditor) Details — Hmun hran aṭanga endik ve tu tur (Optional)</span>
+                        </span>
+                        <span className="text-[10px] font-bold text-emerald-800 bg-white px-2 py-0.5 rounded-full border border-emerald-200">
+                          A rualin emaw a hnuah a hrang pawhin a ruat theih
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div>
+                          <label className="block text-xs font-bold text-slate-700 mb-1">
+                            Auditor 2 Hming (Co-Auditor Name)
+                          </label>
+                          <input
+                            type="text"
+                            value={coAuditorNameInput}
+                            onChange={e => setCoAuditorNameInput(e.target.value)}
+                            placeholder="Entirnan: R. Lallawmawma"
+                            className="w-full text-xs p-2.5 rounded-xl bg-white border border-emerald-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-bold"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-slate-700 mb-1">
+                            Auditor 2 Phone Number (10 Digit)
+                          </label>
+                          <input
+                            type="tel"
+                            maxLength={10}
+                            value={coAuditorPhoneInput}
+                            onChange={e => setCoAuditorPhoneInput(e.target.value.replace(/\D/g, '').slice(-10))}
+                            placeholder="9436xxxxxx"
+                            className="w-full text-xs p-2.5 rounded-xl bg-white border border-emerald-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono font-bold"
+                          />
+                        </div>
+                        <div>
+                          <div className="flex items-center justify-between mb-1">
+                            <label className="block text-xs font-bold text-slate-700">
+                              Auditor 2 Login PIN (4-Digit)
+                            </label>
+                            <button
+                              type="button"
+                              onClick={() => setCoAuditorPinInput(String(Math.floor(1000 + Math.random() * 9000)))}
+                              className="text-[10px] font-bold text-emerald-700 hover:underline cursor-pointer"
+                            >
+                              Random PIN
+                            </button>
+                          </div>
+                          <div className="relative">
+                            <Key className="w-3.5 h-3.5 text-emerald-600 absolute left-3 top-2.5" />
+                            <input
+                              type="text"
+                              maxLength={6}
+                              value={coAuditorPinInput}
+                              onChange={e => setCoAuditorPinInput(e.target.value.replace(/\s+/g, ''))}
+                              placeholder="1234"
+                              className="w-full text-xs pl-8 pr-3 py-2.5 rounded-xl bg-white border border-emerald-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono font-black tracking-widest text-emerald-950"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1.5">
                       Access Hun Tiam (Time-Bound Duration)
@@ -1823,6 +2120,92 @@ export const AuthorizedPersonsModal: React.FC<AuthorizedPersonsModalProps> = ({
                           <span>{d.label}</span>
                         </button>
                       ))}
+                    </div>
+                  </div>
+
+                  {/* Appointed Audit Period (Hun Bi Tiam) */}
+                  <div className="bg-amber-50/70 border border-amber-300 rounded-2xl p-3.5 space-y-3 shadow-2xs">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                      <label className="text-xs font-black text-amber-950 flex items-center gap-1.5">
+                        <Calendar className="w-4 h-4 text-amber-700" />
+                        <span>Audit Tur Hun Bi (Appointed Audit Period) *</span>
+                      </label>
+                      <span className="text-[10px] font-bold text-amber-800 bg-amber-100/90 px-2 py-0.5 rounded-full border border-amber-300 inline-block w-fit">
+                        Auditor-in he hun chhung chiah hi a audit thei ang
+                      </span>
+                    </div>
+
+                    {/* Presets */}
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                      {[
+                        { id: 'fy_prev', label: `FY ${fyCurrStart - 1}-${fyCurrStart} (Kum Hmasa)` },
+                        { id: 'fy_curr', label: `FY ${fyCurrStart}-${fyCurrStart + 1} (Kumin FY)` },
+                        { id: 'cy_prev', label: `Kum ${nowForFy.getFullYear() - 1}` },
+                        { id: 'cy_curr', label: `Kum ${nowForFy.getFullYear()}` },
+                        { id: 'custom', label: 'Custom Date Range' },
+                        { id: 'all', label: 'Hun Chhung Zawng (All)' },
+                      ].map(p => (
+                        <button
+                          key={p.id}
+                          type="button"
+                          onClick={() => handleSelectAuditPeriodPreset(p.id)}
+                          className={`py-1.5 px-2.5 rounded-xl border text-[11px] font-extrabold transition cursor-pointer text-left truncate ${
+                            auditorPeriodPreset === p.id
+                              ? 'bg-amber-600 text-white border-amber-600 shadow-2xs'
+                              : 'bg-white border-amber-200 text-slate-700 hover:bg-amber-50'
+                          }`}
+                        >
+                          {p.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Period Label and Date Range Pickers */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
+                      <div>
+                        <label className="block text-[10.5px] font-bold text-slate-700 mb-1">
+                          Period Label / Title *
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={auditorPeriodLabel}
+                          onChange={e => {
+                            setAuditorPeriodLabel(e.target.value);
+                            setAuditorPeriodPreset('custom');
+                          }}
+                          placeholder="e.g. FY 2024-2025"
+                          className="w-full text-xs p-2.5 rounded-xl bg-white border border-amber-200 focus:outline-none focus:ring-2 focus:ring-amber-500 font-bold"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10.5px] font-bold text-slate-700 mb-1">
+                          From Date (Aṭanga)
+                        </label>
+                        <input
+                          type="date"
+                          value={auditorFromDate}
+                          onChange={e => {
+                            setAuditorFromDate(e.target.value);
+                            setAuditorPeriodPreset('custom');
+                          }}
+                          className="w-full text-xs p-2.5 rounded-xl bg-white border border-amber-200 focus:outline-none focus:ring-2 focus:ring-amber-500 font-mono font-bold"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10.5px] font-bold text-slate-700 mb-1">
+                          To Date (Thlengin)
+                        </label>
+                        <input
+                          type="date"
+                          value={auditorToDate}
+                          onChange={e => {
+                            setAuditorToDate(e.target.value);
+                            setAuditorPeriodPreset('custom');
+                          }}
+                          className="w-full text-xs p-2.5 rounded-xl bg-white border border-amber-200 focus:outline-none focus:ring-2 focus:ring-amber-500 font-mono font-bold"
+                        />
+                      </div>
                     </div>
                   </div>
 
@@ -1964,6 +2347,22 @@ export const AuthorizedPersonsModal: React.FC<AuthorizedPersonsModalProps> = ({
                                   </span>
                                 )}
                               </div>
+                            </div>
+
+                            {/* Appointed Period Display */}
+                            <div className="bg-white/90 p-2 rounded-xl border border-amber-200 text-[11px] space-y-0.5">
+                              <div className="flex items-center justify-between font-bold text-slate-800">
+                                <span className="flex items-center gap-1 text-indigo-900">
+                                  <Calendar className="w-3 h-3 text-indigo-600" />
+                                  <span>Audit Hun Bi:</span>
+                                </span>
+                                <span className="text-amber-950 font-black">{grant.auditPeriod || 'Hun Chhung Zawng'}</span>
+                              </div>
+                              {(grant.auditFromDate || grant.auditToDate) && (
+                                <div className="text-[10px] text-slate-500 font-mono">
+                                  {grant.auditFromDate ? formatDateDDMMYYYY(grant.auditFromDate) : 'Start'} – {grant.auditToDate ? formatDateDDMMYYYY(grant.auditToDate) : 'Present'}
+                                </div>
+                              )}
                             </div>
 
                             {grant.notes && (

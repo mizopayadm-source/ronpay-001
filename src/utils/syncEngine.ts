@@ -392,6 +392,59 @@ export async function syncAllWithServer(forceAuthoritative: boolean = false): Pr
             }
           }
 
+          const mergeRecordAuditorState = (serverRec: any, localRec: any, localIsNewer: boolean) => {
+            const base = localIsNewer ? { ...serverRec, ...localRec } : { ...localRec, ...serverRec };
+            const verS = serverRec?.auditor_verifications || serverRec?.metadata?.auditor_verifications;
+            const verL = localRec?.auditor_verifications || localRec?.metadata?.auditor_verifications;
+            if (verS || verL) {
+              const mergedVer: Record<string, any> = {};
+              const keys = new Set([...Object.keys(verS || {}), ...Object.keys(verL || {})]);
+              for (const ak of keys) {
+                const entryS = verS?.[ak];
+                const entryL = verL?.[ak];
+                if (entryS && !entryL) mergedVer[ak] = entryS;
+                else if (!entryS && entryL) mergedVer[ak] = entryL;
+                else if (entryS && entryL) {
+                  const tS = new Date(entryS.markedAt || 0).getTime();
+                  const tL = new Date(entryL.markedAt || 0).getTime();
+                  mergedVer[ak] = tL >= tS ? entryL : entryS;
+                }
+              }
+              base.auditor_verifications = mergedVer;
+              const activeEntries = Object.values(mergedVer).filter((v: any) => v && (v.mark === 'verified' || v.mark === 'flagged'));
+              const flaggedEntries = activeEntries.filter((v: any) => v.mark === 'flagged');
+              const verifiedEntries = activeEntries.filter((v: any) => v.mark === 'verified');
+              if (flaggedEntries.length > 0) {
+                base.audit_mark = 'flagged';
+                base.audit_query = flaggedEntries.map((f: any) => `${f.auditorName}: ${f.query || 'Query'}`).join(' | ');
+                base.audit_marked_by = flaggedEntries.map((f: any) => f.auditorName).join(', ');
+              } else if (verifiedEntries.length > 0) {
+                base.audit_mark = 'verified';
+                base.audit_query = undefined;
+                base.audit_marked_by = verifiedEntries.map((v: any) => v.auditorName).join(', ');
+              } else {
+                base.audit_mark = undefined;
+                base.audit_query = undefined;
+                base.audit_marked_by = undefined;
+                base.audit_marked_at = undefined;
+              }
+              if (base.metadata && typeof base.metadata === 'object') {
+                base.metadata = {
+                  ...base.metadata,
+                  audit_mark: base.audit_mark || null,
+                  audit_query: base.audit_query || null,
+                  auditor_verifications: mergedVer
+                };
+              }
+            } else if (localIsNewer && localRec?.metadata && localRec.metadata.audit_mark === null) {
+              base.audit_mark = undefined;
+              base.audit_query = undefined;
+              base.audit_marked_by = undefined;
+              base.audit_marked_at = undefined;
+            }
+            return base;
+          };
+
           // 2. Reconcile with local transactions:
           const newLocalTxsToPush: Transaction[] = [];
           const nowMs = Date.now();
@@ -409,9 +462,8 @@ export async function syncAllWithServer(forceAuthoritative: boolean = false): Pr
               if (existing) {
                 const localTime = new Date(ct.updatedAt || ct.timestamp || 0).getTime();
                 const serverTime = new Date(existing.updatedAt || existing.timestamp || 0).getTime();
-                if (localTime > serverTime) {
-                  txMap.set(k, { ...existing, ...ct, isSynced: true });
-                }
+                const mergedItem = mergeRecordAuditorState(existing, ct, localTime >= serverTime);
+                txMap.set(k, { ...mergedItem, isSynced: true });
               } else {
                 // Not in serverData.transactions!
                 const isFreshOffline = ((ct as any).isOfflinePending === true || ct.isSynced === false) &&
@@ -492,9 +544,44 @@ export async function syncAllWithServer(forceAuthoritative: boolean = false): Pr
               const existing = expMap.get(k);
               const localTime = new Date(le.updatedAt || le.recordedAt || le.spentDate || 0).getTime();
               const serverTime = new Date(existing.updatedAt || existing.recordedAt || existing.spentDate || 0).getTime();
-              if (localTime > serverTime) {
-                expMap.set(k, { ...existing, ...le });
+              const verS = existing?.auditor_verifications || existing?.metadata?.auditor_verifications;
+              const verL = le?.auditor_verifications || le?.metadata?.auditor_verifications;
+              const baseExp = localTime >= serverTime ? { ...existing, ...le } : { ...le, ...existing };
+              if (verS || verL) {
+                const mergedVer: Record<string, any> = {};
+                const keys = new Set([...Object.keys(verS || {}), ...Object.keys(verL || {})]);
+                for (const ak of keys) {
+                  const eS = verS?.[ak];
+                  const eL = verL?.[ak];
+                  if (eS && !eL) mergedVer[ak] = eS;
+                  else if (!eS && eL) mergedVer[ak] = eL;
+                  else if (eS && eL) {
+                    mergedVer[ak] = new Date(eL.markedAt || 0).getTime() >= new Date(eS.markedAt || 0).getTime() ? eL : eS;
+                  }
+                }
+                baseExp.auditor_verifications = mergedVer;
+                const activeEntries = Object.values(mergedVer).filter((v: any) => v && (v.mark === 'verified' || v.mark === 'flagged'));
+                const flaggedEntries = activeEntries.filter((v: any) => v.mark === 'flagged');
+                const verifiedEntries = activeEntries.filter((v: any) => v.mark === 'verified');
+                if (flaggedEntries.length > 0) {
+                  baseExp.audit_mark = 'flagged';
+                  baseExp.audit_query = flaggedEntries.map((f: any) => `${f.auditorName}: ${f.query || 'Query'}`).join(' | ');
+                  baseExp.audit_marked_by = flaggedEntries.map((f: any) => f.auditorName).join(', ');
+                } else if (verifiedEntries.length > 0) {
+                  baseExp.audit_mark = 'verified';
+                  baseExp.audit_query = undefined;
+                  baseExp.audit_marked_by = verifiedEntries.map((v: any) => v.auditorName).join(', ');
+                } else {
+                  baseExp.audit_mark = undefined;
+                  baseExp.audit_query = undefined;
+                  baseExp.audit_marked_by = undefined;
+                  baseExp.audit_marked_at = undefined;
+                }
+              } else if (localTime >= serverTime && le?.metadata && le.metadata.audit_mark === null) {
+                baseExp.audit_mark = undefined;
+                baseExp.audit_query = undefined;
               }
+              expMap.set(k, baseExp);
             }
           }
           const finalExpenses = Array.from(expMap.values());

@@ -4914,6 +4914,74 @@ function mergeCollections<T extends Record<string, any>>(serverList: T[], client
       map.set(String(item[key]).toLowerCase(), item);
     }
   }
+  const mergeMultiAuditorFields = (olderObj: any, newerObj: any, baseMerged: any) => {
+    const verA = olderObj?.auditor_verifications || olderObj?.metadata?.auditor_verifications;
+    const verB = newerObj?.auditor_verifications || newerObj?.metadata?.auditor_verifications;
+    if (verA || verB) {
+      const mergedVer: Record<string, any> = {};
+      const keys = new Set([...Object.keys(verA || {}), ...Object.keys(verB || {})]);
+      for (const ak of keys) {
+        const entryA = verA?.[ak];
+        const entryB = verB?.[ak];
+        if (entryA && !entryB) {
+          mergedVer[ak] = entryA;
+        } else if (!entryA && entryB) {
+          mergedVer[ak] = entryB;
+        } else if (entryA && entryB) {
+          const tA = new Date(entryA.markedAt || 0).getTime();
+          const tB = new Date(entryB.markedAt || 0).getTime();
+          mergedVer[ak] = tB >= tA ? entryB : entryA;
+        }
+      }
+      // Clean out any entries marked as 'unchecked' while keeping tombstones or resolving active marks
+      baseMerged.auditor_verifications = mergedVer;
+      if (baseMerged.metadata && typeof baseMerged.metadata === 'object') {
+        baseMerged.metadata = { ...baseMerged.metadata, auditor_verifications: mergedVer };
+      }
+    }
+
+    // Merge auditSignOffs on Campaigns by auditorKey
+    const signA = olderObj?.auditSignOffs || olderObj?.metadata?.auditSignOffs;
+    const signB = newerObj?.auditSignOffs || newerObj?.metadata?.auditSignOffs;
+    if (Array.isArray(signA) || Array.isArray(signB)) {
+      const signMap = new Map<string, any>();
+      for (const s of (Array.isArray(signA) ? signA : [])) {
+        if (s && s.auditorKey) signMap.set(String(s.auditorKey), s);
+      }
+      for (const s of (Array.isArray(signB) ? signB : [])) {
+        if (s && s.auditorKey) {
+          const prev = signMap.get(String(s.auditorKey));
+          if (!prev || new Date(s.signedAt || 0).getTime() >= new Date(prev.signedAt || 0).getTime()) {
+            signMap.set(String(s.auditorKey), s);
+          }
+        }
+      }
+      const mergedSigns = Array.from(signMap.values());
+      baseMerged.auditSignOffs = mergedSigns;
+      if (baseMerged.metadata && typeof baseMerged.metadata === 'object') {
+        baseMerged.metadata = { ...baseMerged.metadata, auditSignOffs: mergedSigns };
+      }
+    }
+
+    // Honor explicit audit_mark clearing (when newerObj sets audit_mark to null or undefined while updating)
+    if ('audit_mark' in newerObj && (newerObj.audit_mark === null || newerObj.audit_mark === undefined)) {
+      baseMerged.audit_mark = undefined;
+      baseMerged.audit_query = undefined;
+      baseMerged.audit_marked_by = undefined;
+      baseMerged.audit_marked_at = undefined;
+      if (baseMerged.metadata && typeof baseMerged.metadata === 'object') {
+        baseMerged.metadata = {
+          ...baseMerged.metadata,
+          audit_mark: null,
+          audit_query: null,
+          audit_marked_by: null,
+          audit_marked_at: null
+        };
+      }
+    }
+    return baseMerged;
+  };
+
   // 2. Put / merge client items intelligently based on updatedAt timestamps and validityDate
   for (const clientItem of filteredClient) {
     if (!clientItem || !clientItem[key]) continue;
@@ -4938,10 +5006,10 @@ function mergeCollections<T extends Record<string, any>>(serverList: T[], client
 
       if (timeDiff >= -5000) {
         // Client update is newer or within 5 seconds (clock skew tolerance): client wins
-        map.set(k, { ...existing, ...clientItem });
+        map.set(k, mergeMultiAuditorFields(existing, clientItem, { ...existing, ...clientItem }));
       } else if (serverTime > clientTime + 5000) {
         // Server is genuinely newer by more than 5 seconds: keep server fields with custom logo protection
-        const mergedObj: any = { ...clientItem, ...existing };
+        const mergedObj: any = mergeMultiAuditorFields(clientItem, existing, { ...clientItem, ...existing });
         const clientVal = (clientItem as any).collectedAmount;
         const existingVal = (existing as any).collectedAmount;
         if (typeof clientVal === 'number' && clientVal > (existingVal || 0)) {
@@ -4955,19 +5023,19 @@ function mergeCollections<T extends Record<string, any>>(serverList: T[], client
       } else {
         // Timestamps are equal or missing:
         if (isCustomLogo(clientItem.imageUrl) && !isCustomLogo(existing.imageUrl)) {
-          map.set(k, { ...existing, ...clientItem });
+          map.set(k, mergeMultiAuditorFields(existing, clientItem, { ...existing, ...clientItem }));
         } else if (clientHasExtendedValidity) {
           // Client has extended validity date (e.g. Admin extend action): client wins
-          map.set(k, { ...existing, ...clientItem });
+          map.set(k, mergeMultiAuditorFields(existing, clientItem, { ...existing, ...clientItem }));
         } else if (serverHasExtendedValidity) {
           // Server has extended validity date: server wins (never allow stale client to re-expire)
-          map.set(k, { ...clientItem, ...existing });
+          map.set(k, mergeMultiAuditorFields(clientItem, existing, { ...clientItem, ...existing }));
         } else if (clientItem.status === 'active' && existing.status === 'expired') {
           // Client reactivated to active: client wins
-          map.set(k, { ...existing, ...clientItem });
+          map.set(k, mergeMultiAuditorFields(existing, clientItem, { ...existing, ...clientItem }));
         } else {
           // Default to latest client payload when timestamps are equal or missing
-          map.set(k, { ...existing, ...clientItem });
+          map.set(k, mergeMultiAuditorFields(existing, clientItem, { ...existing, ...clientItem }));
         }
       }
     }
@@ -5122,12 +5190,19 @@ async function syncFromSupabase(db: DatabaseSchema, force: boolean = false): Pro
             subCategory: row.sub_category || row.subCategory || meta.subCategory || '',
             subCategoryBreakdown: meta.subCategoryBreakdown || row.subCategoryBreakdown || undefined,
             audit_mark: meta.audit_mark || row.audit_mark || undefined,
-            audit_remark: meta.audit_remark || row.audit_remark || undefined,
-            audited_by: meta.audited_by || row.audited_by || undefined,
-            audited_at: meta.audited_at || row.audited_at || undefined,
+            audit_query: meta.audit_query || row.audit_query || meta.audit_remark || row.audit_remark || undefined,
+            audit_remark: meta.audit_remark || row.audit_remark || meta.audit_query || undefined,
+            audit_marked_by: meta.audit_marked_by || row.audit_marked_by || meta.audited_by || undefined,
+            audit_marked_at: meta.audit_marked_at || row.audit_marked_at || meta.audited_at || undefined,
+            audited_by: meta.audited_by || row.audited_by || meta.audit_marked_by || undefined,
+            audited_at: meta.audited_at || row.audited_at || meta.audit_marked_at || undefined,
+            auditor_verifications: meta.auditor_verifications || row.auditor_verifications || undefined,
             is_locked: Boolean(meta.is_locked ?? row.is_locked ?? false),
             locked_by: meta.locked_by || row.locked_by || undefined,
             locked_at: meta.locked_at || row.locked_at || undefined,
+            audit_date: meta.audit_date || row.audit_date || undefined,
+            audit_period: meta.audit_period || row.audit_period || undefined,
+            audit_notes: meta.audit_notes || row.audit_notes || undefined,
             timestamp: row.timestamp || row.created_at || new Date().toISOString(),
             createdAt: row.created_at || row.timestamp || new Date().toISOString(),
             updatedAt: row.updated_at || row.updatedAt || new Date().toISOString(),
@@ -5159,9 +5234,10 @@ async function syncFromSupabase(db: DatabaseSchema, force: boolean = false): Pro
         if (Array.isArray(campRows) && campRows.length > 0) {
           const delCampSet = new Set((db.deletedCampaignIds || []).map((id: string) => String(id).toLowerCase().trim()));
           const validCamps = campRows.filter(c => c && c.id && !delCampSet.has(String(c.id).toLowerCase().trim()));
-          db.campaigns = validCamps.map((r: any) => {
+          const normalizedCamps = validCamps.map((r: any) => {
             const meta = r.metadata || {};
             return {
+              ...meta,
               id: r.id,
               title: r.title,
               category: r.category || 'ralna',
@@ -5195,6 +5271,14 @@ async function syncFromSupabase(db: DatabaseSchema, force: boolean = false): Pro
               gpsCoords: meta.gpsCoords ?? r.gpsCoords,
               kumtluangFeeBearer: meta.kumtluangFeeBearer ?? r.kumtluangFeeBearer,
               auditorGrants: Array.isArray(meta.auditorGrants) ? meta.auditorGrants : (Array.isArray(r.auditorGrants) ? r.auditorGrants : []),
+              auditChecklist: meta.auditChecklist || r.auditChecklist || undefined,
+              auditSignOffs: Array.isArray(meta.auditSignOffs) ? meta.auditSignOffs : (Array.isArray(r.auditSignOffs) ? r.auditSignOffs : undefined),
+              requireDualAuditorConsensus: meta.requireDualAuditorConsensus ?? r.requireDualAuditorConsensus,
+              lastAuditedAt: meta.lastAuditedAt || r.lastAuditedAt || undefined,
+              lastAuditedBy: meta.lastAuditedBy || r.lastAuditedBy || undefined,
+              lastAuditPeriod: meta.lastAuditPeriod || r.lastAuditPeriod || undefined,
+              lastAuditNotes: meta.lastAuditNotes || r.lastAuditNotes || undefined,
+              auditReconciliation: meta.auditReconciliation || r.auditReconciliation || undefined,
               isHidden: Boolean(meta.isHidden ?? r.is_hidden ?? r.isHidden ?? false),
               hiddenAt: meta.hiddenAt ?? r.hidden_at ?? r.hiddenAt,
               hiddenBy: meta.hiddenBy ?? r.hidden_by ?? r.hiddenBy,
@@ -5205,6 +5289,7 @@ async function syncFromSupabase(db: DatabaseSchema, force: boolean = false): Pro
               }
             };
           });
+          db.campaigns = mergeCollections(db.campaigns || [], normalizedCamps, 'id', delCampSet);
 
           // Extract embedded auditorGrants across campaigns and merge into db.auditorGrants
           const extractedGrants: any[] = [];
@@ -5240,27 +5325,45 @@ async function syncFromSupabase(db: DatabaseSchema, force: boolean = false): Pro
             'exp-1791226950000',
             ...(db.deletedExpenseIds || []).map((id: string) => String(id).toLowerCase().trim())
           ]);
-          db.expenses = expRows
+          const normalizedExps = expRows
             .filter(r => r && r.id && !delExpSet.has(String(r.id).toLowerCase().trim()))
-            .map((r: any) => ({
-              id: r.id,
-              campaignId: r.campaign_id || r.campaignId,
-              voucherNo: r.voucher_no || r.voucherNo,
-              payee: r.payee,
-              purpose: r.purpose,
-              amount: Number(r.amount) || 0,
-              date: r.date,
-              createdAt: r.created_at || r.createdAt,
-              updatedAt: r.updated_at || r.updatedAt,
-              head: r.metadata?.head || r.head || 'Miscellaneous',
-              paymentMode: r.metadata?.paymentMode || r.paymentMode || 'Cash',
-              recordedBy: r.metadata?.recordedBy || r.recordedBy || 'Admin',
-              recordedByPhone: r.metadata?.recordedByPhone || r.recordedByPhone,
-              status: r.metadata?.status || r.status || 'approved',
-              attachmentUrl: r.metadata?.attachmentUrl || r.attachmentUrl || null,
-              campaignTitle: r.metadata?.campaignTitle || r.campaignTitle,
-              metadata: r.metadata || {}
-            }));
+            .map((r: any) => {
+              const meta = r.metadata || {};
+              return {
+                ...meta,
+                id: r.id,
+                campaignId: r.campaign_id || r.campaignId,
+                voucherNo: r.voucher_no || r.voucherNo,
+                payee: r.payee || r.paidTo,
+                paidTo: r.payee || r.paidTo || '',
+                purpose: r.purpose || '',
+                amount: Number(r.amount) || 0,
+                date: r.date || r.spentDate,
+                spentDate: r.date || r.spentDate || '',
+                createdAt: r.created_at || r.createdAt,
+                updatedAt: r.updated_at || r.updatedAt,
+                head: meta.head || r.head || 'Miscellaneous',
+                paymentMode: meta.paymentMode || r.paymentMode || 'Cash',
+                recordedBy: meta.recordedBy || r.recordedBy || 'Admin',
+                recordedByPhone: meta.recordedByPhone || r.recordedByPhone,
+                status: meta.status || r.status || 'approved',
+                attachmentUrl: meta.attachmentUrl || r.attachmentUrl || null,
+                campaignTitle: meta.campaignTitle || r.campaignTitle,
+                audit_mark: meta.audit_mark || r.audit_mark || undefined,
+                audit_query: meta.audit_query || r.audit_query || undefined,
+                audit_marked_by: meta.audit_marked_by || r.audit_marked_by || undefined,
+                audit_marked_at: meta.audit_marked_at || r.audit_marked_at || undefined,
+                auditor_verifications: meta.auditor_verifications || r.auditor_verifications || undefined,
+                is_locked: Boolean(meta.is_locked ?? r.is_locked ?? false),
+                locked_by: meta.locked_by || r.locked_by || undefined,
+                locked_at: meta.locked_at || r.locked_at || undefined,
+                audit_date: meta.audit_date || r.audit_date || undefined,
+                audit_period: meta.audit_period || r.audit_period || undefined,
+                audit_notes: meta.audit_notes || r.audit_notes || undefined,
+                metadata: meta
+              };
+            });
+          db.expenses = mergeCollections(db.expenses || [], normalizedExps, 'id', delExpSet);
         }
       }
     } catch {}
@@ -5494,6 +5597,197 @@ app.post('/api/data/sync', (req: Request, res: Response) => {
       success: true,
       message: 'Synchronized successfully with RonPay server database',
       data: db,
+      timestamp: db.lastUpdated
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// POST /api/audit/sync-action - Atomic Multi-Auditor Verification & Sign-Off Sync Endpoint
+app.post('/api/audit/sync-action', async (req: Request, res: Response) => {
+  try {
+    const body = req.body || {};
+    const db = getDatabase();
+    const nowIso = new Date().toISOString();
+
+    const sbUrl = process.env.VITE_SUPABASE_URL || 'https://bxyzvaujvhumupwdmysh.supabase.co';
+    const sbKey = process.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ4eXp2YXVqdmh1bXVwd2RteXNoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUwNjg5NzMsImV4cCI6MjA5MDY0NDk3M30.t93-61a-n3j2-3iT2B8dI-1vR6-0I3r9W8O8S5N3k_E';
+
+    const itemsToProcess: Array<{
+      recordId: string;
+      recordType: 'transaction' | 'expense';
+      auditorKey: string;
+      auditorName: string;
+      auditorPhone?: string;
+      mark: 'verified' | 'flagged' | 'unchecked' | null | undefined;
+      query?: string;
+      forceUnlock?: boolean;
+    }> = Array.isArray(body.items)
+      ? body.items
+      : body.recordId
+      ? [{
+          recordId: body.recordId,
+          recordType: body.recordType || 'transaction',
+          auditorKey: body.auditorKey || body.auditorPhone || body.auditorName || 'auditor',
+          auditorName: body.auditorName || 'Auditor',
+          auditorPhone: body.auditorPhone || '',
+          mark: body.mark,
+          query: body.query,
+          forceUnlock: body.forceUnlock
+        }]
+      : [];
+
+    const updatedTxToPush: any[] = [];
+    const updatedExpToPush: any[] = [];
+
+    for (const action of itemsToProcess) {
+      const cleanId = String(action.recordId || '').toLowerCase().trim();
+      if (!cleanId) continue;
+      const aKey = String(action.auditorKey || action.auditorPhone || action.auditorName || 'auditor').toLowerCase().trim();
+      const isClearing = !action.mark || action.mark === 'unchecked';
+
+      const applyAuditorMarkToRecord = (rec: any) => {
+        const existingMap: Record<string, any> = {
+          ...(rec.metadata?.auditor_verifications || {}),
+          ...(rec.auditor_verifications || {})
+        };
+        if (isClearing) {
+          existingMap[aKey] = {
+            auditorKey: aKey,
+            auditorPhone: action.auditorPhone || '',
+            auditorName: action.auditorName || 'Auditor',
+            mark: 'unchecked',
+            query: '',
+            markedAt: nowIso
+          };
+        } else {
+          existingMap[aKey] = {
+            auditorKey: aKey,
+            auditorPhone: action.auditorPhone || '',
+            auditorName: action.auditorName || 'Auditor',
+            mark: action.mark,
+            query: action.mark === 'flagged' ? (action.query || '') : '',
+            markedAt: nowIso
+          };
+        }
+
+        // Compute aggregate audit_mark from active (non-unchecked) auditor verifications
+        const activeEntries = Object.values(existingMap).filter((v: any) => v && (v.mark === 'verified' || v.mark === 'flagged'));
+        const flaggedEntries = activeEntries.filter((v: any) => v.mark === 'flagged');
+        const verifiedEntries = activeEntries.filter((v: any) => v.mark === 'verified');
+
+        let resolvedMark: 'verified' | 'flagged' | undefined = undefined;
+        let resolvedQuery: string | undefined = undefined;
+        let resolvedMarkedBy: string | undefined = undefined;
+        let resolvedMarkedAt: string | undefined = undefined;
+
+        if (flaggedEntries.length > 0) {
+          resolvedMark = 'flagged';
+          resolvedQuery = flaggedEntries.map((f: any) => `${f.auditorName}: ${f.query || 'Query'}`).join(' | ');
+          resolvedMarkedBy = flaggedEntries.map((f: any) => f.auditorName).join(', ');
+          resolvedMarkedAt = nowIso;
+        } else if (verifiedEntries.length > 0) {
+          resolvedMark = 'verified';
+          resolvedMarkedBy = verifiedEntries.map((v: any) => v.auditorName).join(', ');
+          resolvedMarkedAt = nowIso;
+        }
+
+        const shouldUnlock = isClearing || Boolean(action.forceUnlock);
+        const nextMeta = {
+          ...(rec.metadata || {}),
+          audit_mark: resolvedMark || null,
+          audit_query: resolvedQuery || null,
+          audit_marked_by: resolvedMarkedBy || null,
+          audit_marked_at: resolvedMarkedAt || null,
+          auditor_verifications: existingMap,
+          is_locked: shouldUnlock ? false : Boolean(rec.is_locked)
+        };
+
+        return {
+          ...rec,
+          audit_mark: resolvedMark,
+          audit_query: resolvedQuery,
+          audit_marked_by: resolvedMarkedBy,
+          audit_marked_at: resolvedMarkedAt,
+          auditor_verifications: existingMap,
+          is_locked: shouldUnlock ? false : Boolean(rec.is_locked),
+          locked_by: shouldUnlock ? undefined : rec.locked_by,
+          locked_at: shouldUnlock ? undefined : rec.locked_at,
+          updatedAt: nowIso,
+          metadata: nextMeta
+        };
+      };
+
+      if (action.recordType === 'expense') {
+        db.expenses = (db.expenses || []).map((e: any) => {
+          if (String(e.id || '').toLowerCase().trim() === cleanId) {
+            const updated = applyAuditorMarkToRecord(e);
+            updatedExpToPush.push(updated);
+            return updated;
+          }
+          return e;
+        });
+      } else {
+        db.transactions = (db.transactions || []).map((t: any) => {
+          if (String(t.id || '').toLowerCase().trim() === cleanId) {
+            const updated = applyAuditorMarkToRecord(t);
+            updatedTxToPush.push(updated);
+            return updated;
+          }
+          return t;
+        });
+      }
+    }
+
+    if (body.campaign && body.campaign.id) {
+      db.campaigns = mergeCollections(db.campaigns || [], [body.campaign], 'id');
+    }
+
+    saveDatabase(db);
+    broadcastServerEvent('state_updated', { timestamp: db.lastUpdated });
+    broadcastServerEvent('audit_action_synced', { timestamp: db.lastUpdated, count: itemsToProcess.length });
+
+    // Background push to Supabase so cloud storage stays 100% in sync
+    if (updatedTxToPush.length > 0) {
+      Promise.allSettled(updatedTxToPush.map(tx =>
+        fetch(`${sbUrl}/rest/v1/transactions?id=eq.${encodeURIComponent(tx.id)}`, {
+          method: 'PATCH',
+          headers: {
+            'apikey': sbKey,
+            'Authorization': `Bearer ${sbKey}`,
+            'Content-Type': 'application/json',
+            'Prefer': 'return=minimal'
+          },
+          body: JSON.stringify({
+            updated_at: nowIso,
+            metadata: tx.metadata || {}
+          })
+        })
+      )).catch(() => {});
+    }
+    if (updatedExpToPush.length > 0) {
+      Promise.allSettled(updatedExpToPush.map(exp =>
+        fetch(`${sbUrl}/rest/v1/expenses?id=eq.${encodeURIComponent(exp.id)}`, {
+          method: 'PATCH',
+          headers: {
+            'apikey': sbKey,
+            'Authorization': `Bearer ${sbKey}`,
+            'Content-Type': 'application/json',
+            'Prefer': 'return=minimal'
+          },
+          body: JSON.stringify({
+            updated_at: nowIso,
+            metadata: exp.metadata || {}
+          })
+        })
+      )).catch(() => {});
+    }
+
+    res.json({
+      success: true,
+      updatedTransactions: updatedTxToPush,
+      updatedExpenses: updatedExpToPush,
       timestamp: db.lastUpdated
     });
   } catch (err: any) {

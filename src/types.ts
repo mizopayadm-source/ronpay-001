@@ -166,6 +166,8 @@ export interface Campaign {
   lastAuditPeriod?: string;
   lastAuditNotes?: string;
   auditorGrants?: AuditorAccessGrant[];
+  auditSignOffs?: AuditorSignOffEntry[];
+  requireDualAuditorConsensus?: boolean;
   auditReconciliation?: {
     bankBalance?: number;
     cashInHand?: number;
@@ -177,6 +179,28 @@ export interface Campaign {
   enabledCategories?: string[];
   definedAbcList?: string[];
   workspaceMode?: 'hybrid' | 'org_only';
+  metadata?: Record<string, any>;
+}
+
+export interface AuditorVerificationEntry {
+  auditorKey: string;
+  auditorPhone?: string;
+  auditorName: string;
+  mark: 'verified' | 'flagged' | 'unchecked';
+  query?: string;
+  markedAt: string;
+}
+
+export interface AuditorSignOffEntry {
+  auditorKey: string;
+  auditorPhone?: string;
+  auditorName: string;
+  auditPeriod: string;
+  signedAt: string;
+  notes?: string;
+  verifiedTxCount?: number;
+  verifiedExpCount?: number;
+  flaggedCount?: number;
 }
 
 export interface ExpenseRecord {
@@ -273,6 +297,8 @@ export interface Transaction {
   audit_query?: string;
   audit_marked_by?: string;
   audit_marked_at?: string;
+  auditor_verifications?: Record<string, AuditorVerificationEntry>;
+  metadata?: Record<string, any>;
 }
 
 export interface KumtluangExpense {
@@ -310,6 +336,8 @@ export interface KumtluangExpense {
   audit_query?: string;
   audit_marked_by?: string;
   audit_marked_at?: string;
+  auditor_verifications?: Record<string, AuditorVerificationEntry>;
+  metadata?: Record<string, any>;
 }
 
 export interface AuditorAccessGrant {
@@ -336,6 +364,12 @@ export interface AuditorAccessGrant {
   notes?: string;
   permissions?: string[];
   checklist?: Record<string, boolean>;
+  auditPeriod?: string;
+  audit_period?: string;
+  auditFromDate?: string;
+  audit_from_date?: string;
+  auditToDate?: string;
+  audit_to_date?: string;
   createdAt?: string;
   created_at?: string;
   updatedAt?: string;

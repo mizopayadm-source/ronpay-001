@@ -103,16 +103,18 @@ export const mapTransactionToSupabase = (t: any) => {
   if (t.phonePeTransactionId) metadata.phonePeTransactionId = t.phonePeTransactionId;
   if (t.phonepeMerchantTxId) metadata.phonepeMerchantTxId = t.phonepeMerchantTxId;
   if (t.phonepe_txn_id) metadata.phonepe_txn_id = t.phonepe_txn_id;
-  if (t.is_locked !== undefined) metadata.is_locked = t.is_locked;
-  if (t.locked_by !== undefined) metadata.locked_by = t.locked_by;
-  if (t.audit_date !== undefined) metadata.audit_date = t.audit_date;
-  if (t.audit_period !== undefined) metadata.audit_period = t.audit_period;
-  if (t.audit_notes !== undefined) metadata.audit_notes = t.audit_notes;
-  if (t.audit_mark !== undefined) metadata.audit_mark = t.audit_mark;
-  if (t.audit_query !== undefined) metadata.audit_query = t.audit_query;
-  if (t.audit_marked_by !== undefined) metadata.audit_marked_by = t.audit_marked_by;
-  if (t.audit_marked_at !== undefined) metadata.audit_marked_at = t.audit_marked_at;
-  if (t.unlock_expires_at !== undefined) metadata.unlock_expires_at = t.unlock_expires_at;
+  metadata.is_locked = Boolean(t.is_locked);
+  metadata.locked_by = t.locked_by || null;
+  metadata.locked_at = t.locked_at || null;
+  metadata.audit_date = t.audit_date || null;
+  metadata.audit_period = t.audit_period || null;
+  metadata.audit_notes = t.audit_notes || null;
+  metadata.audit_mark = t.audit_mark || null;
+  metadata.audit_query = t.audit_query || null;
+  metadata.audit_marked_by = t.audit_marked_by || null;
+  metadata.audit_marked_at = t.audit_marked_at || null;
+  metadata.auditor_verifications = t.auditor_verifications || {};
+  metadata.unlock_expires_at = t.unlock_expires_at || null;
 
   return {
     id: t.id,
@@ -149,6 +151,11 @@ export const mapTransactionToSupabase = (t: any) => {
 export const normalizeTransaction = (row: any): Transaction => {
   if (!row) return row;
   const meta = row.metadata || {};
+  const resolvedMark = ('audit_mark' in row && row.audit_mark !== undefined) ? row.audit_mark : (meta.audit_mark || undefined);
+  const resolvedQuery = ('audit_query' in row && row.audit_query !== undefined) ? row.audit_query : (meta.audit_query || undefined);
+  const resolvedMarkedBy = ('audit_marked_by' in row && row.audit_marked_by !== undefined) ? row.audit_marked_by : (meta.audit_marked_by || undefined);
+  const resolvedMarkedAt = ('audit_marked_at' in row && row.audit_marked_at !== undefined) ? row.audit_marked_at : (meta.audit_marked_at || undefined);
+  const resolvedVerifications = row.auditor_verifications || meta.auditor_verifications || undefined;
   return {
     ...meta,
     ...row,
@@ -177,6 +184,12 @@ export const normalizeTransaction = (row: any): Transaction => {
     periodLabel: row.period_label || row.periodLabel || '',
     utr: row.utr || meta.utrRef || '',
     referenceNo: row.reference_no || row.referenceNo || '',
+    audit_mark: resolvedMark || undefined,
+    audit_query: resolvedQuery || undefined,
+    audit_marked_by: resolvedMarkedBy || undefined,
+    audit_marked_at: resolvedMarkedAt || undefined,
+    auditor_verifications: resolvedVerifications,
+    is_locked: Boolean(row.is_locked ?? meta.is_locked ?? false),
     timestamp: row.timestamp || row.created_at || row.createdAt || new Date().toISOString(),
     createdAt: row.created_at || row.createdAt || row.timestamp || new Date().toISOString(),
     updatedAt: row.updated_at || row.updatedAt || row.timestamp || new Date().toISOString(),
@@ -196,6 +209,7 @@ export const mapExpenseToSupabase = (e: any) => {
     created_at: e.createdAt ? new Date(e.createdAt).toISOString() : new Date().toISOString(),
     updated_at: new Date().toISOString(),
     metadata: {
+      ...(e.metadata || {}),
       head: e.head,
       paymentMode: e.paymentMode,
       recordedBy: e.recordedBy,
@@ -204,16 +218,18 @@ export const mapExpenseToSupabase = (e: any) => {
       status: e.status || 'approved',
       campaignTitle: e.campaignTitle,
       attachmentUrl: e.attachmentUrl || null,
-      is_locked: e.is_locked,
-      locked_by: e.locked_by,
-      audit_date: e.audit_date,
-      audit_period: e.audit_period,
-      audit_notes: e.audit_notes,
-      audit_mark: e.audit_mark,
-      audit_query: e.audit_query,
-      audit_marked_by: e.audit_marked_by,
-      audit_marked_at: e.audit_marked_at,
-      unlock_expires_at: e.unlock_expires_at
+      is_locked: Boolean(e.is_locked),
+      locked_by: e.locked_by || null,
+      locked_at: e.locked_at || null,
+      audit_date: e.audit_date || null,
+      audit_period: e.audit_period || null,
+      audit_notes: e.audit_notes || null,
+      audit_mark: e.audit_mark || null,
+      audit_query: e.audit_query || null,
+      audit_marked_by: e.audit_marked_by || null,
+      audit_marked_at: e.audit_marked_at || null,
+      auditor_verifications: e.auditor_verifications || {},
+      unlock_expires_at: e.unlock_expires_at || null
     }
   };
 };
@@ -221,6 +237,11 @@ export const mapExpenseToSupabase = (e: any) => {
 export const normalizeExpense = (row: any): KumtluangExpense => {
   if (!row) return row;
   const meta = row.metadata || {};
+  const resolvedMark = ('audit_mark' in row && row.audit_mark !== undefined) ? row.audit_mark : (meta.audit_mark || undefined);
+  const resolvedQuery = ('audit_query' in row && row.audit_query !== undefined) ? row.audit_query : (meta.audit_query || undefined);
+  const resolvedMarkedBy = ('audit_marked_by' in row && row.audit_marked_by !== undefined) ? row.audit_marked_by : (meta.audit_marked_by || undefined);
+  const resolvedMarkedAt = ('audit_marked_at' in row && row.audit_marked_at !== undefined) ? row.audit_marked_at : (meta.audit_marked_at || undefined);
+  const resolvedVerifications = row.auditor_verifications || meta.auditor_verifications || undefined;
   return {
     ...meta,
     ...row,
@@ -240,7 +261,13 @@ export const normalizeExpense = (row: any): KumtluangExpense => {
     createdAt: row.created_at || new Date().toISOString(),
     updatedAt: row.updated_at || new Date().toISOString(),
     status: meta.status || 'approved',
-    attachmentUrl: meta.attachmentUrl || null
+    attachmentUrl: meta.attachmentUrl || null,
+    audit_mark: resolvedMark || undefined,
+    audit_query: resolvedQuery || undefined,
+    audit_marked_by: resolvedMarkedBy || undefined,
+    audit_marked_at: resolvedMarkedAt || undefined,
+    auditor_verifications: resolvedVerifications,
+    is_locked: Boolean(row.is_locked ?? meta.is_locked ?? false)
   };
 };
 
@@ -331,6 +358,8 @@ export const mapCampaignToSupabase = (camp: any) => {
       authorizedOfficers: camp.authorizedOfficers,
       auditorGrants: camp.auditorGrants,
       auditChecklist: camp.auditChecklist,
+      auditSignOffs: camp.auditSignOffs,
+      requireDualAuditorConsensus: camp.requireDualAuditorConsensus,
       lastAuditedAt: camp.lastAuditedAt,
       lastAuditedBy: camp.lastAuditedBy,
       lastAuditPeriod: camp.lastAuditPeriod,
