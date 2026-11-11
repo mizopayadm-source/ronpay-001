@@ -14,7 +14,9 @@ import {
   findAllBrowserCachedTransactions,
   unpurgeTransactionIds,
   getDeletedTransactionIds,
-  saveStoredAuditorGrants
+  saveStoredAuditorGrants,
+  getStoredDeletedAuditorGrantIds,
+  saveStoredDeletedAuditorGrantIds
 } from '../utils/storage';
 import { broadcastStateChange } from './crossTabSync';
 
@@ -782,10 +784,19 @@ export async function fetchSupabaseCampaigns(): Promise<Campaign[]> {
 
   return (data || []).map((row: any) => {
     const meta = row.metadata || {};
-    const auditorGrants = Array.isArray(meta.auditorGrants)
+    if (Array.isArray(meta.deletedAuditorGrantIds) && meta.deletedAuditorGrantIds.length > 0) {
+      try {
+        saveStoredDeletedAuditorGrantIds([...getStoredDeletedAuditorGrantIds(), ...meta.deletedAuditorGrantIds]);
+      } catch {}
+    }
+    const delGrantSet = new Set(getStoredDeletedAuditorGrantIds());
+    const rawAuditorGrants = Array.isArray(meta.auditorGrants)
       ? meta.auditorGrants
       : Array.isArray(row.auditorGrants)
       ? row.auditorGrants
+      : undefined;
+    const auditorGrants = Array.isArray(rawAuditorGrants)
+      ? rawAuditorGrants.filter((g: any) => g && g.id && !delGrantSet.has(String(g.id).toLowerCase().trim()))
       : undefined;
     if (auditorGrants && auditorGrants.length > 0) {
       try {
@@ -896,8 +907,13 @@ export async function upsertSupabaseCampaign(camp: Campaign): Promise<boolean> {
       urgencyLevel: camp.urgencyLevel,
       officerPasscode: camp.officerPasscode,
       authorizedOfficers: camp.authorizedOfficers,
-      auditorGrants: camp.auditorGrants,
+      auditorGrants: Array.isArray(camp.auditorGrants)
+        ? camp.auditorGrants.filter(g => g && g.id && !getStoredDeletedAuditorGrantIds().includes(String(g.id).toLowerCase().trim()))
+        : [],
+      deletedAuditorGrantIds: getStoredDeletedAuditorGrantIds(),
       auditChecklist: camp.auditChecklist,
+      auditSignOffs: camp.auditSignOffs,
+      requireDualAuditorConsensus: camp.requireDualAuditorConsensus,
       lastAuditedAt: camp.lastAuditedAt,
       lastAuditedBy: camp.lastAuditedBy,
       lastAuditPeriod: camp.lastAuditPeriod,

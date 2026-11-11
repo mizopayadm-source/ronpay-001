@@ -134,7 +134,8 @@ import {
   getStoredModificationRequests,
   reviewModificationRequest,
   getStoredAuditorGrants,
-  revokeAuditorGrant
+  revokeAuditorGrant,
+  permanentlyDeleteAuditorGrant
 } from '../utils/storage';
 import { 
   ROLE_DEFINITIONS, 
@@ -3920,8 +3921,8 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                                   <div><span className="text-slate-400">Expires:</span> {formatDateDDMMYYYY(grant.expires_at)}</div>
                                 </div>
 
-                                {isActive && (
-                                  <div className="text-right pt-1">
+                                <div className="flex items-center justify-end gap-2 pt-1">
+                                  {isActive && (
                                     <button
                                       type="button"
                                       onClick={() => {
@@ -3931,12 +3932,24 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                                         setCampaignActionToast('Auditor access revoked.');
                                         setTimeout(() => setCampaignActionToast(null), 3000);
                                       }}
-                                      className="py-1 px-3 rounded-lg border border-rose-200 text-rose-700 hover:bg-rose-50 text-[11px] font-bold transition"
+                                      className="py-1 px-3 rounded-lg border border-amber-300 text-amber-800 hover:bg-amber-50 text-[11px] font-bold transition cursor-pointer"
                                     >
                                       Revoke Access
                                     </button>
-                                  </div>
-                                )}
+                                  )}
+                                  <button
+                                    type="button"
+                                    onClick={async () => {
+                                      await permanentlyDeleteAuditorGrant(grant.id);
+                                      setModConsoleTick(t => t + 1);
+                                      setCampaignActionToast('Auditor grant permanently deleted.');
+                                      setTimeout(() => setCampaignActionToast(null), 3000);
+                                    }}
+                                    className="py-1 px-3 rounded-lg border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-600 hover:text-white text-[11px] font-bold transition cursor-pointer"
+                                  >
+                                    🗑️ Paih Hlen (Delete)
+                                  </button>
+                                </div>
                               </div>
                             );
                           })}

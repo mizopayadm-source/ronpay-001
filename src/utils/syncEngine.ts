@@ -36,6 +36,8 @@ import {
   markExpenseAsDeleted,
   getStoredAuditorGrants,
   saveStoredAuditorGrants,
+  getStoredDeletedAuditorGrantIds,
+  saveStoredDeletedAuditorGrantIds,
   syncAuditorGrantsAcrossCloud,
   MODIFICATION_REQUESTS_KEY,
   broadcastTabSync,
@@ -227,6 +229,12 @@ export async function syncAllWithServer(forceAuthoritative: boolean = false): Pr
           for (const eId of serverData.deletedExpenseIds) {
             markExpenseAsDeleted(eId);
           }
+        }
+        if (Array.isArray(serverData.deletedAuditorGrantIds) && serverData.deletedAuditorGrantIds.length > 0) {
+          saveStoredDeletedAuditorGrantIds([
+            ...getStoredDeletedAuditorGrantIds(),
+            ...serverData.deletedAuditorGrantIds
+          ]);
         }
 
         // 2. Update campaigns
@@ -598,19 +606,33 @@ export async function syncAllWithServer(forceAuthoritative: boolean = false): Pr
           }
         }
 
-        // 11. Update auditor grants & modification requests (bidirectional merge)
-        const serverGrants = Array.isArray(serverData.auditorGrants)
+        // 11. Update auditor grants & modification requests (authoritative server + fresh local merge)
+        const hasServerGrantsArray = Array.isArray(serverData.auditorGrants) || Array.isArray(serverData.grants);
+        const rawServerGrants = Array.isArray(serverData.auditorGrants)
           ? serverData.auditorGrants
           : Array.isArray(serverData.grants)
           ? serverData.grants
           : [];
+        const delGrantSet = new Set(getStoredDeletedAuditorGrantIds());
+        const serverGrants = rawServerGrants.filter(
+          (g: any) => g && g.id && !delGrantSet.has(String(g.id).toLowerCase().trim())
+        );
         const localGrants = getStoredAuditorGrants();
-        if (serverGrants.length > 0) {
-          saveStoredAuditorGrants(serverGrants, true);
+        if (hasServerGrantsArray) {
+          saveStoredAuditorGrants(serverGrants, true, true);
         }
         if (localGrants.length > 0) {
           const serverGrantIds = new Set(serverGrants.map((g: any) => String(g?.id || '').trim()));
-          const unpushedGrants = localGrants.filter(g => g && g.id && !serverGrantIds.has(String(g.id).trim()));
+          const nowGrantMs = Date.now();
+          // Only push local grants that are not deleted AND were created recently (< 30s ago) so deleted grants on other devices are never resurrected
+          const unpushedGrants = localGrants.filter(g => {
+            if (!g || !g.id) return false;
+            const cleanGid = String(g.id).toLowerCase().trim();
+            if (delGrantSet.has(cleanGid)) return false;
+            if (serverGrantIds.has(String(g.id).trim())) return false;
+            const createdMs = new Date(g.createdAt || g.created_at || 0).getTime();
+            return createdMs > 0 && nowGrantMs - createdMs < 30000;
+          });
           if (unpushedGrants.length > 0) {
             safeApiFetch('/api/data/sync', {
               method: 'POST',
@@ -968,6 +990,12 @@ export async function pullLatestServerState(): Promise<SyncDataState | null> {
             markMemberAsDeleted(mId);
           }
         }
+        if (Array.isArray(serverData.deletedAuditorGrantIds) && serverData.deletedAuditorGrantIds.length > 0) {
+          saveStoredDeletedAuditorGrantIds([
+            ...getStoredDeletedAuditorGrantIds(),
+            ...serverData.deletedAuditorGrantIds
+          ]);
+        }
 
         // 2. Campaigns
         if (Array.isArray(serverData.campaigns)) {
@@ -1078,14 +1106,20 @@ export async function pullLatestServerState(): Promise<SyncDataState | null> {
           saveStoredAnnouncement(serverData.announcement, true);
         }
 
-        // 7. Auditor Grants & Modification Requests
+        // 7. Auditor Grants & Modification Requests (authoritative replacement so deleted grants are removed everywhere)
+        const hasServerGrants = Array.isArray(serverData.auditorGrants) || Array.isArray(serverData.grants);
         const serverGrants = Array.isArray(serverData.auditorGrants)
           ? serverData.auditorGrants
           : Array.isArray(serverData.grants)
           ? serverData.grants
           : [];
-        if (serverGrants.length > 0) {
-          saveStoredAuditorGrants(serverGrants, true);
+        if (hasServerGrants) {
+          const delSet = new Set(getStoredDeletedAuditorGrantIds());
+          saveStoredAuditorGrants(
+            serverGrants.filter((g: any) => g && g.id && !delSet.has(String(g.id).toLowerCase().trim())),
+            true,
+            true
+          );
         }
         if (Array.isArray(serverData.modificationRequests)) {
           try {

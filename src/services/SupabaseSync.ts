@@ -14,7 +14,9 @@ import {
   getStoredCreatorProfile,
   getStoredUserPaidTxIds,
   findAllBrowserCachedTransactions,
-  saveStoredAuditorGrants
+  saveStoredAuditorGrants,
+  getStoredDeletedAuditorGrantIds,
+  saveStoredDeletedAuditorGrantIds
 } from '../utils/storage';
 
 // =========================================================================
@@ -356,7 +358,10 @@ export const mapCampaignToSupabase = (camp: any) => {
       urgencyLevel: camp.urgencyLevel,
       officerPasscode: camp.officerPasscode,
       authorizedOfficers: camp.authorizedOfficers,
-      auditorGrants: camp.auditorGrants,
+      auditorGrants: Array.isArray(camp.auditorGrants)
+        ? camp.auditorGrants.filter(g => g && g.id && !getStoredDeletedAuditorGrantIds().includes(String(g.id).toLowerCase().trim()))
+        : undefined,
+      deletedAuditorGrantIds: getStoredDeletedAuditorGrantIds(),
       auditChecklist: camp.auditChecklist,
       auditSignOffs: camp.auditSignOffs,
       requireDualAuditorConsensus: camp.requireDualAuditorConsensus,
@@ -377,10 +382,19 @@ export const mapCampaignToSupabase = (camp: any) => {
 export const normalizeCampaign = (row: any): Campaign => {
   if (!row) return row;
   const meta = row.metadata || {};
-  const auditorGrants = Array.isArray(meta.auditorGrants)
+  if (Array.isArray(meta.deletedAuditorGrantIds) && meta.deletedAuditorGrantIds.length > 0) {
+    try {
+      saveStoredDeletedAuditorGrantIds([...getStoredDeletedAuditorGrantIds(), ...meta.deletedAuditorGrantIds]);
+    } catch {}
+  }
+  const delGrantSet = new Set(getStoredDeletedAuditorGrantIds());
+  const rawAuditorGrants = Array.isArray(meta.auditorGrants)
     ? meta.auditorGrants
     : Array.isArray(row.auditorGrants)
     ? row.auditorGrants
+    : undefined;
+  const auditorGrants = Array.isArray(rawAuditorGrants)
+    ? rawAuditorGrants.filter((g: any) => g && g.id && !delGrantSet.has(String(g.id).toLowerCase().trim()))
     : undefined;
 
   if (auditorGrants && auditorGrants.length > 0) {

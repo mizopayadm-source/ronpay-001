@@ -34,6 +34,7 @@ import {
   getStoredExpenses, 
   getStoredAuditorGrants,
   saveAuditorGrant,
+  permanentlyDeleteAuditorGrant,
   normalizeAuditorKey,
   lockCampaignAuditPeriod, 
   checkAuditorAccessForCampaign,
@@ -142,11 +143,13 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
     window.addEventListener('ronpay_transactions_updated', onSyncEvent);
     window.addEventListener('ronpay_expenses_updated', onSyncEvent);
     window.addEventListener('ronpay_campaigns_updated', onSyncEvent);
+    window.addEventListener('ronpay_auditor_grants_updated', onSyncEvent);
     return () => {
       window.removeEventListener(RONPAY_SYNC_EVENT, onSyncEvent);
       window.removeEventListener('ronpay_transactions_updated', onSyncEvent);
       window.removeEventListener('ronpay_expenses_updated', onSyncEvent);
       window.removeEventListener('ronpay_campaigns_updated', onSyncEvent);
+      window.removeEventListener('ronpay_auditor_grants_updated', onSyncEvent);
     };
   }, [isOpen, campaign?.id]);
 
@@ -213,16 +216,15 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
   const appointedAuditors = useMemo(() => {
     if (!campaign?.id) return [];
     const campId = String(campaign.id).toLowerCase().trim();
-    const allGrants = getStoredAuditorGrants().filter(
-      g => String(g.campaignId || g.campaign_id || '').toLowerCase().trim() === campId && g.status === 'active'
-    );
-    const map = new Map<string, { auditorKey: string; auditorName: string; auditorPhone: string; auditPeriod?: string }>();
+    const allGrants = getStoredAuditorGrants(campId).filter(g => g && g.status === 'active');
+    const map = new Map<string, { grantId: string; auditorKey: string; auditorName: string; auditorPhone: string; auditPeriod?: string }>();
     allGrants.forEach(g => {
       const ph = g.auditorPhone || g.auditor_phone || '';
       const nm = g.auditorName || g.auditor_name || 'Auditor';
       const key = normalizeAuditorKey(ph, nm);
       if (!map.has(key)) {
         map.set(key, {
+          grantId: g.id,
           auditorKey: key,
           auditorName: nm,
           auditorPhone: ph,
@@ -234,8 +236,11 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
   }, [campaign?.id, tick]);
 
   const isDualAuditMode = useMemo(() => {
-    return appointedAuditors.length >= 2 || Boolean(campaign?.requireDualAuditorConsensus);
-  }, [appointedAuditors, campaign?.requireDualAuditorConsensus]);
+    const freshCamp = campaign?.id
+      ? getStoredCampaigns().find(c => String(c.id).toLowerCase().trim() === String(campaign.id).toLowerCase().trim()) || campaign
+      : campaign;
+    return appointedAuditors.length >= 2 || Boolean(freshCamp?.requireDualAuditorConsensus);
+  }, [appointedAuditors, campaign, tick]);
 
   const appointedFromDate = activeGrant?.auditFromDate || '';
   const appointedToDate = activeGrant?.auditToDate || '';
@@ -1260,6 +1265,7 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
     });
 
     const auditorStatsMap = new Map<string, {
+      grantId?: string;
       auditorKey: string;
       auditorName: string;
       auditorPhone: string;
@@ -1269,9 +1275,12 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
       signedAt?: string;
     }>();
 
+    const activeAppointedKeySet = new Set(appointedAuditors.map(a => a.auditorKey));
+
     appointedAuditors.forEach(a => {
       const s = signOffMap.get(a.auditorKey);
       auditorStatsMap.set(a.auditorKey, {
+        grantId: a.grantId,
         auditorKey: a.auditorKey,
         auditorName: a.auditorName,
         auditorPhone: a.auditorPhone,
@@ -1280,20 +1289,6 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
         hasSignedOff: Boolean(s),
         signedAt: s?.signedAt
       });
-    });
-
-    signOffs.forEach((s: any) => {
-      if (s && s.auditorKey && !auditorStatsMap.has(String(s.auditorKey))) {
-        auditorStatsMap.set(String(s.auditorKey), {
-          auditorKey: String(s.auditorKey),
-          auditorName: s.auditorName || 'Auditor',
-          auditorPhone: s.auditorPhone || '',
-          verifiedCount: 0,
-          flaggedCount: 0,
-          hasSignedOff: true,
-          signedAt: s.signedAt
-        });
-      }
     });
 
     let consensusVerifiedCount = 0;
@@ -1313,21 +1308,25 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
         ...(rec.metadata?.auditor_verifications || {}),
         ...(rec.auditor_verifications || {})
       };
-      const activeEntries = Object.values(verMap).filter((v: any) => v && (v.mark === 'verified' || v.mark === 'flagged'));
+      const allActiveEntries = Object.values(verMap).filter((v: any) => v && (v.mark === 'verified' || v.mark === 'flagged'));
+      // Filter verifications to active appointed auditors if any are appointed, so deleted/revoked auditors do not reappear
+      const activeEntries = activeAppointedKeySet.size > 0
+        ? allActiveEntries.filter((v: any) => {
+            const k = String(v.auditorKey || normalizeAuditorKey(v.auditorPhone, v.auditorName));
+            return activeAppointedKeySet.has(k);
+          })
+        : allActiveEntries;
+
       activeEntries.forEach((v: any) => {
         const k = String(v.auditorKey || normalizeAuditorKey(v.auditorPhone, v.auditorName));
-        const st = auditorStatsMap.get(k) || {
-          auditorKey: k,
-          auditorName: v.auditorName || 'Auditor',
-          auditorPhone: v.auditorPhone || '',
-          verifiedCount: 0,
-          flaggedCount: 0,
-          hasSignedOff: signOffMap.has(k),
-          signedAt: signOffMap.get(k)?.signedAt
-        };
-        if (v.mark === 'verified') st.verifiedCount += 1;
-        if (v.mark === 'flagged') st.flaggedCount += 1;
-        auditorStatsMap.set(k, st);
+        // Only add to auditorStatsMap if they are an active appointed auditor
+        if (activeAppointedKeySet.size > 0 && !activeAppointedKeySet.has(k)) return;
+        const st = auditorStatsMap.get(k);
+        if (st) {
+          if (v.mark === 'verified') st.verifiedCount += 1;
+          if (v.mark === 'flagged') st.flaggedCount += 1;
+          auditorStatsMap.set(k, st);
+        }
       });
 
       const verCnt = activeEntries.filter((v: any) => v.mark === 'verified').length;
@@ -2006,6 +2005,23 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                         </span>
                       ) : (
                         <span className="text-[9.5px] text-slate-400">⏳ Auditing</span>
+                      )}
+                      {(isAdmin || isCreator) && aud.grantId && (
+                        <button
+                          type="button"
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            await permanentlyDeleteAuditorGrant(aud.grantId!);
+                            setTick(t => t + 1);
+                            setLockToast(`🗑️ Auditor ${aud.auditorName} ruatna paih hlen & sync nghal a ni e.`);
+                            setTimeout(() => setLockToast(null), 3000);
+                            if (onRecordsUpdated) onRecordsUpdated();
+                          }}
+                          title={`Auditor ${aud.auditorName} ruatna paih hlen rawh`}
+                          className="ml-0.5 p-0.5 rounded hover:bg-rose-500/30 text-rose-300 hover:text-rose-100 transition cursor-pointer"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
                       )}
                     </div>
                   );

@@ -52,6 +52,8 @@ import {
   saveAuditorGrant,
   revokeAuditorGrant,
   permanentlyDeleteAuditorGrant,
+  getStoredDeletedAuditorGrantIds,
+  getStoredCampaigns,
   formatRemainingAuditTimeMizo,
   syncAuditorGrantsAcrossCloud
 } from '../utils/storage';
@@ -184,11 +186,38 @@ export const AuthorizedPersonsModal: React.FC<AuthorizedPersonsModalProps> = ({
     handleSyncAuditorsFromCloud();
   }, [isOpen, campaign?.id, activeTab, handleSyncAuditorsFromCloud]);
 
+  const effectiveCampaign = useMemo(() => {
+    if (!campaign?.id) return campaign;
+    const targetId = String(campaign.id).toLowerCase().trim();
+    const fresh = getStoredCampaigns().find(c => String(c.id || '').toLowerCase().trim() === targetId);
+    if (!fresh) return campaign;
+    return {
+      ...campaign,
+      ...fresh,
+      auditorGrants: auditorGrants,
+      metadata: {
+        ...(campaign.metadata || {}),
+        ...(fresh.metadata || {}),
+        auditorGrants: auditorGrants,
+        deletedAuditorGrantIds: getStoredDeletedAuditorGrantIds()
+      }
+    };
+  }, [campaign, auditorGrants, auditorTick]);
+
   useEffect(() => {
-    const handleGrantsUpdated = () => setAuditorTick(t => t + 1);
+    const handleGrantsUpdated = () => {
+      if (campaign?.id) {
+        setAuditorGrants(getStoredAuditorGrants(campaign.id));
+      }
+      setAuditorTick(t => t + 1);
+    };
     window.addEventListener('ronpay_auditor_grants_updated', handleGrantsUpdated);
-    return () => window.removeEventListener('ronpay_auditor_grants_updated', handleGrantsUpdated);
-  }, []);
+    window.addEventListener('ronpay_campaigns_updated', handleGrantsUpdated);
+    return () => {
+      window.removeEventListener('ronpay_auditor_grants_updated', handleGrantsUpdated);
+      window.removeEventListener('ronpay_campaigns_updated', handleGrantsUpdated);
+    };
+  }, [campaign?.id]);
 
   // Form fields for assigning/editing Authorized Officer
   const [formName, setFormName] = useState<string>('');
@@ -1116,8 +1145,20 @@ export const AuthorizedPersonsModal: React.FC<AuthorizedPersonsModalProps> = ({
     if (campaign) {
       const updatedGrants = getStoredAuditorGrants(campaign.id);
       setAuditorGrants(updatedGrants);
+      const freshStored = getStoredCampaigns().find(c => String(c.id || '').toLowerCase().trim() === String(campaign.id).toLowerCase().trim());
+      const updatedCamp: Campaign = {
+        ...campaign,
+        ...(freshStored || {}),
+        auditorGrants: updatedGrants,
+        metadata: {
+          ...(campaign.metadata || {}),
+          ...(freshStored?.metadata || {}),
+          auditorGrants: updatedGrants,
+          deletedAuditorGrantIds: getStoredDeletedAuditorGrantIds()
+        }
+      };
       if (onCampaignUpdated) {
-        onCampaignUpdated({ ...campaign, auditorGrants: updatedGrants });
+        onCampaignUpdated(updatedCamp);
       }
     }
     setAuditorTick(t => t + 1);
@@ -1130,8 +1171,20 @@ export const AuthorizedPersonsModal: React.FC<AuthorizedPersonsModalProps> = ({
       if (campaign) {
         const updatedGrants = getStoredAuditorGrants(campaign.id);
         setAuditorGrants(updatedGrants);
+        const freshStored = getStoredCampaigns().find(c => String(c.id || '').toLowerCase().trim() === String(campaign.id).toLowerCase().trim());
+        const updatedCamp: Campaign = {
+          ...campaign,
+          ...(freshStored || {}),
+          auditorGrants: updatedGrants,
+          metadata: {
+            ...(campaign.metadata || {}),
+            ...(freshStored?.metadata || {}),
+            auditorGrants: updatedGrants,
+            deletedAuditorGrantIds: getStoredDeletedAuditorGrantIds()
+          }
+        };
         if (onCampaignUpdated) {
-          onCampaignUpdated({ ...campaign, auditorGrants: updatedGrants });
+          onCampaignUpdated(updatedCamp);
         }
       }
       setAuditorTick(t => t + 1);
@@ -2789,12 +2842,15 @@ export const AuthorizedPersonsModal: React.FC<AuthorizedPersonsModalProps> = ({
         {/* Auditor Portal Modal for Creator/Auditor inspection */}
         <AuditorPortalModal
           isOpen={isAuditorPortalOpen}
-          campaign={campaign}
+          campaign={effectiveCampaign}
           creatorProfile={creatorProfile}
           onClose={() => setIsAuditorPortalOpen(false)}
           onRecordsUpdated={() => {
+            if (campaign?.id) {
+              setAuditorGrants(getStoredAuditorGrants(campaign.id));
+            }
             setAuditorTick(t => t + 1);
-            if (onCampaignUpdated && campaign) onCampaignUpdated(campaign);
+            if (onCampaignUpdated && effectiveCampaign) onCampaignUpdated(effectiveCampaign);
           }}
         />
 
