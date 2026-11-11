@@ -112,6 +112,8 @@ export interface GA4ReportResponse {
       country: string;
       visitors: number;
       pageviews: number;
+      isGps?: boolean;
+      locality?: string;
     }>;
     topPages: Array<{
       path: string;
@@ -535,14 +537,14 @@ export async function fetchGA4DirectRestReport(dateRange: string = '30d'): Promi
       }
     ).then(r => r.json());
 
-    const topCities: GA4ReportResponse['data']['topCities'] = [];
+    const rawTopCities: GA4ReportResponse['data']['topCities'] = [];
     if (cityRes?.rows) {
       for (const r of cityRes.rows) {
         const city = r.dimensionValues?.[0]?.value || 'Unknown';
         const country = r.dimensionValues?.[1]?.value || 'India';
         const visitors = parseInt(r.metricValues?.[0]?.value || '0', 10);
         const pageviews = parseInt(r.metricValues?.[1]?.value || '0', 10);
-        topCities.push({
+        rawTopCities.push({
           city,
           country,
           visitors,
@@ -550,6 +552,7 @@ export async function fetchGA4DirectRestReport(dateRange: string = '30d'): Promi
         });
       }
     }
+    const topCities = mergeTopCitiesWithLiveGps(rawTopCities);
 
     // 6. Top Pages
     const pageRes = await fetch(
@@ -901,7 +904,7 @@ export async function fetchGA4AnalyticsReport(dateRange: string = '30d'): Promis
       limit: 12,
     });
 
-    const topCities: GA4ReportResponse['data']['topCities'] = [];
+    const rawTopCities: GA4ReportResponse['data']['topCities'] = [];
     if (cityRes?.rows) {
       for (const r of cityRes.rows) {
         const city = r.dimensionValues?.[0]?.value || '(not set)';
@@ -909,7 +912,7 @@ export async function fetchGA4AnalyticsReport(dateRange: string = '30d'): Promis
         const visitors = parseInt(r.metricValues?.[0]?.value || '0', 10);
         const pageviews = parseInt(r.metricValues?.[1]?.value || '0', 10);
 
-        topCities.push({
+        rawTopCities.push({
           city: city === '(not set)' ? 'Direct Mobile / Unknown' : city,
           country,
           visitors,
@@ -917,6 +920,7 @@ export async function fetchGA4AnalyticsReport(dateRange: string = '30d'): Promis
         });
       }
     }
+    const topCities = mergeTopCitiesWithLiveGps(rawTopCities);
 
     // 6. Top Visited Pages
     const [pageRes] = await client.runReport({
@@ -1059,16 +1063,66 @@ interface LiveHit {
   title: string;
   visitorHash: string;
   timestamp: number;
+  gpsCity?: string;
+  gpsLocality?: string;
+  gpsState?: string;
+  gpsCountry?: string;
+  lat?: number;
+  lng?: number;
+  isGps?: boolean;
 }
 
 const liveHitStore: LiveHit[] = [];
 
-export function recordLiveHit(path: string, title?: string, clientIp?: string, userAgent?: string, visitorId?: string): number {
+export function recordLiveHit(
+  path: string,
+  title?: string,
+  clientIp?: string,
+  userAgent?: string,
+  visitorId?: string,
+  gpsInfo?: {
+    gpsCity?: string;
+    gpsLocality?: string;
+    gpsState?: string;
+    gpsCountry?: string;
+    lat?: number;
+    lng?: number;
+    isGps?: boolean;
+  }
+): number {
   const now = Date.now();
   const rawId = visitorId || `${clientIp || '127.0.0.1'}-${userAgent || 'unknown'}`;
   const hash = crypto.createHash('md5').update(rawId).digest('hex');
   const cleanPath = path || '/';
   const cleanTitle = title || 'RonPay App';
+  const cleanCity = gpsInfo?.gpsCity?.trim();
+
+  // If this visitor just resolved their GPS city, backfill their earlier hits in the last 24h
+  if (cleanCity) {
+    for (const h of liveHitStore) {
+      if (h.visitorHash === hash && !h.gpsCity) {
+        h.gpsCity = cleanCity;
+        h.gpsLocality = gpsInfo?.gpsLocality?.trim();
+        h.gpsState = gpsInfo?.gpsState?.trim() || 'Mizoram';
+        h.gpsCountry = gpsInfo?.gpsCountry?.trim() || 'India';
+        h.isGps = true;
+      }
+    }
+  } else {
+    // Inherit previously known GPS city for this visitorHash if available
+    const prevWithGps = liveHitStore.find(h => h.visitorHash === hash && h.gpsCity);
+    if (prevWithGps) {
+      gpsInfo = {
+        gpsCity: prevWithGps.gpsCity,
+        gpsLocality: prevWithGps.gpsLocality,
+        gpsState: prevWithGps.gpsState,
+        gpsCountry: prevWithGps.gpsCountry,
+        lat: prevWithGps.lat,
+        lng: prevWithGps.lng,
+        isGps: true,
+      };
+    }
+  }
 
   liveHitStore.push({
     id: `${now}-${Math.random().toString(36).substring(2, 7)}`,
@@ -1076,6 +1130,13 @@ export function recordLiveHit(path: string, title?: string, clientIp?: string, u
     title: cleanTitle,
     visitorHash: hash,
     timestamp: now,
+    gpsCity: gpsInfo?.gpsCity?.trim(),
+    gpsLocality: gpsInfo?.gpsLocality?.trim(),
+    gpsState: gpsInfo?.gpsState?.trim(),
+    gpsCountry: gpsInfo?.gpsCountry?.trim() || 'India',
+    lat: gpsInfo?.lat,
+    lng: gpsInfo?.lng,
+    isGps: Boolean(gpsInfo?.gpsCity),
   });
 
   // Keep hits up to 24 hours for accurate daily calculation
@@ -1086,6 +1147,105 @@ export function recordLiveHit(path: string, title?: string, clientIp?: string, u
 
   // Count active visitors in last 15 mins
   return getActiveVisitorsCount();
+}
+
+/**
+ * Combines First-Party GPS-verified visitor cities with GA4's IP-based cities,
+ * and corrects Mizoram ISP CGNAT gateway misattributions (e.g. "Agartala").
+ */
+export function mergeTopCitiesWithLiveGps(
+  ga4Cities: GA4ReportResponse['data']['topCities']
+): GA4ReportResponse['data']['topCities'] {
+  const cityMap = new Map<
+    string,
+    {
+      city: string;
+      country: string;
+      visitors: number;
+      pageviews: number;
+      isGps?: boolean;
+      locality?: string;
+    }
+  >();
+
+  // 1. Aggregate GPS-verified cities from liveHitStore first
+  const gpsVisitorsByCity = new Map<string, Set<string>>();
+  const gpsHitsByCity = new Map<string, { count: number; country: string; locality?: string }>();
+
+  for (const h of liveHitStore) {
+    if (h.gpsCity) {
+      const key = h.gpsCity.toLowerCase().trim();
+      if (!gpsVisitorsByCity.has(key)) gpsVisitorsByCity.set(key, new Set());
+      gpsVisitorsByCity.get(key)!.add(h.visitorHash);
+
+      const prev = gpsHitsByCity.get(key) || { count: 0, country: h.gpsCountry || 'India', locality: h.gpsLocality };
+      prev.count += 1;
+      if (h.gpsLocality && !prev.locality) prev.locality = h.gpsLocality;
+      gpsHitsByCity.set(key, prev);
+
+      cityMap.set(key, {
+        city: h.gpsCity,
+        country: h.gpsCountry || 'India',
+        visitors: gpsVisitorsByCity.get(key)!.size,
+        pageviews: prev.count,
+        isGps: true,
+        locality: prev.locality,
+      });
+    }
+  }
+
+  // Determine the primary GPS-detected Mizoram city (if any visitor has shared GPS, e.g. Lunglei or Aizawl)
+  let primaryGpsMizoramCity = 'Aizawl / Lunglei (Mizoram)';
+  let maxGpsVis = 0;
+  for (const item of cityMap.values()) {
+    if (item.isGps && item.visitors > maxGpsVis) {
+      maxGpsVis = item.visitors;
+      primaryGpsMizoramCity = item.city;
+    }
+  }
+
+  // 2. Merge GA4 cities, correcting "Agartala" CGNAT ISP gateway misattribution for Mizoram mobile networks
+  for (const c of ga4Cities) {
+    const rawName = (c.city || '').trim();
+    const lower = rawName.toLowerCase();
+
+    // In Mizoram, Jio/BSNL/Airtel mobile data frequently routes via Agartala CGNAT gateway
+    const isMisattributedGateway =
+      lower === 'agartala' ||
+      lower === '(not set)' ||
+      lower === 'unknown' ||
+      lower === 'direct mobile / unknown' ||
+      lower === 'direct / mobile';
+
+    const resolvedCityName = isMisattributedGateway
+      ? maxGpsVis > 0
+        ? primaryGpsMizoramCity
+        : 'Mizoram (Mobile Network)'
+      : rawName;
+
+    const key = resolvedCityName.toLowerCase().trim();
+    const existing = cityMap.get(key);
+
+    if (existing) {
+      // Combine counts without double-counting if GPS already tracked this visitor
+      existing.visitors = Math.max(existing.visitors, c.visitors);
+      existing.pageviews = Math.max(existing.pageviews, c.pageviews);
+    } else {
+      cityMap.set(key, {
+        city: resolvedCityName,
+        country: c.country || 'India',
+        visitors: c.visitors,
+        pageviews: c.pageviews,
+        isGps: Boolean(c.isGps),
+      });
+    }
+  }
+
+  return Array.from(cityMap.values()).sort((a, b) => {
+    if (a.isGps && !b.isGps) return -1;
+    if (!a.isGps && b.isGps) return 1;
+    return b.visitors - a.visitors || b.pageviews - a.pageviews;
+  });
 }
 
 export function getActiveVisitorsCount(): number {

@@ -41,6 +41,7 @@ import {
 import { UserRole, CreatorProfile } from '../types';
 import { resolveApiUrl } from '../utils/apiConfig';
 import { fetchGA4AnalyticsHybrid } from '../services/clientGa4Service';
+import { detectAndCacheUserGpsLocation, getCachedUserGpsLocation, GpsVisitorLocation } from '../utils/ga4Tracking';
 
 interface AdminAnalyticsProps {
   currentRole: UserRole;
@@ -92,6 +93,8 @@ interface GA4DataPayload {
       country: string;
       visitors: number;
       pageviews: number;
+      isGps?: boolean;
+      locality?: string;
     }>;
     topPages: Array<{
       path: string;
@@ -162,9 +165,33 @@ export const AdminAnalytics: React.FC<AdminAnalyticsProps> = ({
     }
   }, []);
 
-  // Fetch on mount & date range change, and auto-refresh every 20s while open
+  const [gpsLocation, setGpsLocation] = useState<GpsVisitorLocation | null>(() => getCachedUserGpsLocation());
+  const [isDetectingGps, setIsDetectingGps] = useState<boolean>(false);
+
+  const handleDetectGps = useCallback(async (force: boolean = true) => {
+    setIsDetectingGps(true);
+    try {
+      const loc = await detectAndCacheUserGpsLocation(force);
+      if (loc) {
+        setGpsLocation(loc);
+        await fetchAnalytics(dateRange, true);
+      }
+    } finally {
+      setIsDetectingGps(false);
+    }
+  }, [dateRange, fetchAnalytics]);
+
+  // Fetch on mount & date range change, auto-detect GPS if not cached, and auto-refresh every 20s while open
   useEffect(() => {
     fetchAnalytics(dateRange);
+    if (!getCachedUserGpsLocation()) {
+      detectAndCacheUserGpsLocation(false).then((loc) => {
+        if (loc) {
+          setGpsLocation(loc);
+          fetchAnalytics(dateRange, true);
+        }
+      });
+    }
     const interval = setInterval(() => {
       fetchAnalytics(dateRange, true);
     }, 20000);
@@ -650,18 +677,34 @@ export const AdminAnalytics: React.FC<AdminAnalyticsProps> = ({
           </div>
         </div>
 
-        {/* Top Cities / Localities (Mizoram & Beyond) */}
+        {/* Top Cities / Localities (Mizoram & Beyond — GPS Assisted) */}
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
-          <div className="flex items-center justify-between mb-3.5">
+          <div className="flex items-start justify-between gap-2 mb-3.5 flex-wrap">
             <div>
-              <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
+              <h3 className="text-sm font-black text-slate-900 flex items-center gap-2 flex-wrap">
                 <MapPin className="w-4 h-4 text-amber-500" />
-                <span>Top Cities & Localities</span>
+                <span>Top Cities &amp; Localities (GPS + Network)</span>
               </h3>
               <p className="text-xs text-slate-500 mt-0.5">
-                Mizoram khaw hrang hrang leh state dang atanga tlawhtute.
+                Phone GPS location hmanga tlawhtute awmna khua dik tak chhinchhiahna (ISP Gateway Agartala tidiktu).
               </p>
             </div>
+            <button
+              type="button"
+              onClick={() => handleDetectGps(true)}
+              disabled={isDetectingGps}
+              className="px-2.5 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-[11px] font-black flex items-center gap-1.5 transition cursor-pointer shrink-0 disabled:opacity-50"
+              title="I phone GPS atangin tun meka i awmna khua dik tak detect rawh"
+            >
+              <MapPin className={`w-3.5 h-3.5 text-emerald-600 ${isDetectingGps ? 'animate-bounce' : ''}`} />
+              <span>
+                {isDetectingGps
+                  ? 'GPS Zawng Mek...'
+                  : gpsLocation?.city
+                  ? `📍 GPS: ${gpsLocation.city}${gpsLocation.locality ? ` (${gpsLocation.locality})` : ''}`
+                  : '📍 GPS Location Detect'}
+              </span>
+            </button>
           </div>
 
           <div className="overflow-x-auto">
@@ -676,10 +719,18 @@ export const AdminAnalytics: React.FC<AdminAnalyticsProps> = ({
               <tbody className="divide-y divide-slate-100 font-bold">
                 {report?.data?.topCities?.slice(0, 6).map((c) => (
                   <tr key={c.city} className="hover:bg-slate-50/80 transition">
-                    <td className="py-2 flex items-center gap-1.5 text-slate-800">
-                      <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
+                    <td className="py-2 flex items-center gap-1.5 text-slate-800 flex-wrap">
+                      <span className={`w-1.5 h-1.5 rounded-full ${c.isGps ? 'bg-emerald-500' : 'bg-indigo-500'}`} />
                       <span>{c.city}</span>
+                      {c.locality && (
+                        <span className="text-[10px] font-semibold text-slate-500">• {c.locality}</span>
+                      )}
                       <span className="text-[10px] text-slate-400">({c.country})</span>
+                      {c.isGps && (
+                        <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          📍 GPS
+                        </span>
+                      )}
                     </td>
                     <td className="py-2 text-right text-slate-900">{c.visitors.toLocaleString('en-IN')}</td>
                     <td className="py-2 text-right text-slate-500">{c.pageviews.toLocaleString('en-IN')}</td>

@@ -11,6 +11,7 @@
  */
 
 import { resolveApiUrl } from '../utils/apiConfig';
+import { getCachedUserGpsLocation } from '../utils/ga4Tracking';
 
 export const DEFAULT_GA4_PROPERTY_ID = '551685547';
 export const DEFAULT_GA4_CLIENT_EMAIL = 'ronpay-ga4-reader@gen-lang-client-0112822721.iam.gserviceaccount.com';
@@ -87,6 +88,8 @@ export interface GA4ReportPayload {
       country: string;
       visitors: number;
       pageviews: number;
+      isGps?: boolean;
+      locality?: string;
     }>;
     topPages: Array<{
       path: string;
@@ -376,8 +379,8 @@ export async function fetchGA4DirectClientReport(dateRange: string = 'today'): P
       }
     } catch {}
 
-    // 5. Top Cities
-    const topCities: GA4ReportPayload['data']['topCities'] = [];
+    // 5. Top Cities (with GPS override for ISP CGNAT misattributions like Agartala)
+    const rawTopCities: GA4ReportPayload['data']['topCities'] = [];
     try {
       const cityRaw = await fetch(
         `https://analyticsdata.googleapis.com/v1beta/properties/${propertyId}:runReport`,
@@ -399,7 +402,7 @@ export async function fetchGA4DirectClientReport(dateRange: string = 'today'): P
           const country = r.dimensionValues?.[1]?.value || 'India';
           const visitors = parseInt(r.metricValues?.[0]?.value || '0', 10);
           const pageviews = parseInt(r.metricValues?.[1]?.value || '0', 10);
-          topCities.push({
+          rawTopCities.push({
             city: city === '(not set)' ? 'Direct / Mobile' : city,
             country,
             visitors,
@@ -408,6 +411,7 @@ export async function fetchGA4DirectClientReport(dateRange: string = 'today'): P
         }
       }
     } catch {}
+    const topCities = reconcileClientCitiesWithGps(rawTopCities);
 
     // 6. Top Pages
     const topPages: GA4ReportPayload['data']['topPages'] = [];
@@ -496,6 +500,7 @@ export async function fetchGA4AnalyticsHybrid(dateRange: string = 'today'): Prom
     if (res.ok && contentType.includes('application/json')) {
       const json: GA4ReportPayload = await res.json();
       if (json && json.status === 'live' && json.data) {
+        json.data.topCities = reconcileClientCitiesWithGps(json.data.topCities || []);
         return json;
       }
     }
@@ -514,4 +519,62 @@ export async function fetchGA4AnalyticsHybrid(dateRange: string = 'today'): Prom
   }
 
   return null;
+}
+
+export function reconcileClientCitiesWithGps(
+  cities: GA4ReportPayload['data']['topCities']
+): GA4ReportPayload['data']['topCities'] {
+  const gps = getCachedUserGpsLocation();
+  const map = new Map<string, GA4ReportPayload['data']['topCities'][0]>();
+
+  if (gps && gps.city) {
+    const gpsKey = gps.city.toLowerCase().trim();
+    map.set(gpsKey, {
+      city: gps.city,
+      country: gps.country || 'India',
+      visitors: 1,
+      pageviews: 1,
+      isGps: true,
+      locality: gps.locality,
+    });
+  }
+
+  for (const c of cities || []) {
+    const rawName = (c.city || '').trim();
+    const lower = rawName.toLowerCase();
+    const isGatewayMisattribution =
+      lower === 'agartala' ||
+      lower === '(not set)' ||
+      lower === 'unknown' ||
+      lower === 'direct mobile / unknown' ||
+      lower === 'direct / mobile' ||
+      lower === 'mizoram (mobile network)';
+
+    const targetCity = isGatewayMisattribution
+      ? gps?.city || 'Mizoram (Mobile Network)'
+      : rawName;
+
+    const k = targetCity.toLowerCase().trim();
+    const existing = map.get(k);
+    if (existing) {
+      existing.visitors = Math.max(existing.visitors, c.visitors);
+      existing.pageviews = Math.max(existing.pageviews, c.pageviews);
+      if (c.isGps) existing.isGps = true;
+    } else {
+      map.set(k, {
+        city: targetCity,
+        country: c.country || 'India',
+        visitors: c.visitors,
+        pageviews: c.pageviews,
+        isGps: Boolean(c.isGps) || (Boolean(gps?.city) && isGatewayMisattribution),
+        locality: c.locality || (isGatewayMisattribution ? gps?.locality : undefined),
+      });
+    }
+  }
+
+  return Array.from(map.values()).sort((a, b) => {
+    if (a.isGps && !b.isGps) return -1;
+    if (!a.isGps && b.isGps) return 1;
+    return b.visitors - a.visitors || b.pageviews - a.pageviews;
+  });
 }
