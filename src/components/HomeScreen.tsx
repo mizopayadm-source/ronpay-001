@@ -814,7 +814,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
       {/* Smart Login & Active User Strip */}
       {onOpenLogin && (
-        <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-3 rounded-2xl border border-indigo-800/60 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+        <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-3 rounded-2xl border border-indigo-800/60 shadow-xs flex flex-col @2xl:flex-row @2xl:items-center justify-between gap-2.5 overflow-hidden">
           <div className="flex items-center gap-2.5 min-w-0 flex-1">
             <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold shadow-xs shrink-0 ${
               creatorProfile.isApproved && creatorProfile.phone
@@ -829,7 +829,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             </div>
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="font-black text-xs sm:text-sm text-white break-words">
+                <span className="font-black text-xs sm:text-sm text-white truncate max-w-full">
                   {creatorProfile.isApproved && creatorProfile.phone
                     ? creatorProfile.name
                     : (language === 'mizo' ? 'Creator & Member Login' : 'Creator & Member Login')}
@@ -844,7 +844,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                     : 'GUEST'}
                 </span>
               </div>
-              <p className="text-[10px] text-slate-300 truncate">
+              <p className="text-[10px] text-slate-300 truncate mt-0.5">
                 {creatorProfile.isApproved && creatorProfile.phone
                   ? `${creatorProfile.orgName || 'RonPay Registered'} • ${creatorProfile.phone}`
                   : (language === 'mizo' ? 'Luhna leh Account inthlakna (Phone & MPIN)' : 'Login & Switch Account (Phone & MPIN)')}
@@ -852,13 +852,13 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             </div>
           </div>
 
-          <div className="w-full sm:w-auto flex items-center justify-between sm:justify-end gap-1.5 shrink-0 flex-wrap pt-1 sm:pt-0 border-t border-indigo-900/50 sm:border-t-0">
+          <div className={`w-full @2xl:w-auto grid ${onOpenMemberships && !isGuestUser ? 'grid-cols-3' : 'grid-cols-2'} @2xl:flex items-center gap-1.5 shrink-0 pt-2 @2xl:pt-0 border-t border-indigo-900/60 @2xl:border-t-0`}>
             {/* Workspace Mode Switcher: Personal + Org vs Dedicated Organization Dashboard */}
             <button
               type="button"
               id="home-workspace-mode-toggle-btn"
               onClick={() => toggleWorkspaceViewMode(workspaceViewMode === 'org_only' ? 'hybrid' : 'org_only')}
-              className={`flex-1 sm:flex-initial justify-center px-2.5 py-2 sm:py-1.5 rounded-xl font-black text-[11px] sm:text-xs transition cursor-pointer flex items-center gap-1.5 shadow-sm active:scale-95 border whitespace-nowrap ${
+              className={`w-full @2xl:w-auto justify-center px-2 py-2 @2xl:px-2.5 @2xl:py-1.5 rounded-xl font-black text-[10.5px] transition cursor-pointer flex items-center gap-1 shadow-sm active:scale-95 border whitespace-nowrap min-w-0 ${
                 workspaceViewMode === 'org_only'
                   ? 'bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-300/60'
                   : 'bg-slate-800/90 hover:bg-slate-700 text-indigo-200 border-indigo-400/40'
@@ -868,7 +868,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               <Building2 className="w-3.5 h-3.5 text-amber-300 shrink-0" />
               <span className="truncate">
                 {workspaceViewMode === 'org_only'
-                  ? '🏛️ Org-Only View'
+                  ? '🏛️ Org-Only'
                   : '🌐 Mimal + Pawl'}
               </span>
             </button>
@@ -879,7 +879,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                 type="button"
                 id="home-open-memberships-btn"
                 onClick={onOpenMemberships}
-                className="flex-1 sm:flex-initial justify-center px-2.5 py-2 sm:py-1.5 rounded-xl font-black text-[11px] sm:text-xs transition cursor-pointer flex items-center gap-1.5 shadow-sm bg-indigo-600/90 hover:bg-indigo-500 text-white border border-indigo-400/40 active:scale-95 whitespace-nowrap"
+                className="w-full @2xl:w-auto justify-center px-2 py-2 @2xl:px-2.5 @2xl:py-1.5 rounded-xl font-black text-[10.5px] transition cursor-pointer flex items-center gap-1 shadow-sm bg-indigo-600/90 hover:bg-indigo-500 text-white border border-indigo-400/40 active:scale-95 whitespace-nowrap min-w-0"
                 title="My Memberships & Multi-Group Context"
               >
                 <Layers className="w-3.5 h-3.5 text-amber-300 shrink-0" />
@@ -891,14 +891,14 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               type="button"
               id="home-open-login-btn"
               onClick={onOpenLogin}
-              className={`flex-1 sm:flex-initial justify-center px-3 py-2 sm:py-1.5 rounded-xl font-black text-[11px] sm:text-xs transition cursor-pointer flex items-center gap-1.5 shadow-sm active:scale-95 whitespace-nowrap ${
+              className={`w-full @2xl:w-auto justify-center px-2 py-2 @2xl:px-3 @2xl:py-1.5 rounded-xl font-black text-[10.5px] transition cursor-pointer flex items-center gap-1 shadow-sm active:scale-95 whitespace-nowrap min-w-0 ${
                 creatorProfile.isApproved && creatorProfile.phone
                   ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950'
                   : 'bg-amber-400 hover:bg-amber-300 text-slate-950'
               }`}
             >
               <LogIn className="w-3.5 h-3.5 shrink-0" />
-              <span>{creatorProfile.isApproved && creatorProfile.phone ? 'Switch / Login' : (language === 'mizo' ? 'Lut Rawh' : 'Login')}</span>
+              <span className="truncate">{creatorProfile.isApproved && creatorProfile.phone ? 'Switch / Login' : (language === 'mizo' ? 'Lut Rawh' : 'Login')}</span>
             </button>
           </div>
         </div>
@@ -986,7 +986,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         <div className="bg-slate-50 rounded-3xl p-3 sm:p-5 border border-slate-200/90 shadow-xs space-y-4 animate-fadeIn">
           {/* Top Organization Workspace Header & Selector */}
           <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-200/80 flex flex-col gap-3.5">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex flex-col @xl:flex-row @xl:items-center justify-between gap-3">
               <div className="flex items-center gap-3 min-w-0">
                 <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-indigo-600 to-slate-900 text-white flex items-center justify-center font-black text-lg shadow-sm shrink-0 overflow-hidden border border-indigo-200">
                   {activeOrgCampaign.imageUrl ? (
@@ -1023,12 +1023,12 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               </div>
 
               {/* Organization Switcher & Mode Switcher */}
-              <div className="w-full sm:w-auto flex flex-col sm:items-end gap-2 shrink-0">
+              <div className="w-full @xl:w-auto flex flex-col @xl:items-end gap-2 shrink-0">
                 {availableOrgCampaigns.length > 1 && (
                   <select
                     value={activeOrgCampaign.id}
                     onChange={(e) => handleSelectOrgCampaign(e.target.value)}
-                    className="w-full sm:w-64 bg-slate-50 border border-slate-300 text-slate-800 rounded-xl px-3 py-2 text-xs font-extrabold focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+                    className="w-full @xl:w-64 bg-slate-50 border border-slate-300 text-slate-800 rounded-xl px-3 py-2 text-xs font-extrabold focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
                   >
                     {availableOrgCampaigns.map(c => (
                       <option key={c.id} value={c.id}>
@@ -1037,18 +1037,18 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                     ))}
                   </select>
                 )}
-                <div className="grid grid-cols-2 sm:flex items-center gap-1.5 w-full sm:w-auto">
+                <div className="grid grid-cols-2 @xl:flex items-center gap-1.5 w-full @xl:w-auto">
                   <button
                     type="button"
                     onClick={() => toggleWorkspaceViewMode('hybrid')}
-                    className="w-full sm:w-auto justify-center px-2.5 py-2 sm:py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10.5px] font-extrabold border border-slate-300 transition cursor-pointer flex items-center whitespace-nowrap"
+                    className="w-full @xl:w-auto justify-center px-2.5 py-2 @xl:py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10.5px] font-extrabold border border-slate-300 transition cursor-pointer flex items-center whitespace-nowrap"
                   >
                     🌐 Mimal + Pawl View
                   </button>
                   <button
                     type="button"
                     onClick={onCreateQRClick}
-                    className="w-full sm:w-auto justify-center px-2.5 py-2 sm:py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-[10.5px] font-extrabold shadow-2xs transition cursor-pointer flex items-center gap-1 whitespace-nowrap"
+                    className="w-full @xl:w-auto justify-center px-2.5 py-2 @xl:py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-[10.5px] font-extrabold shadow-2xs transition cursor-pointer flex items-center gap-1 whitespace-nowrap"
                   >
                     <PlusCircle className="w-3.5 h-3.5 shrink-0" />
                     <span>Bawm Thar / Config</span>
@@ -1058,7 +1058,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             </div>
 
             {/* Enabled Categories Pill Strip & Quick Action Bar */}
-            <div className="pt-2.5 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+            <div className="pt-2.5 border-t border-slate-100 flex flex-col @xl:flex-row @xl:items-center justify-between gap-2.5">
               <div className="flex items-center gap-1.5 flex-wrap">
                 <span className="text-[10px] font-black uppercase text-slate-400 mr-1 flex items-center gap-1">
                   <CheckSquare className="w-3 h-3 text-indigo-600" /> Active Categories:
@@ -1074,11 +1074,11 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               </div>
 
               {onOpenMemberRoll && (
-                <div className="grid grid-cols-2 sm:flex items-center gap-2 w-full sm:w-auto">
+                <div className="grid grid-cols-2 @xl:flex items-center gap-2 w-full @xl:w-auto">
                   <button
                     type="button"
                     onClick={() => onOpenMemberRoll('quick_entry', activeOrgCampaign.id)}
-                    className="w-full sm:w-auto justify-center px-3 py-2 sm:py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-black shadow-2xs transition cursor-pointer flex items-center gap-1 active:scale-95 whitespace-nowrap"
+                    className="w-full @xl:w-auto justify-center px-3 py-2 @xl:py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-black shadow-2xs transition cursor-pointer flex items-center gap-1 active:scale-95 whitespace-nowrap"
                   >
                     <Zap className="w-3.5 h-3.5 shrink-0" />
                     <span>Quick Entry</span>
@@ -1086,7 +1086,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                   <button
                     type="button"
                     onClick={() => onOpenMemberRoll('register_member', activeOrgCampaign.id)}
-                    className="w-full sm:w-auto justify-center px-3 py-2 sm:py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-black shadow-2xs transition cursor-pointer flex items-center gap-1 active:scale-95 whitespace-nowrap"
+                    className="w-full @xl:w-auto justify-center px-3 py-2 @xl:py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-black shadow-2xs transition cursor-pointer flex items-center gap-1 active:scale-95 whitespace-nowrap"
                   >
                     <Users className="w-3.5 h-3.5 shrink-0" />
                     <span className="truncate">
@@ -1098,7 +1098,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                   <button
                     type="button"
                     onClick={() => onOpenMemberRoll('expenses', activeOrgCampaign.id)}
-                    className="w-full sm:w-auto justify-center px-3 py-2 sm:py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-[11px] font-black shadow-2xs transition cursor-pointer flex items-center gap-1 active:scale-95 whitespace-nowrap"
+                    className="w-full @xl:w-auto justify-center px-3 py-2 @xl:py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-[11px] font-black shadow-2xs transition cursor-pointer flex items-center gap-1 active:scale-95 whitespace-nowrap"
                   >
                     <Receipt className="w-3.5 h-3.5 shrink-0" />
                     <span>Hmanral</span>
@@ -1106,7 +1106,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                   <button
                     type="button"
                     onClick={() => onOpenMemberRoll('print_reports', activeOrgCampaign.id)}
-                    className="w-full sm:w-auto justify-center px-3 py-2 sm:py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-[11px] font-black shadow-2xs transition cursor-pointer flex items-center gap-1 active:scale-95 whitespace-nowrap"
+                    className="w-full @xl:w-auto justify-center px-3 py-2 @xl:py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-[11px] font-black shadow-2xs transition cursor-pointer flex items-center gap-1 active:scale-95 whitespace-nowrap"
                   >
                     <FileSpreadsheet className="w-3.5 h-3.5 text-amber-300 shrink-0" />
                     <span>Statements</span>
@@ -1687,7 +1687,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             Instant Pay
           </span>
         </div>
-        <div className="grid grid-cols-6 gap-1 sm:gap-2 text-center">
+        <div className="grid grid-cols-6 gap-1 sm:gap-2 text-center items-start">
           {/* Scan Any QR */}
           <button 
             id="home-quick-scan-btn"
@@ -1697,12 +1697,12 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               e.stopPropagation();
               onStartScanner('any');
             }}
-            className="flex flex-col items-center group cursor-pointer active:scale-95 transition-transform"
+            className="flex flex-col items-center group cursor-pointer active:scale-95 transition-transform min-w-0"
           >
-            <div className="w-10 h-10 sm:w-11 sm:h-11 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center text-base sm:text-lg mb-1 group-hover:bg-indigo-600 group-hover:text-white transition-all shadow-xs border border-indigo-100">
+            <div className="w-10 h-10 sm:w-11 sm:h-11 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center text-base sm:text-lg mb-1 group-hover:bg-indigo-600 group-hover:text-white transition-all shadow-xs border border-indigo-100 shrink-0">
               <QrCode className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
-            <span className="text-[9px] sm:text-[10px] font-bold text-slate-700 group-hover:text-indigo-600 transition-colors truncate w-full">
+            <span className="text-[9px] leading-[1.15] font-bold text-slate-700 group-hover:text-indigo-600 transition-colors line-clamp-2 w-full min-h-[21px]">
               {t.scanQR}
             </span>
           </button>
@@ -1716,12 +1716,12 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               e.stopPropagation();
               onOpenHistory && onOpenHistory();
             }}
-            className="flex flex-col items-center group cursor-pointer active:scale-95 transition-transform relative"
+            className="flex flex-col items-center group cursor-pointer active:scale-95 transition-transform relative min-w-0"
           >
-            <div className="w-10 h-10 sm:w-11 sm:h-11 bg-purple-50 text-purple-700 rounded-2xl flex items-center justify-center text-base sm:text-lg mb-1 group-hover:bg-purple-600 group-hover:text-white transition-all shadow-xs border border-purple-200 relative">
+            <div className="w-10 h-10 sm:w-11 sm:h-11 bg-purple-50 text-purple-700 rounded-2xl flex items-center justify-center text-base sm:text-lg mb-1 group-hover:bg-purple-600 group-hover:text-white transition-all shadow-xs border border-purple-200 relative shrink-0">
               <History className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
-            <span className="text-[9px] sm:text-[10px] font-bold text-purple-900 group-hover:text-purple-600 transition-colors truncate w-full">
+            <span className="text-[9px] leading-[1.15] font-bold text-purple-900 group-hover:text-purple-600 transition-colors line-clamp-2 w-full min-h-[21px]">
               Sulhnu
             </span>
           </button>
@@ -1735,13 +1735,13 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               e.stopPropagation();
               onOpenMemberRoll && onOpenMemberRoll('members_list');
             }}
-            className="flex flex-col items-center group cursor-pointer active:scale-95 transition-transform relative"
+            className="flex flex-col items-center group cursor-pointer active:scale-95 transition-transform relative min-w-0"
           >
-            <div className="w-10 h-10 sm:w-11 sm:h-11 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center text-base sm:text-lg mb-1 group-hover:bg-blue-600 group-hover:text-white transition-all shadow-xs border border-blue-200 relative">
+            <div className="w-10 h-10 sm:w-11 sm:h-11 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center text-base sm:text-lg mb-1 group-hover:bg-blue-600 group-hover:text-white transition-all shadow-xs border border-blue-200 relative shrink-0">
               <Users className="w-4 h-4 sm:w-5 sm:h-5" />
               <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-blue-600 rounded-full ring-2 ring-white" />
             </div>
-            <span className="text-[9px] sm:text-[10px] font-bold text-blue-800 group-hover:text-blue-600 transition-colors truncate w-full">
+            <span className="text-[9px] leading-[1.15] font-bold text-blue-800 group-hover:text-blue-600 transition-colors line-clamp-2 w-full min-h-[21px]">
               Member Roll
             </span>
           </button>
@@ -1749,12 +1749,12 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           {/* To Bank Transfer */}
           <button 
             onClick={onShowBankTransfer}
-            className="flex flex-col items-center group cursor-pointer active:scale-95 transition-transform"
+            className="flex flex-col items-center group cursor-pointer active:scale-95 transition-transform min-w-0"
           >
-            <div className="w-10 h-10 sm:w-11 sm:h-11 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center text-base sm:text-lg mb-1 group-hover:bg-emerald-600 group-hover:text-white transition-all shadow-xs border border-emerald-100">
+            <div className="w-10 h-10 sm:w-11 sm:h-11 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center text-base sm:text-lg mb-1 group-hover:bg-emerald-600 group-hover:text-white transition-all shadow-xs border border-emerald-100 shrink-0">
               <Building2 className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
-            <span className="text-[9px] sm:text-[10px] font-bold text-slate-700 group-hover:text-emerald-600 transition-colors truncate w-full">
+            <span className="text-[9px] leading-[1.15] font-bold text-slate-700 group-hover:text-emerald-600 transition-colors line-clamp-2 w-full min-h-[21px]">
               {t.toBank}
             </span>
           </button>
@@ -1762,9 +1762,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           {/* Create QR */}
           <button 
             onClick={onCreateQRClick}
-            className="flex flex-col items-center group cursor-pointer active:scale-95 transition-transform relative"
+            className="flex flex-col items-center group cursor-pointer active:scale-95 transition-transform relative min-w-0"
           >
-            <div className="w-10 h-10 sm:w-11 sm:h-11 bg-amber-50 text-amber-600 rounded-2xl flex items-center justify-center text-base sm:text-lg mb-1 group-hover:bg-amber-500 group-hover:text-white transition-all shadow-xs border border-amber-100 relative">
+            <div className="w-10 h-10 sm:w-11 sm:h-11 bg-amber-50 text-amber-600 rounded-2xl flex items-center justify-center text-base sm:text-lg mb-1 group-hover:bg-amber-500 group-hover:text-white transition-all shadow-xs border border-amber-100 relative shrink-0">
               <PlusCircle className="w-4 h-4 sm:w-5 sm:h-5" />
               {creatorProfile.isApproved && (() => {
                 const exp = getCreatorExpiryStatus(creatorProfile);
@@ -1779,7 +1779,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                 return null;
               })()}
             </div>
-            <span className="text-[9px] sm:text-[10px] font-bold text-slate-700 group-hover:text-amber-600 transition-colors truncate w-full">
+            <span className="text-[9px] leading-[1.15] font-bold text-slate-700 group-hover:text-amber-600 transition-colors line-clamp-2 w-full min-h-[21px]">
               {t.createQR}
             </span>
           </button>
@@ -1787,12 +1787,12 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           {/* Check Balance */}
           <button 
             onClick={onShowBalance}
-            className="flex flex-col items-center group cursor-pointer active:scale-95 transition-transform"
+            className="flex flex-col items-center group cursor-pointer active:scale-95 transition-transform min-w-0"
           >
-            <div className="w-10 h-10 sm:w-11 sm:h-11 bg-slate-50 text-slate-700 rounded-2xl flex items-center justify-center text-base sm:text-lg mb-1 group-hover:bg-slate-700 group-hover:text-white transition-all shadow-xs border border-slate-200">
+            <div className="w-10 h-10 sm:w-11 sm:h-11 bg-slate-50 text-slate-700 rounded-2xl flex items-center justify-center text-base sm:text-lg mb-1 group-hover:bg-slate-700 group-hover:text-white transition-all shadow-xs border border-slate-200 shrink-0">
               <Wallet className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
-            <span className="text-[9px] sm:text-[10px] font-bold text-slate-700 group-hover:text-slate-900 transition-colors truncate w-full">
+            <span className="text-[9px] leading-[1.15] font-bold text-slate-700 group-hover:text-slate-900 transition-colors line-clamp-2 w-full min-h-[21px]">
               {t.checkBalance}
             </span>
           </button>
@@ -1812,27 +1812,27 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           </span>
         </div>
 
-        <div className="grid grid-cols-3 gap-2 text-center">
-          <div className="bg-white/5 p-2.5 rounded-xl border border-white/10 backdrop-blur-xs">
-            <p className="text-[9px] text-indigo-200 font-bold uppercase tracking-wider">Total Raised</p>
-            <p className="text-sm sm:text-base font-black text-amber-300 mt-1">
+        <div className="grid grid-cols-3 gap-2 text-center items-stretch">
+          <div className="bg-white/5 p-2.5 rounded-xl border border-white/10 backdrop-blur-xs flex flex-col items-center justify-center min-w-0">
+            <p className="text-[9px] text-indigo-200 font-bold uppercase tracking-wider truncate w-full">Total Raised</p>
+            <p className="text-sm sm:text-base font-black text-amber-300 mt-1 tabular-nums truncate w-full">
               ₹{totalRaised.toLocaleString('en-IN', { minimumFractionDigits: totalRaised % 1 !== 0 ? 1 : 0, maximumFractionDigits: 2 })}
             </p>
           </div>
-          <div className="bg-white/5 p-2.5 rounded-xl border border-white/10 backdrop-blur-xs">
-            <p className="text-[9px] text-indigo-200 font-bold uppercase tracking-wider">Total Txns</p>
-            <p className="text-sm sm:text-base font-black text-emerald-300 mt-1">
+          <div className="bg-white/5 p-2.5 rounded-xl border border-white/10 backdrop-blur-xs flex flex-col items-center justify-center min-w-0">
+            <p className="text-[9px] text-indigo-200 font-bold uppercase tracking-wider truncate w-full">Total Txns</p>
+            <p className="text-sm sm:text-base font-black text-emerald-300 mt-1 tabular-nums truncate w-full">
               {totalTxnsCount} Txns
             </p>
             {todayTxnsCount > 0 && (
-              <p className="text-[8px] text-emerald-200/90 font-bold mt-0.5">
+              <p className="text-[8px] text-emerald-200/90 font-bold mt-0.5 truncate w-full">
                 ({language === 'mizo' ? 'Vawiin' : 'Today'}: {todayTxnsCount})
               </p>
             )}
           </div>
-          <div className="bg-white/5 p-2.5 rounded-xl border border-white/10 backdrop-blur-xs">
-            <p className="text-[9px] text-indigo-200 font-bold uppercase tracking-wider">Actives QRS</p>
-            <p className="text-sm sm:text-base font-black text-cyan-300 mt-1">
+          <div className="bg-white/5 p-2.5 rounded-xl border border-white/10 backdrop-blur-xs flex flex-col items-center justify-center min-w-0">
+            <p className="text-[9px] text-indigo-200 font-bold uppercase tracking-wider truncate w-full">Active QRs</p>
+            <p className="text-sm sm:text-base font-black text-cyan-300 mt-1 tabular-nums truncate w-full">
               {activeQRsCount} Lives
             </p>
           </div>
@@ -1840,12 +1840,12 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
       </div>
 
       {/* 2.5 PhonePe TSP & PG V2 Integration Quick Panel */}
-      <div className="bg-gradient-to-r from-purple-900 to-indigo-900 p-3 sm:p-3.5 rounded-2xl text-white shadow-sm border border-purple-700/60 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3">
+      <div className="bg-gradient-to-r from-purple-900 to-indigo-900 p-3 sm:p-3.5 rounded-2xl text-white shadow-sm border border-purple-700/60 flex flex-col @xl:flex-row @xl:items-center justify-between gap-2.5">
         <div className="flex items-center gap-2.5 min-w-0">
           <div className="w-9 h-9 sm:w-10 sm:h-10 bg-purple-600 text-white rounded-xl flex items-center justify-center font-black shadow-md border border-purple-400 shrink-0">
             <Zap className="w-4 h-4 sm:w-5 sm:h-5" />
           </div>
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1.5 flex-wrap">
               <h3 className="font-extrabold text-xs text-white">PhonePe PG V2 & TSP</h3>
               <span className="text-[8.5px] sm:text-[9px] bg-emerald-400 text-emerald-950 font-black px-1.5 py-0.2 rounded font-mono shrink-0">
@@ -1858,13 +1858,13 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           </div>
         </div>
 
-        <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto">
+        <div className="flex items-center gap-2 shrink-0 w-full @xl:w-auto">
           {onOpenPhonePeCheckout && (
             <button
               type="button"
               id="home-phonepe-checkout-btn"
               onClick={() => onOpenPhonePeCheckout(100)}
-              className="flex-1 sm:flex-initial h-8 bg-gradient-to-r from-amber-400 to-orange-400 hover:from-amber-300 hover:to-orange-300 text-slate-950 font-black px-3 rounded-xl text-[10.5px] transition shadow-xs cursor-pointer active:scale-95 flex items-center justify-center gap-1 shrink-0 whitespace-nowrap"
+              className="flex-1 @xl:flex-initial h-8 bg-gradient-to-r from-amber-400 to-orange-400 hover:from-amber-300 hover:to-orange-300 text-slate-950 font-black px-3 rounded-xl text-[10.5px] transition shadow-xs cursor-pointer active:scale-95 flex items-center justify-center gap-1 shrink-0 whitespace-nowrap"
               title="Open PhonePe PG Checkout Page"
             >
               <Zap className="w-3.5 h-3.5 fill-slate-950 text-slate-950 shrink-0" />
@@ -1875,7 +1875,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             type="button"
             id="home-phonepe-api-logs-btn"
             onClick={onOpenPhonePePortal}
-            className="flex-1 sm:flex-initial h-8 bg-white hover:bg-purple-50 text-purple-950 font-black px-3 rounded-xl text-[10.5px] transition shadow-xs cursor-pointer active:scale-95 shrink-0 whitespace-nowrap flex items-center justify-center gap-1.5 border border-purple-200/80 text-center"
+            className="flex-1 @xl:flex-initial h-8 bg-white hover:bg-purple-50 text-purple-950 font-black px-3 rounded-xl text-[10.5px] transition shadow-xs cursor-pointer active:scale-95 shrink-0 whitespace-nowrap flex items-center justify-center gap-1.5 border border-purple-200/80 text-center"
           >
             <Activity className="w-3 h-3 text-purple-700 shrink-0" />
             <span>API & Logs</span>
@@ -2171,13 +2171,13 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
       {onOpenWebsite && (
         <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-950 p-3.5 sm:p-4 rounded-2xl text-white shadow-md border border-indigo-500/40 relative overflow-hidden">
           <div className="absolute top-0 right-0 w-32 h-32 bg-amber-400/10 rounded-full blur-2xl pointer-events-none" />
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 relative z-10">
-            <div className="flex items-start sm:items-center gap-3">
+          <div className="flex flex-col @xl:flex-row @xl:items-center justify-between gap-3 relative z-10">
+            <div className="flex items-start @xl:items-center gap-3 min-w-0">
               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-400 to-amber-500 text-slate-950 flex items-center justify-center shrink-0 shadow-md font-black">
                 <Globe className="w-5 h-5" />
               </div>
-              <div>
-                <div className="flex items-center gap-2">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2 flex-wrap">
                   <h3 className="text-xs sm:text-sm font-black text-white">
                     {language === 'mizo' ? 'RonPay Official Website & Kawtchhuah' : 'RonPay Official Website & Portal'}
                   </h3>
@@ -2197,7 +2197,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               type="button"
               id="home-open-website-btn"
               onClick={onOpenWebsite}
-              className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-xs font-black text-slate-950 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 shadow-md transition cursor-pointer active:scale-95 shrink-0"
+              className="w-full @xl:w-auto inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-xs font-black text-slate-950 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 shadow-md transition cursor-pointer active:scale-95 shrink-0"
             >
               <span>{language === 'mizo' ? 'Website Tlawh Rawh' : 'Visit Website'}</span>
               <ArrowRight className="w-3.5 h-3.5" />

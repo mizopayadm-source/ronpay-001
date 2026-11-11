@@ -461,19 +461,19 @@ export const Header: React.FC<HeaderProps> = ({
       <div className="absolute -right-6 -top-6 w-40 h-40 bg-amber-500/10 rounded-full blur-2xl pointer-events-none" />
       <div className="absolute left-1/4 -bottom-6 w-40 h-40 bg-indigo-500/10 rounded-full blur-2xl pointer-events-none" />
 
-      <div className="px-3 sm:px-4 py-2 sm:py-3 flex flex-col gap-2 relative z-10">
+      <div className="px-3 py-2 flex flex-col gap-2 relative z-10">
         {/* Main Row: Brand & Quick Action Controls */}
-        <div className="flex items-center justify-between gap-1.5 sm:gap-2 w-full min-w-0">
+        <div className="flex items-center justify-between gap-1.5 w-full min-w-0">
           {/* Brand Logo & Title */}
           <button 
             type="button"
             onClick={handleBrandLogoClick}
-            className="flex items-center gap-1.5 sm:gap-2 group transition cursor-pointer shrink-0 focus:outline-none text-left"
+            className="flex items-center gap-1.5 group transition cursor-pointer shrink-0 focus:outline-none text-left min-w-0"
             title="RonPay Fintech Platform"
           >
             {/* Logo Squircle */}
             <div className="relative shrink-0">
-              <div className="w-7 h-7 sm:w-9 sm:h-9 rounded-xl p-[1px] bg-gradient-to-b from-[#1e3a6b] to-[#0d1d38] shadow-md group-hover:scale-105 transition-transform duration-200 border border-[#2b5191]/50 overflow-hidden">
+              <div className={`${isDesktopView ? 'w-8 h-8 sm:w-9 sm:h-9' : 'w-7 h-7'} rounded-xl p-[1px] bg-gradient-to-b from-[#1e3a6b] to-[#0d1d38] shadow-md group-hover:scale-105 transition-transform duration-200 border border-[#2b5191]/50 overflow-hidden`}>
                 <img 
                   src="/ronpay-logo.png" 
                   alt="RonPay Logo" 
@@ -481,16 +481,16 @@ export const Header: React.FC<HeaderProps> = ({
                   referrerPolicy="no-referrer"
                 />
               </div>
-              <span className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full ring-2 ring-slate-950 shadow-xs ${isOnline ? 'bg-emerald-500' : 'bg-amber-400 animate-ping'}`} />
+              <span className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full ring-2 ring-slate-950 shadow-xs ${isOnline ? 'bg-emerald-500' : 'bg-amber-400 animate-ping'}`} />
             </div>
 
             {/* Brand Name & FINTECH Badge */}
             <div className="shrink-0 flex flex-col justify-center">
               <div className="flex items-center gap-1 leading-tight">
-                <span className="font-black text-sm sm:text-lg tracking-tight text-white font-sans whitespace-nowrap">
+                <span className={`font-black ${isDesktopView ? 'text-base sm:text-lg' : 'text-sm'} tracking-tight text-white font-sans whitespace-nowrap`}>
                   Ron<span className="text-[#f97316]">Pay</span>
                 </span>
-                <span className="hidden sm:inline-flex bg-orange-500/15 text-orange-300 text-[8px] font-black px-1.5 py-0.5 rounded-full border border-orange-500/30 tracking-wider uppercase items-center gap-0.5 shrink-0 whitespace-nowrap">
+                <span className={`${isDesktopView ? 'hidden sm:inline-flex' : 'hidden'} bg-orange-500/15 text-orange-300 text-[8px] font-black px-1.5 py-0.5 rounded-full border border-orange-500/30 tracking-wider uppercase items-center gap-0.5 shrink-0 whitespace-nowrap`}>
                   FINTECH V1.0
                 </span>
                 {!isOnline && (
@@ -503,9 +503,9 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
 
           {/* Right Action Controls */}
-          <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+          <div className="flex items-center gap-1 shrink-0">
             {/* Language Switcher (MZ / EN) */}
-            <div className="flex items-center bg-slate-900 border border-slate-800 rounded-lg p-0.5 text-[8.5px] sm:text-[9.5px] font-black shadow-inner">
+            <div className="flex items-center bg-slate-900 border border-slate-800 rounded-lg p-0.5 text-[8.5px] font-black shadow-inner shrink-0">
               <button
                 type="button"
                 onClick={() => onToggleLanguage('mizo')}
@@ -532,17 +532,17 @@ export const Header: React.FC<HeaderProps> = ({
               </button>
             </div>
 
-            {/* Switch to Marketing Website Button (Globe Icon) - Visible on mobile and desktop */}
+            {/* Switch to Marketing Website Button (Globe Icon) */}
             {onSwitchToWebsite && (
               <button
                 type="button"
                 id="header-switch-to-website-btn"
                 onClick={onSwitchToWebsite}
                 title="Go to RonPay Website (www.ronpay.app)"
-                className="h-7 sm:h-8 px-1.5 sm:px-2 bg-slate-900 border border-slate-800 hover:border-indigo-500/60 text-indigo-300 hover:text-white rounded-lg flex items-center justify-center gap-1 text-[10px] font-bold transition cursor-pointer active:scale-95 shrink-0 shadow-xs"
+                className={`${isDesktopView ? 'h-8 px-2.5' : 'w-7 h-7 px-0'} bg-slate-900 border border-slate-800 hover:border-indigo-500/60 text-indigo-300 hover:text-white rounded-lg flex items-center justify-center gap-1 text-[10px] font-bold transition cursor-pointer active:scale-95 shrink-0 shadow-xs`}
               >
-                <Globe className="w-3.5 h-3.5 text-amber-300" />
-                <span className="hidden md:inline">Website</span>
+                <Globe className="w-3.5 h-3.5 text-amber-300 shrink-0" />
+                <span className={isDesktopView ? 'hidden md:inline' : 'hidden'}>Website</span>
               </button>
             )}
 
@@ -551,7 +551,7 @@ export const Header: React.FC<HeaderProps> = ({
               type="button"
               onClick={onToggleDesktopView}
               title={isDesktopView ? "Switch to Mobile View" : "Switch to Desktop View"}
-              className="hidden sm:flex w-8 h-8 rounded-lg bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-amber-300 items-center justify-center transition cursor-pointer active:scale-95 shrink-0 shadow-xs"
+              className={`hidden sm:flex ${isDesktopView ? 'w-8 h-8' : 'w-7 h-7'} rounded-lg bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-amber-300 items-center justify-center transition cursor-pointer active:scale-95 shrink-0 shadow-xs`}
             >
               {isDesktopView ? <Smartphone className="w-3.5 h-3.5 text-amber-300" /> : <Monitor className="w-3.5 h-3.5 text-indigo-300" />}
             </button>
@@ -561,7 +561,7 @@ export const Header: React.FC<HeaderProps> = ({
               type="button"
               onClick={onOpenNotifications}
               title="Notifications"
-              className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-white flex items-center justify-center transition relative cursor-pointer active:scale-95 shrink-0 shadow-xs"
+              className={`${isDesktopView ? 'w-8 h-8' : 'w-7 h-7'} rounded-lg bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-white flex items-center justify-center transition relative cursor-pointer active:scale-95 shrink-0 shadow-xs`}
             >
               <Bell className="w-3.5 h-3.5" />
               {notificationCount > 0 && (
@@ -576,10 +576,10 @@ export const Header: React.FC<HeaderProps> = ({
                 id="header-auditor-portal-btn"
                 onClick={onOpenAuditorPortal}
                 title="Online Sum Endiktu (Auditor Portal)"
-                className="w-7 h-7 sm:w-auto sm:h-8 px-0 sm:px-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 rounded-lg flex items-center justify-center gap-1 font-black text-[10px] transition shadow-xs cursor-pointer active:scale-95 border border-amber-300 shrink-0"
+                className={`${isDesktopView ? 'h-8 px-2.5' : 'w-7 h-7 px-0'} bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 rounded-lg flex items-center justify-center gap-1 font-black text-[10px] transition shadow-xs cursor-pointer active:scale-95 border border-amber-300 shrink-0`}
               >
-                <ShieldCheck className="w-3.5 h-3.5 text-slate-950 animate-pulse" />
-                <span className="tracking-tight font-black hidden sm:inline">Auditor Portal</span>
+                <ShieldCheck className="w-3.5 h-3.5 text-slate-950 animate-pulse shrink-0" />
+                <span className={`tracking-tight font-black ${isDesktopView ? 'hidden sm:inline' : 'hidden'}`}>Auditor Portal</span>
               </button>
             )}
 
@@ -590,10 +590,10 @@ export const Header: React.FC<HeaderProps> = ({
                 id="header-ai-hriatpui-btn"
                 onClick={onOpenAIHriatpui}
                 title="AI Hriatpui (Recommendation & Verification Assistant)"
-                className="w-7 h-7 sm:w-auto sm:h-8 px-0 sm:px-2.5 bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-700 hover:from-indigo-500 hover:to-purple-500 text-white rounded-lg flex items-center justify-center gap-1 font-black text-[10px] transition shadow-xs cursor-pointer active:scale-95 border border-indigo-400/50 shrink-0"
+                className={`${isDesktopView ? 'h-8 px-2.5' : 'w-7 h-7 px-0'} bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-700 hover:from-indigo-500 hover:to-purple-500 text-white rounded-lg flex items-center justify-center gap-1 font-black text-[10px] transition shadow-xs cursor-pointer active:scale-95 border border-indigo-400/50 shrink-0`}
               >
-                <Sparkles className="w-3.5 h-3.5 text-amber-300 animate-pulse" />
-                <span className="tracking-tight font-black hidden sm:inline">AI Hriatpui</span>
+                <Sparkles className="w-3.5 h-3.5 text-amber-300 animate-pulse shrink-0" />
+                <span className={`tracking-tight font-black ${isDesktopView ? 'hidden sm:inline' : 'hidden'}`}>AI Hriatpui</span>
               </button>
             )}
 
@@ -602,10 +602,10 @@ export const Header: React.FC<HeaderProps> = ({
               type="button"
               onClick={onOpenScanner}
               title="Scan QR Code"
-              className="w-7 h-7 sm:w-auto sm:h-8 px-0 sm:px-2.5 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 rounded-lg flex items-center justify-center gap-1 font-black text-[10px] transition shadow-xs cursor-pointer active:scale-95 border border-amber-300 shrink-0"
+              className={`${isDesktopView ? 'h-8 px-2.5' : 'w-7 h-7 px-0'} bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 rounded-lg flex items-center justify-center gap-1 font-black text-[10px] transition shadow-xs cursor-pointer active:scale-95 border border-amber-300 shrink-0`}
             >
-              <QrCode className="w-3.5 h-3.5" />
-              <span className="tracking-tight font-black hidden sm:inline">SCAN</span>
+              <QrCode className="w-3.5 h-3.5 shrink-0" />
+              <span className={`tracking-tight font-black ${isDesktopView ? 'hidden sm:inline' : 'hidden'}`}>SCAN</span>
             </button>
 
             {/* Smart Login & Account Switcher Button */}
@@ -624,7 +624,7 @@ export const Header: React.FC<HeaderProps> = ({
                   id="header-smart-login-btn"
                   onClick={onOpenLogin}
                   title={isLoggedAccount ? `Active: ${creatorProfile?.name} (${creatorProfile?.designation || creatorProfile?.role})` : "Creator, Member & Auditor Login"}
-                  className={`w-7 h-7 sm:w-auto sm:h-8 px-0 sm:px-2.5 rounded-lg flex items-center justify-center gap-1 font-black text-[10px] transition shadow-xs cursor-pointer active:scale-95 shrink-0 ${
+                  className={`${isDesktopView ? 'h-8 px-2.5' : 'h-7 px-2'} rounded-lg flex items-center justify-center gap-1 font-black text-[10px] transition shadow-xs cursor-pointer active:scale-95 shrink-0 ${
                     isLoggedAccount
                       ? 'bg-emerald-600 hover:bg-emerald-500 text-white border border-emerald-400/60 shadow-emerald-900/30'
                       : 'bg-indigo-600 hover:bg-indigo-500 text-white border border-indigo-400/50 shadow-indigo-900/30'
@@ -632,15 +632,15 @@ export const Header: React.FC<HeaderProps> = ({
                 >
                   {isLoggedAccount ? (
                     <>
-                      <User className="w-3.5 h-3.5 text-emerald-200" />
-                      <span className="tracking-tight font-black hidden sm:inline truncate max-w-[85px]">
+                      <User className="w-3.5 h-3.5 text-emerald-200 shrink-0" />
+                      <span className={`tracking-tight font-black truncate ${isDesktopView ? 'max-w-[90px]' : 'max-w-[52px]'}`}>
                         {creatorProfile?.name ? creatorProfile.name.split(' ')[0] : 'Account'}
                       </span>
                     </>
                   ) : (
                     <>
-                      <LogIn className="w-3.5 h-3.5 text-amber-300" />
-                      <span className="tracking-tight font-black hidden sm:inline">Login</span>
+                      <LogIn className="w-3.5 h-3.5 text-amber-300 shrink-0" />
+                      <span className="tracking-tight font-black">Login</span>
                     </>
                   )}
                 </button>
@@ -650,11 +650,11 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
 
         {/* Sub-Row: Location Auto GPS Bar & Sulhnu Quick Link */}
-        <div className="w-full flex items-center justify-between bg-slate-900/80 backdrop-blur-xs border border-slate-800/80 rounded-xl px-2.5 py-1 gap-2 shadow-inner">
+        <div className="w-full flex items-center justify-between bg-slate-900/80 backdrop-blur-xs border border-slate-800/80 rounded-xl px-2.5 py-1 gap-1.5 shadow-inner min-w-0">
           {/* Live Auto GPS (Click to change/cycle) */}
           <div 
             onClick={handleLocationClick}
-            className="flex items-center gap-1.5 min-w-0 text-slate-300 hover:text-amber-300 transition cursor-pointer group text-left flex-1"
+            className="flex items-center gap-1.5 min-w-0 text-slate-300 hover:text-amber-300 transition cursor-pointer group text-left flex-1 overflow-hidden"
             title="Location (Click to change or run GPS)"
           >
             {isLocating ? (
@@ -667,7 +667,7 @@ export const Header: React.FC<HeaderProps> = ({
                 )}
               </span>
             )}
-            <span className="truncate text-[11px] font-bold text-slate-200 max-w-[170px] sm:max-w-[240px]">
+            <span className="truncate text-[10.5px] font-bold text-slate-200 min-w-0">
               {userLocation}
             </span>
             {isGpsActive ? (
@@ -693,7 +693,7 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
 
           {/* Quick Actions: Sulhnu (History) & Report (Print / Statement) */}
-          <div className="flex items-center gap-1.5 shrink-0">
+          <div className="flex items-center gap-1 shrink-0">
             <button
               id="header-sulhnu-btn"
               type="button"
@@ -703,12 +703,11 @@ export const Header: React.FC<HeaderProps> = ({
                 onOpenHistory();
               }}
               title={language === 'mizo' ? 'Pekna Sulhnu (History)' : 'Transaction History'}
-              className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 hover:text-amber-300 text-slate-300 text-[10px] font-bold border border-slate-700/80 transition cursor-pointer active:scale-95 shrink-0"
+              className="flex items-center gap-1 px-1.5 py-0.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 hover:text-amber-300 text-slate-300 text-[9.5px] font-bold border border-slate-700/80 transition cursor-pointer active:scale-95 shrink-0"
             >
-              <History className="w-3 h-3 text-amber-400" />
+              <History className="w-2.5 h-2.5 text-amber-400 shrink-0" />
               <span>Sulhnu</span>
             </button>
-
 
             <button
               id="header-reports-btn"
@@ -719,9 +718,9 @@ export const Header: React.FC<HeaderProps> = ({
                 onOpenReports();
               }}
               title={language === 'mizo' ? 'Reports & Print Statements' : 'Reports & Print Statements'}
-              className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 hover:text-emerald-300 text-slate-300 text-[10px] font-bold border border-slate-700/80 transition cursor-pointer active:scale-95 shrink-0"
+              className="flex items-center gap-1 px-1.5 py-0.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 hover:text-emerald-300 text-slate-300 text-[9.5px] font-bold border border-slate-700/80 transition cursor-pointer active:scale-95 shrink-0"
             >
-              <FileDown className="w-3 h-3 text-emerald-400" />
+              <FileDown className="w-2.5 h-2.5 text-emerald-400 shrink-0" />
               <span>Report</span>
             </button>
 
@@ -735,9 +734,9 @@ export const Header: React.FC<HeaderProps> = ({
                   onOpenBackupSync();
                 }}
                 title="Backup & Sync Settings (Local HDD, Email, WhatsApp)"
-                className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 hover:text-amber-300 text-slate-300 text-[10px] font-bold border border-slate-700/80 transition cursor-pointer active:scale-95 shrink-0"
+                className="flex items-center gap-1 px-1.5 py-0.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 hover:text-amber-300 text-slate-300 text-[9.5px] font-bold border border-slate-700/80 transition cursor-pointer active:scale-95 shrink-0"
               >
-                <HardDrive className="w-3 h-3 text-amber-400" />
+                <HardDrive className="w-2.5 h-2.5 text-amber-400 shrink-0" />
                 <span>Backup</span>
               </button>
             )}

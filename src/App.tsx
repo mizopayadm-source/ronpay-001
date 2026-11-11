@@ -1740,7 +1740,7 @@ export default function App() {
       )}
 
       {/* Container with responsive boundary */}
-      <div className={`w-full ${isDesktopView ? 'max-w-6xl' : 'max-w-md'} bg-white min-h-screen flex flex-col shadow-xl transition-all duration-300 relative overflow-x-hidden`}>
+      <div className={`@container w-full ${isDesktopView ? 'max-w-6xl' : 'max-w-md'} bg-white min-h-screen flex flex-col shadow-xl transition-all duration-300 relative overflow-x-hidden`}>
         {/* Offline & Connection Status Banner */}
         <OfflineStatusBanner onRefreshCache={reloadLocalData} />
 
