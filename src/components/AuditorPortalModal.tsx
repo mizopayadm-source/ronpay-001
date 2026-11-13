@@ -43,6 +43,7 @@ import {
   isCampaignCreator,
   saveCampaign,
   markRecordAuditVerification,
+  markBatchRecordsAuditVerification,
   unlockSingleRecord,
   formatRemainingAuditTimeMizo,
   getMembers,
@@ -207,17 +208,20 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
   const activeGrant = useMemo(() => {
     if (accessInfo?.grant) return accessInfo.grant;
     const phone = creatorProfile?.phone || creatorProfile?.phoneNumber || '';
-    if (!phone || !campaign?.id) return null;
-    const grants = getActiveAuditorGrantsForUser(phone);
-    return grants.find(g => String(g.campaignId || g.campaign_id || '').trim() === String(campaign.id).trim()) || null;
-  }, [accessInfo, creatorProfile, campaign]);
+    if (phone && campaign?.id) {
+      const grants = getActiveAuditorGrantsForUser(phone);
+      const matched = grants.find(g => String(g.campaignId || g.campaign_id || '').trim() === String(campaign.id).trim());
+      if (matched) return matched;
+    }
+    return null;
+  }, [accessInfo, creatorProfile, campaign, tick]);
 
   // All active appointed auditors for this campaign (supports Optional 1 or 2+ Co-Auditors)
   const appointedAuditors = useMemo(() => {
     if (!campaign?.id) return [];
     const campId = String(campaign.id).toLowerCase().trim();
     const allGrants = getStoredAuditorGrants(campId).filter(g => g && g.status === 'active');
-    const map = new Map<string, { grantId: string; auditorKey: string; auditorName: string; auditorPhone: string; auditPeriod?: string }>();
+    const map = new Map<string, { grantId: string; auditorKey: string; auditorName: string; auditorPhone: string; auditPeriod?: string; auditFromDate?: string; auditToDate?: string }>();
     allGrants.forEach(g => {
       const ph = g.auditorPhone || g.auditor_phone || '';
       const nm = g.auditorName || g.auditor_name || 'Auditor';
@@ -228,12 +232,30 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
           auditorKey: key,
           auditorName: nm,
           auditorPhone: ph,
-          auditPeriod: g.auditPeriod || g.audit_period
+          auditPeriod: g.auditPeriod || g.audit_period,
+          auditFromDate: g.auditFromDate || g.audit_from_date,
+          auditToDate: g.auditToDate || g.audit_to_date
         });
       }
     });
     return Array.from(map.values());
   }, [campaign?.id, tick]);
+
+  // Look up Creator-appointed audit dates from the user's grant OR from any active appointed auditor grant on this campaign
+  const campaignAppointedGrant = useMemo(() => {
+    if (activeGrant && (activeGrant.auditFromDate || activeGrant.audit_from_date || activeGrant.auditToDate || activeGrant.audit_to_date || activeGrant.auditPeriod || activeGrant.audit_period)) {
+      return activeGrant;
+    }
+    if (!campaign?.id) return activeGrant;
+    const campId = String(campaign.id).toLowerCase().trim();
+    const allGrants = getStoredAuditorGrants(campId).filter(g => g && g.status === 'active');
+    return (
+      allGrants.find(g => g.auditFromDate || g.audit_from_date || g.auditToDate || g.audit_to_date || (g.auditPeriod && g.auditPeriod !== 'Hun Chhung Zawng (All Records)')) ||
+      allGrants[0] ||
+      activeGrant ||
+      null
+    );
+  }, [activeGrant, campaign?.id, tick]);
 
   const isDualAuditMode = useMemo(() => {
     const freshCamp = campaign?.id
@@ -242,14 +264,45 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
     return appointedAuditors.length >= 2 || Boolean(freshCamp?.requireDualAuditorConsensus);
   }, [appointedAuditors, campaign, tick]);
 
-  const appointedFromDate = activeGrant?.auditFromDate || '';
-  const appointedToDate = activeGrant?.auditToDate || '';
-  const appointedPeriodLabel = activeGrant?.auditPeriod || (appointedFromDate && appointedToDate ? `${formatDateDDMMYYYY(appointedFromDate)} – ${formatDateDDMMYYYY(appointedToDate)}` : '');
+  const freshCampMeta = useMemo(() => {
+    if (!campaign?.id) return (campaign as any)?.metadata || {};
+    const found = getStoredCampaigns().find(c => String(c.id).toLowerCase().trim() === String(campaign.id).toLowerCase().trim());
+    return (found as any)?.metadata || (campaign as any)?.metadata || {};
+  }, [campaign, tick]);
+
+  const appointedFromDate =
+    campaignAppointedGrant?.auditFromDate ||
+    campaignAppointedGrant?.audit_from_date ||
+    freshCampMeta?.appointedAuditFromDate ||
+    '';
+  const appointedToDate =
+    campaignAppointedGrant?.auditToDate ||
+    campaignAppointedGrant?.audit_to_date ||
+    freshCampMeta?.appointedAuditToDate ||
+    '';
+  const rawAppointedPeriod =
+    campaignAppointedGrant?.auditPeriod ||
+    campaignAppointedGrant?.audit_period ||
+    freshCampMeta?.appointedAuditPeriod ||
+    '';
+  const appointedPeriodLabel =
+    rawAppointedPeriod ||
+    (appointedFromDate && appointedToDate
+      ? `${formatDateDDMMYYYY(appointedFromDate)} – ${formatDateDDMMYYYY(appointedToDate)}`
+      : '');
+
+  // Whenever Creator has set a Custom Date Range / Specific Period for the appointed Auditor(s), lock the date range so Auditors cannot alter it
+  const hasCreatorAppointedDates = useMemo(() => {
+    return Boolean(
+      appointedFromDate ||
+        appointedToDate ||
+        (appointedPeriodLabel && appointedPeriodLabel !== 'Hun Chhung Zawng (All Records)')
+    );
+  }, [appointedFromDate, appointedToDate, appointedPeriodLabel]);
 
   const isRestrictedAuditor = useMemo(() => {
-    if (isAdmin) return false;
-    return Boolean(appointedFromDate || appointedToDate || (activeGrant?.auditPeriod && activeGrant.auditPeriod !== 'Hun Chhung Zawng (All Records)'));
-  }, [isAdmin, appointedFromDate, appointedToDate, activeGrant]);
+    return hasCreatorAppointedDates;
+  }, [hasCreatorAppointedDates]);
 
   // Sign & Lock inputs
   const [auditPeriod, setAuditPeriod] = useState<string>(() => {
@@ -316,7 +369,7 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
 
   useEffect(() => {
     if (isRestrictedAuditor) {
-      if (appointedFromDate && appointedToDate) {
+      if (appointedFromDate || appointedToDate) {
         setCbPreset('custom');
         setCbFromDate(appointedFromDate);
         setCbToDate(appointedToDate);
@@ -388,18 +441,17 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
     const targetObj: any = targetType === 'transaction'
       ? getStoredTransactions().find(t => String(t.id).toLowerCase().trim() === cleanTargetId)
       : getStoredExpenses().find(e => String(e.id).toLowerCase().trim() === cleanTargetId);
-    const verMap: Record<string, any> = {
-      ...(targetObj?.metadata?.auditor_verifications || {}),
-      ...(targetObj?.auditor_verifications || {})
-    };
-    const myEntry = verMap[currentAuditorKey];
 
-    const isAlreadyVerified = isDualAuditMode && Object.keys(verMap).length > 0
-      ? myEntry?.mark === 'verified'
-      : (currentMark === 'verified' || itemAuditCategory === 'audited' || Boolean(isCurrentlyLocked));
-    const isAlreadyFlagged = isDualAuditMode && Object.keys(verMap).length > 0
-      ? myEntry?.mark === 'flagged'
-      : (currentMark === 'flagged' || itemAuditCategory === 'flagged');
+    const isAlreadyVerified =
+      currentMark === 'verified' ||
+      itemAuditCategory === 'audited' ||
+      Boolean(isCurrentlyLocked) ||
+      targetObj?.audit_mark === 'verified' ||
+      Boolean(targetObj?.is_locked);
+    const isAlreadyFlagged =
+      currentMark === 'flagged' ||
+      itemAuditCategory === 'flagged' ||
+      targetObj?.audit_mark === 'flagged';
 
     let nextMark: 'verified' | 'flagged' | undefined = desiredMark;
     if (desiredMark === 'verified' && isAlreadyVerified && queryText === undefined) {
@@ -450,25 +502,20 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
 
   const handleVerifyAllRecords = (targetType: 'transaction' | 'expense') => {
     if (!canAudit) return;
-    const records = targetType === 'transaction' ? allTransactions : allExpenses;
-    let count = 0;
+    const records = targetType === 'transaction' ? filteredTransactions : filteredExpenses;
     const effPhone = auditorPhone || creatorProfile?.phone || '';
-    records.forEach(r => {
-      const verMap = { ...(r.metadata?.auditor_verifications || {}), ...(r.auditor_verifications || {}) };
-      const myMark = verMap[currentAuditorKey]?.mark;
-      if (isDualAuditMode ? myMark !== 'verified' : r.audit_mark !== 'verified') {
-        markRecordAuditVerification(
-          r.id,
-          targetType,
-          'verified',
-          auditorName || creatorProfile?.name || 'Auditor',
-          '',
-          true,
-          effPhone
-        );
-        count++;
-      }
-    });
+    const idsToVerify = records
+      .filter(r => r.audit_mark !== 'verified' || !r.is_locked)
+      .map(r => r.id);
+    const count = markBatchRecordsAuditVerification(
+      idsToVerify,
+      targetType,
+      'verified',
+      auditorName || creatorProfile?.name || 'Auditor',
+      '',
+      true,
+      effPhone
+    );
     if (count > 0) {
       setTick(t => t + 1);
       setLockToast(`✅ Record ${count} chu '${auditorName}' hmingin '✓ Dik (Verified)' tiin chhinchhiah & Server-ah sync nghal a ni e.`);
@@ -1381,47 +1428,24 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
   // Verify all unaudited Receipts & Payments within the currently selected Cash Book date range
   const handleVerifySelectedRange = () => {
     if (!canAudit) return;
-    let verifiedCnt = 0;
     const effPhone = auditorPhone || creatorProfile?.phone || '';
-    cashBookAuditData.inRangeTxs.forEach(t => {
-      const verMap = { ...(t.metadata?.auditor_verifications || {}), ...(t.auditor_verifications || {}) };
-      const myMark = verMap[currentAuditorKey]?.mark;
-      if (isDualAuditMode ? myMark !== 'verified' : t.audit_mark !== 'verified') {
-        markRecordAuditVerification(
-          t.id,
-          'transaction',
-          'verified',
-          auditorName || creatorProfile?.name || 'Auditor',
-          '',
-          true,
-          effPhone
-        );
-        verifiedCnt++;
-      }
-    });
-    cashBookAuditData.inRangeExps.forEach(e => {
-      const verMap = { ...(e.metadata?.auditor_verifications || {}), ...(e.auditor_verifications || {}) };
-      const myMark = verMap[currentAuditorKey]?.mark;
-      if (isDualAuditMode ? myMark !== 'verified' : e.audit_mark !== 'verified') {
-        markRecordAuditVerification(
-          e.id,
-          'expense',
-          'verified',
-          auditorName || creatorProfile?.name || 'Auditor',
-          '',
-          true,
-          effPhone
-        );
-        verifiedCnt++;
-      }
-    });
+    const effName = auditorName || creatorProfile?.name || 'Auditor';
+    const txIds = cashBookAuditData.inRangeTxs
+      .filter(t => t.audit_mark !== 'verified')
+      .map(t => t.id);
+    const expIds = cashBookAuditData.inRangeExps
+      .filter(e => e.audit_mark !== 'verified')
+      .map(e => e.id);
+    const txCnt = markBatchRecordsAuditVerification(txIds, 'transaction', 'verified', effName, '', true, effPhone);
+    const expCnt = markBatchRecordsAuditVerification(expIds, 'expense', 'verified', effName, '', true, effPhone);
+    const verifiedCnt = txCnt + expCnt;
     if (verifiedCnt > 0) {
       setTick(t => t + 1);
-      setLockToast(`✅ Selected Range (${cashBookAuditData.rangeLabel}) chhunga record ${verifiedCnt} chu '${auditorName}' hmingin '✓ Audited' tiin chhinchhiah & Server-ah sync nghal a ni e!`);
+      setLockToast(`✅ Selected Range (${cashBookAuditData.rangeLabel}) chhunga record ${verifiedCnt} chu '${effName}' hmingin '✓ Audited' tiin chhinchhiah & Server-ah sync nghal a ni e!`);
       if (onRecordsUpdated) onRecordsUpdated();
       setTimeout(() => setLockToast(null), 4000);
     } else {
-      setLockToast(`ℹ️ He range chhunga record zawng zawng hi i hmingin Audited vek a ni tawh e.`);
+      setLockToast(`ℹ️ He range chhunga record zawng zawng hi Audited vek a ni tawh e.`);
       setTimeout(() => setLockToast(null), 3000);
     }
   };
@@ -1444,12 +1468,24 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
     // Ensure all items in range are marked verified by the current auditor first
     const effPhone = auditorPhone.trim() || creatorProfile?.phone || '';
     const effName = auditorName.trim() || creatorProfile?.name || 'Auditor';
-    cashBookAuditData.inRangeTxs.forEach(t => {
-      markRecordAuditVerification(t.id, 'transaction', 'verified', effName, '', true, effPhone);
-    });
-    cashBookAuditData.inRangeExps.forEach(e => {
-      markRecordAuditVerification(e.id, 'expense', 'verified', effName, '', true, effPhone);
-    });
+    markBatchRecordsAuditVerification(
+      cashBookAuditData.inRangeTxs.map(t => t.id),
+      'transaction',
+      'verified',
+      effName,
+      '',
+      true,
+      effPhone
+    );
+    markBatchRecordsAuditVerification(
+      cashBookAuditData.inRangeExps.map(e => e.id),
+      'expense',
+      'verified',
+      effName,
+      '',
+      true,
+      effPhone
+    );
 
     const result = lockCampaignAuditPeriod(
       campaign.id,
@@ -2466,130 +2502,162 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                   </div>
                 </div>
 
-                {/* Date Range Presets + Responsive Dedicated Custom Date Card */}
+                {/* Date Range Presets + Responsive Dedicated Custom Date Card (Locked when Creator appointed a Custom Date Range) */}
                 <div className="pt-2.5 border-t border-slate-200/80 space-y-2">
-                  <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-                    <span className="text-[11px] sm:text-xs font-black text-slate-800 flex items-center gap-1 shrink-0 mr-0.5">
-                      <Calendar className="w-3.5 h-3.5 text-indigo-600" />
-                      <span>Hun:</span>
-                    </span>
-                    {[
-                      { id: 'all', label: 'A Zavai (All)' },
-                      { id: 'this_month', label: 'Kumin Thla' },
-                      { id: 'last_month', label: 'Thla Hmasa' },
-                      { id: 'today', label: 'Vawiin' },
-                      { id: 'custom', label: '📅 Custom Range' }
-                    ].map(p => (
-                      <button
-                        key={p.id}
-                        type="button"
-                        onClick={() => setCbPreset(p.id as any)}
-                        className={`px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-xl text-[10.5px] sm:text-[11px] font-bold border transition cursor-pointer ${
-                          cbPreset === p.id
-                            ? 'bg-indigo-600 text-white border-indigo-600 shadow-2xs font-black'
-                            : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100 hover:border-slate-400'
-                        }`}
-                      >
-                        {p.label}
-                      </button>
-                    ))}
-
-                    {/* Current Range Label Badge */}
-                    <div className="w-full sm:w-auto sm:ml-auto mt-1 sm:mt-0 flex items-center gap-1 text-[10.5px] font-bold text-indigo-800 bg-indigo-50 border border-indigo-200 rounded-lg px-2.5 py-1">
-                      <span className="shrink-0">📍</span>
-                      <span className="truncate">Active: <strong className="font-extrabold">{cashBookAuditData.rangeLabel}</strong></span>
-                    </div>
-                  </div>
-
-                  {/* Dedicated, Full-Width Custom Date Picker Card when 'custom' is active */}
-                  {cbPreset === 'custom' && (
-                    <div className="w-full bg-white border-2 border-indigo-400/90 rounded-2xl p-3 sm:p-3.5 shadow-xs space-y-2.5">
+                  {isRestrictedAuditor ? (
+                    <div className="w-full bg-amber-50/90 border-2 border-amber-300 rounded-2xl p-3 sm:p-3.5 shadow-2xs space-y-2">
                       <div className="flex items-center justify-between gap-2 flex-wrap">
-                        <div className="text-xs font-black text-indigo-950 flex items-center gap-1.5">
-                          <Calendar className="w-4 h-4 text-indigo-600 shrink-0" />
-                          <span>📅 Hun Thlan Bik (Custom Date Range)</span>
+                        <div className="text-xs font-black text-amber-950 flex items-center gap-1.5">
+                          <Lock className="w-4 h-4 text-amber-700 shrink-0" />
+                          <span>🔒 Creator-in Audit Hun Bi A Ruatsa (Auditor tan thlak danglam theih a ni lo)</span>
                         </div>
-                        {(cbFromDate || cbToDate) && (
-                          <button
-                            type="button"
-                            onClick={() => { setCbFromDate(''); setCbToDate(''); }}
-                            className="text-[11px] font-black text-rose-600 hover:text-rose-800 underline cursor-pointer"
-                          >
-                            Clear Dates
-                          </button>
-                        )}
+                        <span className="text-[10.5px] font-black px-2.5 py-0.5 rounded-full bg-amber-200/80 text-amber-950 border border-amber-400">
+                          📍 {cashBookAuditData.rangeLabel}
+                        </span>
                       </div>
-
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                        <div className="bg-slate-50 border border-slate-300 rounded-xl p-2 sm:p-2.5 flex items-center justify-between gap-2">
-                          <label className="text-[11px] font-black text-slate-700 shrink-0 flex items-center gap-1">
-                            <span>Atanga (From):</span>
-                          </label>
-                          <input
-                            type="date"
-                            value={cbFromDate}
-                            onChange={e => setCbFromDate(e.target.value)}
-                            className="w-full text-xs font-bold text-slate-900 bg-white border border-slate-300 rounded-lg px-2 py-1.5 outline-none focus:ring-2 focus:ring-indigo-500 shadow-2xs"
-                          />
+                        <div className="bg-white/90 border border-amber-300 rounded-xl p-2 flex items-center justify-between gap-2">
+                          <span className="text-[11px] font-black text-slate-600 shrink-0">Atanga (From):</span>
+                          <span className="text-xs font-black text-slate-900 font-mono bg-slate-100 border border-slate-300 rounded-lg px-2.5 py-1 flex items-center gap-1.5">
+                            <Lock className="w-3 h-3 text-amber-700" />
+                            <span>{appointedFromDate ? formatDateDDMMYYYY(appointedFromDate) : 'A Tir Aṭangin'}</span>
+                          </span>
                         </div>
-                        <div className="bg-slate-50 border border-slate-300 rounded-xl p-2 sm:p-2.5 flex items-center justify-between gap-2">
-                          <label className="text-[11px] font-black text-slate-700 shrink-0 flex items-center gap-1">
-                            <span>Thleng (To):</span>
-                          </label>
-                          <input
-                            type="date"
-                            value={cbToDate}
-                            onChange={e => setCbToDate(e.target.value)}
-                            className="w-full text-xs font-bold text-slate-900 bg-white border border-slate-300 rounded-lg px-2 py-1.5 outline-none focus:ring-2 focus:ring-indigo-500 shadow-2xs"
-                          />
+                        <div className="bg-white/90 border border-amber-300 rounded-xl p-2 flex items-center justify-between gap-2">
+                          <span className="text-[11px] font-black text-slate-600 shrink-0">Thleng (To):</span>
+                          <span className="text-xs font-black text-slate-900 font-mono bg-slate-100 border border-slate-300 rounded-lg px-2.5 py-1 flex items-center gap-1.5">
+                            <Lock className="w-3 h-3 text-amber-700" />
+                            <span>{appointedToDate ? formatDateDDMMYYYY(appointedToDate) : 'Vawiin Thleng'}</span>
+                          </span>
                         </div>
-                      </div>
-
-                      {/* Quick Date Presets for Mobile */}
-                      <div className="flex items-center gap-1.5 flex-wrap pt-1 text-[10.5px]">
-                        <span className="font-extrabold text-slate-500">Awlsam:</span>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const now = new Date();
-                            const y = now.getFullYear();
-                            setCbFromDate(`${y}-01-01`);
-                            setCbToDate(`${y}-12-31`);
-                          }}
-                          className="px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold border border-slate-200 cursor-pointer"
-                        >
-                          Kumin Pum ({new Date().getFullYear()})
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const now = new Date();
-                            const past = new Date();
-                            past.setDate(past.getDate() - 30);
-                            const toIso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-                            setCbFromDate(toIso(past));
-                            setCbToDate(toIso(now));
-                          }}
-                          className="px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold border border-slate-200 cursor-pointer"
-                        >
-                          Ni 30 Kalta
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const now = new Date();
-                            const past = new Date();
-                            past.setDate(past.getDate() - 90);
-                            const toIso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-                            setCbFromDate(toIso(past));
-                            setCbToDate(toIso(now));
-                          }}
-                          className="px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold border border-slate-200 cursor-pointer"
-                        >
-                          Ni 90 Kalta
-                        </button>
                       </div>
                     </div>
+                  ) : (
+                    <>
+                      <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                        <span className="text-[11px] sm:text-xs font-black text-slate-800 flex items-center gap-1 shrink-0 mr-0.5">
+                          <Calendar className="w-3.5 h-3.5 text-indigo-600" />
+                          <span>Hun:</span>
+                        </span>
+                        {[
+                          { id: 'all', label: 'A Zavai (All)' },
+                          { id: 'this_month', label: 'Kumin Thla' },
+                          { id: 'last_month', label: 'Thla Hmasa' },
+                          { id: 'today', label: 'Vawiin' },
+                          { id: 'custom', label: '📅 Custom Range' }
+                        ].map(p => (
+                          <button
+                            key={p.id}
+                            type="button"
+                            onClick={() => setCbPreset(p.id as any)}
+                            className={`px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-xl text-[10.5px] sm:text-[11px] font-bold border transition cursor-pointer ${
+                              cbPreset === p.id
+                                ? 'bg-indigo-600 text-white border-indigo-600 shadow-2xs font-black'
+                                : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100 hover:border-slate-400'
+                            }`}
+                          >
+                            {p.label}
+                          </button>
+                        ))}
+
+                        {/* Current Range Label Badge */}
+                        <div className="w-full sm:w-auto sm:ml-auto mt-1 sm:mt-0 flex items-center gap-1 text-[10.5px] font-bold text-indigo-800 bg-indigo-50 border border-indigo-200 rounded-lg px-2.5 py-1">
+                          <span className="shrink-0">📍</span>
+                          <span className="truncate">Active: <strong className="font-extrabold">{cashBookAuditData.rangeLabel}</strong></span>
+                        </div>
+                      </div>
+
+                      {/* Dedicated, Full-Width Custom Date Picker Card when 'custom' is active */}
+                      {cbPreset === 'custom' && (
+                        <div className="w-full bg-white border-2 border-indigo-400/90 rounded-2xl p-3 sm:p-3.5 shadow-xs space-y-2.5">
+                          <div className="flex items-center justify-between gap-2 flex-wrap">
+                            <div className="text-xs font-black text-indigo-950 flex items-center gap-1.5">
+                              <Calendar className="w-4 h-4 text-indigo-600 shrink-0" />
+                              <span>📅 Hun Thlan Bik (Custom Date Range)</span>
+                            </div>
+                            {(cbFromDate || cbToDate) && (
+                              <button
+                                type="button"
+                                onClick={() => { setCbFromDate(''); setCbToDate(''); }}
+                                className="text-[11px] font-black text-rose-600 hover:text-rose-800 underline cursor-pointer"
+                              >
+                                Clear Dates
+                              </button>
+                            )}
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                            <div className="bg-slate-50 border border-slate-300 rounded-xl p-2 sm:p-2.5 flex items-center justify-between gap-2">
+                              <label className="text-[11px] font-black text-slate-700 shrink-0 flex items-center gap-1">
+                                <span>Atanga (From):</span>
+                              </label>
+                              <input
+                                type="date"
+                                value={cbFromDate}
+                                onChange={e => setCbFromDate(e.target.value)}
+                                className="w-full text-xs font-bold text-slate-900 bg-white border border-slate-300 rounded-lg px-2 py-1.5 outline-none focus:ring-2 focus:ring-indigo-500 shadow-2xs"
+                              />
+                            </div>
+                            <div className="bg-slate-50 border border-slate-300 rounded-xl p-2 sm:p-2.5 flex items-center justify-between gap-2">
+                              <label className="text-[11px] font-black text-slate-700 shrink-0 flex items-center gap-1">
+                                <span>Thleng (To):</span>
+                              </label>
+                              <input
+                                type="date"
+                                value={cbToDate}
+                                onChange={e => setCbToDate(e.target.value)}
+                                className="w-full text-xs font-bold text-slate-900 bg-white border border-slate-300 rounded-lg px-2 py-1.5 outline-none focus:ring-2 focus:ring-indigo-500 shadow-2xs"
+                              />
+                            </div>
+                          </div>
+
+                          {/* Quick Date Presets for Mobile */}
+                          <div className="flex items-center gap-1.5 flex-wrap pt-1 text-[10.5px]">
+                            <span className="font-extrabold text-slate-500">Awlsam:</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const now = new Date();
+                                const y = now.getFullYear();
+                                setCbFromDate(`${y}-01-01`);
+                                setCbToDate(`${y}-12-31`);
+                              }}
+                              className="px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold border border-slate-200 cursor-pointer"
+                            >
+                              Kumin Pum ({new Date().getFullYear()})
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const now = new Date();
+                                const past = new Date();
+                                past.setDate(past.getDate() - 30);
+                                const toIso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+                                setCbFromDate(toIso(past));
+                                setCbToDate(toIso(now));
+                              }}
+                              className="px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold border border-slate-200 cursor-pointer"
+                            >
+                              Ni 30 Kalta
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const now = new Date();
+                                const past = new Date();
+                                past.setDate(past.getDate() - 90);
+                                const toIso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+                                setCbFromDate(toIso(past));
+                                setCbToDate(toIso(now));
+                              }}
+                              className="px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold border border-slate-200 cursor-pointer"
+                            >
+                              Ni 90 Kalta
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
 
@@ -3316,7 +3384,7 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                                 <span>{grp.baseHead} — {grp.monthYearLabel}</span>
                                 <span className="text-[10px] text-emerald-300 font-bold">({grp.count} entries)</span>
                               </div>
-                              <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-2 flex-wrap">
                                 {allHeadAudited ? (
                                   <span className="text-[9.5px] font-black px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-200 border border-emerald-400/40">
                                     ✓ AUDITED ({grp.auditedCount}/{grp.count})
@@ -3329,6 +3397,43 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                                 <span className="font-black text-xs sm:text-sm text-emerald-300 tabular-nums">
                                   Total: ₹{grp.totalAmount.toLocaleString('en-IN')}
                                 </span>
+                                {canAudit && (
+                                  grp.unauditedCount > 0 ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const effPhone = auditorPhone || creatorProfile?.phone || '';
+                                        const effName = auditorName || creatorProfile?.name || 'Auditor';
+                                        const ids = grp.items.map(i => i.id);
+                                        markBatchRecordsAuditVerification(ids, 'transaction', 'verified', effName, '', true, effPhone);
+                                        setTick(t => t + 1);
+                                        setLockToast(`✅ '${grp.baseHead} (${grp.monthYearLabel})' chhunga receipt ${ids.length} chu '✓ Audited' tiin chhinchhiah a ni e!`);
+                                        if (onRecordsUpdated) onRecordsUpdated();
+                                        setTimeout(() => setLockToast(null), 3000);
+                                      }}
+                                      className="px-2 py-0.5 rounded-lg text-[10px] font-black bg-emerald-500 hover:bg-emerald-400 text-slate-950 cursor-pointer transition"
+                                    >
+                                      ✓ Audit Head
+                                    </button>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const effPhone = auditorPhone || creatorProfile?.phone || '';
+                                        const effName = auditorName || creatorProfile?.name || 'Auditor';
+                                        const ids = grp.items.map(i => i.id);
+                                        markBatchRecordsAuditVerification(ids, 'transaction', undefined, effName, '', true, effPhone);
+                                        setTick(t => t + 1);
+                                        setLockToast(`↩️ '${grp.baseHead} (${grp.monthYearLabel})' Head audit-na sut (Undo) a ni e.`);
+                                        if (onRecordsUpdated) onRecordsUpdated();
+                                        setTimeout(() => setLockToast(null), 3000);
+                                      }}
+                                      className="px-2 py-0.5 rounded-lg text-[10px] font-black bg-amber-400/20 hover:bg-amber-400/40 text-amber-200 border border-amber-400/50 cursor-pointer transition"
+                                    >
+                                      ✓ Audited (Undo)
+                                    </button>
+                                  )
+                                )}
                               </div>
                             </div>
                             <div className="overflow-x-auto">
@@ -3370,14 +3475,15 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                                         <td className="py-1.5 px-2.5 text-center whitespace-nowrap">
                                           <button
                                             type="button"
-                                            onClick={() => handleMarkItem('transaction', item.id, item.audit_mark, 'verified', undefined, item.is_locked)}
+                                            onClick={() => handleMarkItem('transaction', item.id, item.audit_mark, 'verified', undefined, item.is_locked, item.auditCategory, item.isoDate)}
+                                            title={item.auditCategory === 'audited' ? "Audit tawh a ni (Click la sut rawh / Undo)" : "Audit / Dik tiin chhinchhiah rawh"}
                                             className={`px-1.5 py-0.5 rounded text-[9.5px] font-black border transition cursor-pointer ${
                                               item.auditCategory === 'audited'
-                                                ? 'bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700'
+                                                ? 'bg-emerald-600 text-white border-emerald-600 hover:bg-amber-600 hover:border-amber-600'
                                                 : 'bg-white text-emerald-700 border-emerald-300 hover:bg-emerald-50'
                                             }`}
                                           >
-                                            ✓ Dik
+                                            {item.auditCategory === 'audited' ? '✓ Dik (Undo)' : '✓ Dik'}
                                           </button>
                                         </td>
                                       )}
@@ -3467,15 +3573,15 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                                 <div className="inline-flex items-center gap-1">
                                   <button
                                     type="button"
-                                    onClick={() => handleMarkItem(item.recordType, item.id, item.audit_mark, 'verified', undefined, item.is_locked)}
-                                    title={item.auditCategory === 'audited' ? "Audit tawh a ni (Click la sut rawh / uncheck)" : "Audit / Dik tiin chhinchhiah rawh"}
+                                    onClick={() => handleMarkItem(item.recordType, item.id, item.audit_mark, 'verified', undefined, item.is_locked, item.auditCategory, item.isoDate)}
+                                    title={item.auditCategory === 'audited' ? "Audit tawh a ni (Click la sut rawh / Undo)" : "Audit / Dik tiin chhinchhiah rawh"}
                                     className={`px-2 py-1 rounded-lg text-[10px] font-black border transition cursor-pointer ${
                                       item.auditCategory === 'audited'
-                                        ? 'bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700'
+                                        ? 'bg-emerald-600 text-white border-emerald-600 hover:bg-amber-600 hover:border-amber-600'
                                         : 'bg-white text-emerald-700 border-emerald-300 hover:bg-emerald-50'
                                     }`}
                                   >
-                                    ✓ Dik
+                                    {item.auditCategory === 'audited' ? '✓ Dik (Undo)' : '✓ Dik'}
                                   </button>
                                   <button
                                     type="button"
@@ -4334,21 +4440,19 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                                       type="button"
                                       onClick={() => {
                                         const effPhone = auditorPhone || creatorProfile?.phone || '';
-                                        grp.items.forEach(t => {
-                                          if (t.audit_mark !== 'verified') {
-                                            markRecordAuditVerification(
-                                              t.id,
-                                              'transaction',
-                                              'verified',
-                                              auditorName || creatorProfile?.name || 'Auditor',
-                                              '',
-                                              true,
-                                              effPhone
-                                            );
-                                          }
-                                        });
+                                        const effName = auditorName || creatorProfile?.name || 'Auditor';
+                                        const ids = grp.items.map(t => t.id);
+                                        const cnt = markBatchRecordsAuditVerification(
+                                          ids,
+                                          'transaction',
+                                          'verified',
+                                          effName,
+                                          '',
+                                          true,
+                                          effPhone
+                                        );
                                         setTick(t => t + 1);
-                                        setLockToast(`✅ '${grp.headName}' chhunga record ${grp.uncheckedCount} chu '✓ Audited' tiin chhinchhiah a ni e!`);
+                                        setLockToast(`✅ '${grp.headName}' chhunga record ${cnt || ids.length} chu '✓ Audited' tiin chhinchhiah a ni e!`);
                                         if (onRecordsUpdated) onRecordsUpdated();
                                         setTimeout(() => setLockToast(null), 3500);
                                       }}
@@ -4361,17 +4465,17 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                                       type="button"
                                       onClick={() => {
                                         const effPhone = auditorPhone || creatorProfile?.phone || '';
-                                        grp.items.forEach(t => {
-                                          markRecordAuditVerification(
-                                            t.id,
-                                            'transaction',
-                                            undefined,
-                                            auditorName || creatorProfile?.name || 'Auditor',
-                                            '',
-                                            true,
-                                            effPhone
-                                          );
-                                        });
+                                        const effName = auditorName || creatorProfile?.name || 'Auditor';
+                                        const ids = grp.items.map(t => t.id);
+                                        markBatchRecordsAuditVerification(
+                                          ids,
+                                          'transaction',
+                                          undefined,
+                                          effName,
+                                          '',
+                                          true,
+                                          effPhone
+                                        );
                                         setTick(t => t + 1);
                                         setLockToast(`↩️ '${grp.headName}' Head audit-na sut (Undo) a ni e.`);
                                         if (onRecordsUpdated) onRecordsUpdated();
@@ -4394,7 +4498,9 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                               <div className="text-[10px] font-black uppercase text-slate-500 pb-1">
                                 📋 Subsidiary Member Receipts ({grp.items.length})
                               </div>
-                              {grp.items.map(tx => (
+                              {grp.items.map(tx => {
+                                const isTxAudited = tx.audit_mark === 'verified' || Boolean(tx.is_locked);
+                                return (
                                 <div key={tx.id} className="p-2.5 bg-white border border-slate-200/80 rounded-xl text-xs flex items-center justify-between gap-2 flex-wrap">
                                   <div className="space-y-0.5 min-w-0">
                                     <div className="flex items-center gap-1.5 flex-wrap">
@@ -4424,15 +4530,15 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                                       <div className="flex items-center gap-1">
                                         <button
                                           type="button"
-                                          onClick={() => handleMarkItem('transaction', tx.id, tx.audit_mark, 'verified', undefined, tx.is_locked)}
-                                          title={tx.audit_mark === 'verified' ? "Audit tawh a ni (Click la sut rawh / uncheck)" : "Audit / Dik tiin chhinchhiah rawh"}
+                                          onClick={() => handleMarkItem('transaction', tx.id, tx.audit_mark, 'verified', undefined, tx.is_locked, isTxAudited ? 'audited' : 'unaudited')}
+                                          title={isTxAudited ? "Audit tawh a ni (Click la sut rawh / Undo)" : "Audit / Dik tiin chhinchhiah rawh"}
                                           className={`px-2 py-1 rounded-lg text-[10px] font-black border transition cursor-pointer ${
-                                            tx.audit_mark === 'verified'
-                                              ? 'bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700'
+                                            isTxAudited
+                                              ? 'bg-emerald-600 text-white border-emerald-600 hover:bg-amber-600 hover:border-amber-600'
                                               : 'bg-white text-emerald-700 border-emerald-300 hover:bg-emerald-50'
                                           }`}
                                         >
-                                          ✓ Dik
+                                          {isTxAudited ? '✓ Dik (Undo)' : '✓ Dik'}
                                         </button>
                                         <button
                                           type="button"
@@ -4454,7 +4560,8 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                                     )}
                                   </div>
                                 </div>
-                              ))}
+                                );
+                              })}
                             </div>
                           )}
                         </div>
@@ -4569,15 +4676,15 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                               <div className="flex items-center justify-end gap-1 pt-0.5">
                                 <button
                                   type="button"
-                                  onClick={() => handleMarkItem('transaction', tx.id, tx.audit_mark, 'verified', undefined, tx.is_locked)}
-                                  title={tx.audit_mark === 'verified' ? "Audit tawh a ni (Click la sut rawh / uncheck)" : "Audit / Dik tiin chhinchhiah rawh"}
+                                  onClick={() => handleMarkItem('transaction', tx.id, tx.audit_mark, 'verified', undefined, tx.is_locked, (tx.audit_mark === 'verified' || tx.is_locked) ? 'audited' : 'unaudited')}
+                                  title={(tx.audit_mark === 'verified' || tx.is_locked) ? "Audit tawh a ni (Click la sut rawh / Undo)" : "Audit / Dik tiin chhinchhiah rawh"}
                                   className={`text-[10px] font-bold px-2 py-0.5 rounded-lg border transition cursor-pointer ${
-                                    tx.audit_mark === 'verified'
-                                      ? 'bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700'
+                                    (tx.audit_mark === 'verified' || tx.is_locked)
+                                      ? 'bg-emerald-600 text-white border-emerald-600 hover:bg-amber-600 hover:border-amber-600'
                                       : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-200'
                                   }`}
                                 >
-                                  ✓ Dik
+                                  {(tx.audit_mark === 'verified' || tx.is_locked) ? '✓ Dik (Undo)' : '✓ Dik'}
                                 </button>
                                 <button
                                   type="button"
@@ -4823,14 +4930,14 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                             <div className="flex items-center justify-end gap-1 pt-0.5">
                               <button
                                 type="button"
-                                onClick={() => handleMarkItem('expense', exp.id, exp.audit_mark, 'verified')}
-                                className={`text-[10px] font-bold px-2 py-0.5 rounded-lg border transition ${
-                                  exp.audit_mark === 'verified'
-                                    ? 'bg-emerald-600 text-white border-emerald-600'
+                                onClick={() => handleMarkItem('expense', exp.id, exp.audit_mark, 'verified', undefined, exp.is_locked, (exp.audit_mark === 'verified' || exp.is_locked) ? 'audited' : 'unaudited')}
+                                className={`text-[10px] font-bold px-2 py-0.5 rounded-lg border transition cursor-pointer ${
+                                  (exp.audit_mark === 'verified' || exp.is_locked)
+                                    ? 'bg-emerald-600 text-white border-emerald-600 hover:bg-amber-600 hover:border-amber-600'
                                     : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-200'
                                 }`}
                               >
-                                ✓ Dik
+                                {(exp.audit_mark === 'verified' || exp.is_locked) ? '✓ Dik (Undo)' : '✓ Dik'}
                               </button>
                               <button
                                 type="button"
@@ -4922,37 +5029,53 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                     <label className="block text-xs font-bold text-slate-700">
                       Audit Financial Period *
                     </label>
-                    <div className="flex items-center gap-1">
-                      <button
-                        type="button"
-                        onClick={() => setAuditPeriod(`FY ${new Date().getFullYear() - 1}-${new Date().getFullYear()}`)}
-                        className="text-[9.5px] font-extrabold px-2 py-0.5 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300"
-                      >
-                        FY {new Date().getFullYear() - 1}-{new Date().getFullYear()}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setAuditPeriod(`${new Date().toLocaleString('default', { month: 'short' })} ${new Date().getFullYear()}`)}
-                        className="text-[9.5px] font-extrabold px-2 py-0.5 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300"
-                      >
-                        Thla Bi ({new Date().toLocaleString('default', { month: 'short' })})
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setAuditPeriod(`All Time (${new Date().getFullYear()})`)}
-                        className="text-[9.5px] font-extrabold px-2 py-0.5 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300"
-                      >
-                        All Time
-                      </button>
-                    </div>
+                    {!isRestrictedAuditor && (
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => setAuditPeriod(`FY ${new Date().getFullYear() - 1}-${new Date().getFullYear()}`)}
+                          className="text-[9.5px] font-extrabold px-2 py-0.5 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300"
+                        >
+                          FY {new Date().getFullYear() - 1}-{new Date().getFullYear()}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setAuditPeriod(`${new Date().toLocaleString('default', { month: 'short' })} ${new Date().getFullYear()}`)}
+                          className="text-[9.5px] font-extrabold px-2 py-0.5 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300"
+                        >
+                          Thla Bi ({new Date().toLocaleString('default', { month: 'short' })})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setAuditPeriod(`All Time (${new Date().getFullYear()})`)}
+                          className="text-[9.5px] font-extrabold px-2 py-0.5 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300"
+                        >
+                          All Time
+                        </button>
+                      </div>
+                    )}
                   </div>
                   <input
                     type="text"
-                    value={auditPeriod}
-                    onChange={e => setAuditPeriod(e.target.value)}
+                    value={isRestrictedAuditor && appointedPeriodLabel ? appointedPeriodLabel : auditPeriod}
+                    readOnly={isRestrictedAuditor}
+                    disabled={isRestrictedAuditor}
+                    onChange={e => {
+                      if (!isRestrictedAuditor) setAuditPeriod(e.target.value);
+                    }}
                     placeholder="Entirnan: FY 2024-2025 / Jan - Dec 2024"
-                    className="w-full text-xs p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-amber-500 font-bold"
+                    className={`w-full text-xs p-2.5 rounded-xl border font-bold ${
+                      isRestrictedAuditor
+                        ? 'bg-amber-50 border-amber-300 text-amber-950 cursor-not-allowed'
+                        : 'border-slate-200 focus:outline-none focus:ring-2 focus:ring-amber-500'
+                    }`}
                   />
+                  {isRestrictedAuditor && (
+                    <p className="text-[10.5px] text-amber-800 font-bold mt-1 flex items-center gap-1">
+                      <Lock className="w-3 h-3 text-amber-700 shrink-0" />
+                      <span>Creator-in Audit Hun Bi a ruatsa a ni a, Auditor tan thlak danglam theih a ni lo.</span>
+                    </p>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

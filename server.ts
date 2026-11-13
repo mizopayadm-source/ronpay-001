@@ -4986,10 +4986,36 @@ function mergeCollections<T extends Record<string, any>>(serverList: T[], client
           mergedVer[ak] = tB >= tA ? entryB : entryA;
         }
       }
-      // Clean out any entries marked as 'unchecked' while keeping tombstones or resolving active marks
       baseMerged.auditor_verifications = mergedVer;
+      const activeEntries = Object.values(mergedVer).filter((v: any) => v && (v.mark === 'verified' || v.mark === 'flagged'));
+      const flaggedEntries = activeEntries.filter((v: any) => v.mark === 'flagged');
+      const verifiedEntries = activeEntries.filter((v: any) => v.mark === 'verified');
+      if (flaggedEntries.length > 0) {
+        baseMerged.audit_mark = 'flagged';
+        baseMerged.audit_query = flaggedEntries.map((f: any) => `${f.auditorName}: ${f.query || 'Query'}`).join(' | ');
+        baseMerged.audit_marked_by = flaggedEntries.map((f: any) => f.auditorName).join(', ');
+      } else if (verifiedEntries.length > 0) {
+        baseMerged.audit_mark = 'verified';
+        baseMerged.audit_query = undefined;
+        baseMerged.audit_marked_by = verifiedEntries.map((v: any) => v.auditorName).join(', ');
+      } else {
+        baseMerged.audit_mark = undefined;
+        baseMerged.audit_query = undefined;
+        baseMerged.audit_marked_by = undefined;
+        baseMerged.audit_marked_at = undefined;
+        baseMerged.is_locked = false;
+        baseMerged.locked_by = undefined;
+        baseMerged.locked_at = undefined;
+      }
       if (baseMerged.metadata && typeof baseMerged.metadata === 'object') {
-        baseMerged.metadata = { ...baseMerged.metadata, auditor_verifications: mergedVer };
+        baseMerged.metadata = {
+          ...baseMerged.metadata,
+          audit_mark: baseMerged.audit_mark || null,
+          audit_query: baseMerged.audit_query || null,
+          audit_marked_by: baseMerged.audit_marked_by || null,
+          auditor_verifications: mergedVer,
+          is_locked: Boolean(baseMerged.is_locked)
+        };
       }
     }
 
@@ -5062,19 +5088,28 @@ function mergeCollections<T extends Record<string, any>>(serverList: T[], client
       }
     }
 
-    // Honor explicit audit_mark clearing (when newerObj sets audit_mark to null or undefined while updating)
-    if ('audit_mark' in newerObj && (newerObj.audit_mark === null || newerObj.audit_mark === undefined)) {
+    // Honor explicit audit_mark clearing (when newerObj sets audit_mark to null/undefined or metadata.audit_mark === null)
+    if (
+      ('audit_mark' in newerObj && (newerObj.audit_mark === null || newerObj.audit_mark === undefined)) ||
+      (newerObj?.metadata && newerObj.metadata.audit_mark === null)
+    ) {
       baseMerged.audit_mark = undefined;
       baseMerged.audit_query = undefined;
       baseMerged.audit_marked_by = undefined;
       baseMerged.audit_marked_at = undefined;
+      if (newerObj.is_locked === false || newerObj?.metadata?.is_locked === false) {
+        baseMerged.is_locked = false;
+        baseMerged.locked_by = undefined;
+        baseMerged.locked_at = undefined;
+      }
       if (baseMerged.metadata && typeof baseMerged.metadata === 'object') {
         baseMerged.metadata = {
           ...baseMerged.metadata,
           audit_mark: null,
           audit_query: null,
           audit_marked_by: null,
-          audit_marked_at: null
+          audit_marked_at: null,
+          is_locked: Boolean(baseMerged.is_locked)
         };
       }
     }
@@ -5814,6 +5849,17 @@ app.post('/api/audit/sync-action', async (req: Request, res: Response) => {
           ...(rec.auditor_verifications || {})
         };
         if (isClearing) {
+          // Mark all existing keys as 'unchecked' with latest timestamp so undo reliably resets the record to unaudited
+          for (const existingKey of Object.keys(existingMap)) {
+            const prevEntry = existingMap[existingKey] || {};
+            existingMap[existingKey] = {
+              ...prevEntry,
+              auditorKey: existingKey,
+              mark: 'unchecked',
+              query: '',
+              markedAt: nowIso
+            };
+          }
           existingMap[aKey] = {
             auditorKey: aKey,
             auditorPhone: action.auditorPhone || '',

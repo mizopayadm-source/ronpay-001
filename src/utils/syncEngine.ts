@@ -435,13 +435,17 @@ export async function syncAllWithServer(forceAuthoritative: boolean = false): Pr
                 base.audit_query = undefined;
                 base.audit_marked_by = undefined;
                 base.audit_marked_at = undefined;
+                base.is_locked = false;
+                base.locked_by = undefined;
+                base.locked_at = undefined;
               }
               if (base.metadata && typeof base.metadata === 'object') {
                 base.metadata = {
                   ...base.metadata,
                   audit_mark: base.audit_mark || null,
                   audit_query: base.audit_query || null,
-                  auditor_verifications: mergedVer
+                  auditor_verifications: mergedVer,
+                  is_locked: Boolean(base.is_locked)
                 };
               }
             } else if (localIsNewer && localRec?.metadata && localRec.metadata.audit_mark === null) {
@@ -449,6 +453,9 @@ export async function syncAllWithServer(forceAuthoritative: boolean = false): Pr
               base.audit_query = undefined;
               base.audit_marked_by = undefined;
               base.audit_marked_at = undefined;
+              base.is_locked = false;
+              base.locked_by = undefined;
+              base.locked_at = undefined;
             }
             return base;
           };
@@ -584,10 +591,16 @@ export async function syncAllWithServer(forceAuthoritative: boolean = false): Pr
                   baseExp.audit_query = undefined;
                   baseExp.audit_marked_by = undefined;
                   baseExp.audit_marked_at = undefined;
+                  baseExp.is_locked = false;
+                  baseExp.locked_by = undefined;
+                  baseExp.locked_at = undefined;
                 }
               } else if (localTime >= serverTime && le?.metadata && le.metadata.audit_mark === null) {
                 baseExp.audit_mark = undefined;
                 baseExp.audit_query = undefined;
+                baseExp.is_locked = false;
+                baseExp.locked_by = undefined;
+                baseExp.locked_at = undefined;
               }
               expMap.set(k, baseExp);
             }

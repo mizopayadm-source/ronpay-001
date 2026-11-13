@@ -1355,6 +1355,17 @@ export const getStoredTransactions = (): Transaction[] => {
           seen.has(cleanId)
         ) continue;
         seen.add(cleanId);
+        if (t.metadata && t.metadata.audit_mark === null) {
+          t.audit_mark = undefined;
+          t.audit_query = undefined;
+          t.audit_marked_by = undefined;
+          t.audit_marked_at = undefined;
+          if (t.metadata.is_locked === false) {
+            t.is_locked = false;
+            t.locked_by = undefined;
+            t.locked_at = undefined;
+          }
+        }
         result.push(t);
       }
       return result;
@@ -1421,7 +1432,19 @@ export const saveStoredTransactions = (transactions: Transaction[], skipServerPu
                     const localTime = new Date((existingLocal as any).updatedAt || existingLocal.createdAt || existingLocal.timestamp || 0).getTime();
                     const serverTime = new Date((st as any).updatedAt || st.createdAt || st.timestamp || 0).getTime();
                     if (serverTime > localTime) {
-                      localMap.set(k, { ...existingLocal, ...st });
+                      const mergedTx: Transaction = { ...existingLocal, ...st };
+                      if (st.metadata && st.metadata.audit_mark === null) {
+                        mergedTx.audit_mark = undefined;
+                        mergedTx.audit_query = undefined;
+                        mergedTx.audit_marked_by = undefined;
+                        mergedTx.audit_marked_at = undefined;
+                        if (st.metadata.is_locked === false) {
+                          mergedTx.is_locked = false;
+                          mergedTx.locked_by = undefined;
+                          mergedTx.locked_at = undefined;
+                        }
+                      }
+                      localMap.set(k, mergedTx);
                       hasNewFromOtherWindow = true;
                     }
                   }
@@ -5157,20 +5180,33 @@ export function mergeTransactions(existing: Transaction[], incoming: Transaction
     } else {
       const prevTime = new Date(prev.updatedAt || prev.audit_marked_at || prev.audit_date || prev.timestamp || 0).getTime();
       const incTime = new Date(inc.updatedAt || inc.audit_marked_at || inc.audit_date || inc.timestamp || 0).getTime();
+      const newer = incTime >= prevTime ? inc : prev;
       const merged: Transaction = incTime >= prevTime ? { ...prev, ...inc } : { ...inc, ...prev };
-      // Preserve local audit verification marks & locks if incoming row lacks them and local was marked more recently
-      if (prev.audit_mark !== undefined && inc.audit_mark === undefined && prevTime >= incTime) {
-        merged.audit_mark = prev.audit_mark;
-        merged.audit_query = prev.audit_query;
-        merged.audit_marked_by = prev.audit_marked_by;
-        merged.audit_marked_at = prev.audit_marked_at;
-      }
-      if (prev.is_locked !== undefined && inc.is_locked === undefined && prevTime >= incTime) {
-        merged.is_locked = prev.is_locked;
-        merged.locked_by = prev.locked_by;
-        merged.audit_date = prev.audit_date;
-        merged.audit_period = prev.audit_period;
-        merged.audit_notes = prev.audit_notes;
+      if (newer.metadata && newer.metadata.audit_mark === null) {
+        merged.audit_mark = undefined;
+        merged.audit_query = undefined;
+        merged.audit_marked_by = undefined;
+        merged.audit_marked_at = undefined;
+        if (newer.metadata.is_locked === false) {
+          merged.is_locked = false;
+          merged.locked_by = undefined;
+          merged.locked_at = undefined;
+        }
+      } else {
+        // Preserve local audit verification marks & locks if incoming row lacks them and local was marked more recently
+        if (prev.audit_mark !== undefined && inc.audit_mark === undefined && prevTime >= incTime) {
+          merged.audit_mark = prev.audit_mark;
+          merged.audit_query = prev.audit_query;
+          merged.audit_marked_by = prev.audit_marked_by;
+          merged.audit_marked_at = prev.audit_marked_at;
+        }
+        if (prev.is_locked !== undefined && inc.is_locked === undefined && prevTime >= incTime) {
+          merged.is_locked = prev.is_locked;
+          merged.locked_by = prev.locked_by;
+          merged.audit_date = prev.audit_date;
+          merged.audit_period = prev.audit_period;
+          merged.audit_notes = prev.audit_notes;
+        }
       }
       map.set(k, merged);
     }
@@ -6094,17 +6130,20 @@ export const normalizeAuditorKey = (auditorPhone?: string, auditorName?: string)
   return slug || 'auditor';
 };
 
-export const markRecordAuditVerification = (
-  recordId: string,
+export const markBatchRecordsAuditVerification = (
+  recordIds: string[],
   recordType: 'transaction' | 'expense',
   mark: 'verified' | 'flagged' | undefined,
   auditorName: string,
   queryNote?: string,
   forceUnlock?: boolean,
   auditorPhone?: string
-): boolean => {
+): number => {
+  if (!Array.isArray(recordIds) || recordIds.length === 0) return 0;
+  const targetSet = new Set(recordIds.map(id => String(id || '').toLowerCase().trim()).filter(Boolean));
+  if (targetSet.size === 0) return 0;
+
   const nowIso = new Date().toISOString();
-  const cleanId = String(recordId).toLowerCase().trim();
   const isClearing = mark === undefined;
   const profile = getStoredCreatorProfile();
   const effPhone = auditorPhone || profile?.phone || '';
@@ -6117,6 +6156,17 @@ export const markRecordAuditVerification = (
       ...(rec.auditor_verifications || {})
     };
     if (isClearing) {
+      // Mark all existing keys as 'unchecked' so undoing a record or head reliably resets it to unaudited
+      for (const existingKey of Object.keys(existingMap)) {
+        const prevEntry = existingMap[existingKey] || {};
+        existingMap[existingKey] = {
+          ...prevEntry,
+          auditorKey: existingKey,
+          mark: 'unchecked',
+          query: '',
+          markedAt: nowIso
+        };
+      }
       existingMap[aKey] = {
         auditorKey: aKey,
         auditorPhone: effPhone,
@@ -6165,12 +6215,25 @@ export const markRecordAuditVerification = (
     };
   };
 
+  let modifiedCount = 0;
+  const syncItems: Array<{
+    recordId: string;
+    recordType: 'transaction' | 'expense';
+    auditorKey: string;
+    auditorName: string;
+    auditorPhone: string;
+    mark: 'verified' | 'flagged' | 'unchecked';
+    query?: string;
+    forceUnlock: boolean;
+  }> = [];
+
   try {
     if (recordType === 'transaction') {
       const txs = getStoredTransactions();
-      let modifiedTx: Transaction | null = null;
+      const modifiedTxs: Transaction[] = [];
       const updated = txs.map(t => {
-        if (String(t.id).toLowerCase().trim() === cleanId) {
+        const cleanId = String(t.id || '').toLowerCase().trim();
+        if (targetSet.has(cleanId)) {
           const shouldUnlock = isClearing || forceUnlock;
           const { existingMap, resolvedMark, resolvedQuery, resolvedMarkedBy, resolvedMarkedAt } = computeMultiAuditorState(t);
           const nextMeta = {
@@ -6182,7 +6245,7 @@ export const markRecordAuditVerification = (
             auditor_verifications: existingMap,
             is_locked: shouldUnlock ? false : Boolean(t.is_locked)
           };
-          modifiedTx = {
+          const modifiedTx: Transaction = {
             ...t,
             audit_mark: resolvedMark,
             audit_query: resolvedQuery,
@@ -6198,36 +6261,39 @@ export const markRecordAuditVerification = (
             updatedAt: nowIso,
             metadata: nextMeta
           };
-          return modifiedTx;
-        }
-        return t;
-      });
-      saveStoredTransactions(updated, false);
-      if (modifiedTx) {
-        const txToSync = modifiedTx;
-        import('../services/SupabaseSync').then(({ upsertTransaction }) => {
-          upsertTransaction(txToSync).catch(() => {});
-        }).catch(() => {});
-        safeApiFetch('/api/audit/sync-action', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
+          modifiedCount++;
+          modifiedTxs.push(modifiedTx);
+          syncItems.push({
             recordId: cleanId,
             recordType: 'transaction',
             auditorKey: aKey,
             auditorName: effName,
             auditorPhone: effPhone,
-            mark: isClearing ? 'unchecked' : mark,
+            mark: isClearing ? 'unchecked' : mark!,
             query: queryNote,
             forceUnlock: Boolean(isClearing || forceUnlock)
-          })
+          });
+          return modifiedTx;
+        }
+        return t;
+      });
+      if (modifiedCount > 0) {
+        saveStoredTransactions(updated, false);
+        import('../services/SupabaseSync').then(({ upsertTransaction }) => {
+          modifiedTxs.forEach(tx => upsertTransaction(tx).catch(() => {}));
+        }).catch(() => {});
+        safeApiFetch('/api/audit/sync-action', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ items: syncItems })
         }).catch(() => {});
       }
     } else {
       const exps = getStoredExpenses();
-      let modifiedExp: KumtluangExpense | null = null;
+      const modifiedExps: KumtluangExpense[] = [];
       const updated = exps.map(e => {
-        if (String(e.id).toLowerCase().trim() === cleanId) {
+        const cleanId = String(e.id || '').toLowerCase().trim();
+        if (targetSet.has(cleanId)) {
           const shouldUnlock = isClearing || forceUnlock;
           const { existingMap, resolvedMark, resolvedQuery, resolvedMarkedBy, resolvedMarkedAt } = computeMultiAuditorState(e);
           const nextMeta = {
@@ -6239,7 +6305,7 @@ export const markRecordAuditVerification = (
             auditor_verifications: existingMap,
             is_locked: shouldUnlock ? false : Boolean(e.is_locked)
           };
-          modifiedExp = {
+          const modifiedExp: KumtluangExpense = {
             ...e,
             audit_mark: resolvedMark,
             audit_query: resolvedQuery,
@@ -6254,37 +6320,59 @@ export const markRecordAuditVerification = (
             updatedAt: nowIso,
             metadata: nextMeta
           };
-          return modifiedExp;
-        }
-        return e;
-      });
-      saveStoredExpenses(updated, false);
-      if (modifiedExp) {
-        const expToSync = modifiedExp;
-        import('../services/SupabaseSync').then(({ upsertExpense }) => {
-          upsertExpense(expToSync).catch(() => {});
-        }).catch(() => {});
-        safeApiFetch('/api/audit/sync-action', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
+          modifiedCount++;
+          modifiedExps.push(modifiedExp);
+          syncItems.push({
             recordId: cleanId,
             recordType: 'expense',
             auditorKey: aKey,
             auditorName: effName,
             auditorPhone: effPhone,
-            mark: isClearing ? 'unchecked' : mark,
+            mark: isClearing ? 'unchecked' : mark!,
             query: queryNote,
             forceUnlock: Boolean(isClearing || forceUnlock)
-          })
+          });
+          return modifiedExp;
+        }
+        return e;
+      });
+      if (modifiedCount > 0) {
+        saveStoredExpenses(updated, false);
+        import('../services/SupabaseSync').then(({ upsertExpense }) => {
+          modifiedExps.forEach(exp => upsertExpense(exp).catch(() => {}));
+        }).catch(() => {});
+        safeApiFetch('/api/audit/sync-action', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ items: syncItems })
         }).catch(() => {});
       }
     }
-    return true;
+    return modifiedCount;
   } catch (e) {
-    console.error('Failed to mark record audit verification:', e);
-    return false;
+    console.error('Failed to batch mark record audit verification:', e);
+    return 0;
   }
+};
+
+export const markRecordAuditVerification = (
+  recordId: string,
+  recordType: 'transaction' | 'expense',
+  mark: 'verified' | 'flagged' | undefined,
+  auditorName: string,
+  queryNote?: string,
+  forceUnlock?: boolean,
+  auditorPhone?: string
+): boolean => {
+  return markBatchRecordsAuditVerification(
+    [recordId],
+    recordType,
+    mark,
+    auditorName,
+    queryNote,
+    forceUnlock,
+    auditorPhone
+  ) > 0;
 };
 
 export const lockCampaignAuditPeriod = (

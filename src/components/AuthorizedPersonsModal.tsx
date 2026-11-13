@@ -1034,6 +1034,8 @@ export const AuthorizedPersonsModal: React.FC<AuthorizedPersonsModalProps> = ({
       g => String(g.auditorPhone || g.auditor_phone || '').replace(/\D/g, '').slice(-10) === cleanPhone
     );
 
+    const effectivePeriodLabel = auditorPeriodLabel || (auditorFromDate && auditorToDate ? `${formatDateDDMMYYYY(auditorFromDate)} – ${formatDateDDMMYYYY(auditorToDate)}` : defaultFyLabel);
+
     const newGrant: AuditorAccessGrant = {
       id: existingGrant ? existingGrant.id : `GRANT_${Date.now()}_${Math.random().toString(36).substring(2, 6).toUpperCase()}`,
       auditorName: trimmedName,
@@ -1055,8 +1057,8 @@ export const AuthorizedPersonsModal: React.FC<AuthorizedPersonsModalProps> = ({
       expiresAt: expiresAt,
       expires_at: expiresAt,
       status: 'active',
-      auditPeriod: auditorPeriodLabel || defaultFyLabel,
-      audit_period: auditorPeriodLabel || defaultFyLabel,
+      auditPeriod: effectivePeriodLabel,
+      audit_period: effectivePeriodLabel,
       auditFromDate: auditorFromDate || '',
       audit_from_date: auditorFromDate || '',
       auditToDate: auditorToDate || '',
@@ -1090,8 +1092,8 @@ export const AuthorizedPersonsModal: React.FC<AuthorizedPersonsModalProps> = ({
         expiresAt: expiresAt,
         expires_at: expiresAt,
         status: 'active',
-        auditPeriod: auditorPeriodLabel || defaultFyLabel,
-        audit_period: auditorPeriodLabel || defaultFyLabel,
+        auditPeriod: effectivePeriodLabel,
+        audit_period: effectivePeriodLabel,
         auditFromDate: auditorFromDate || '',
         audit_from_date: auditorFromDate || '',
         auditToDate: auditorToDate || '',
@@ -1102,6 +1104,24 @@ export const AuthorizedPersonsModal: React.FC<AuthorizedPersonsModalProps> = ({
       saveAuditorGrant(coGrant);
     }
 
+    // Also synchronize any other active grants on this campaign to the Creator's newly appointed date range so Co-Auditors always share the exact same locked period
+    const rawGrants = getStoredAuditorGrants(campaign.id);
+    rawGrants.forEach(g => {
+      if (g && g.status === 'active' && (g.auditFromDate !== (auditorFromDate || '') || g.auditToDate !== (auditorToDate || '') || g.auditPeriod !== effectivePeriodLabel)) {
+        saveAuditorGrant({
+          ...g,
+          auditPeriod: effectivePeriodLabel,
+          audit_period: effectivePeriodLabel,
+          auditFromDate: auditorFromDate || '',
+          audit_from_date: auditorFromDate || '',
+          auditToDate: auditorToDate || '',
+          audit_to_date: auditorToDate || '',
+          updatedAt: now.toISOString(),
+          updated_at: now.toISOString()
+        });
+      }
+    });
+
     const updatedGrants = getStoredAuditorGrants(campaign.id);
     const isNowDual = auditAppointmentMode === 'dual' || updatedGrants.filter(g => g.status === 'active').length >= 2;
     const updatedCamp: Campaign = {
@@ -1111,7 +1131,10 @@ export const AuthorizedPersonsModal: React.FC<AuthorizedPersonsModalProps> = ({
       metadata: {
         ...(campaign.metadata || {}),
         auditorGrants: updatedGrants,
-        requireDualAuditorConsensus: isNowDual
+        requireDualAuditorConsensus: isNowDual,
+        appointedAuditPeriod: effectivePeriodLabel,
+        appointedAuditFromDate: auditorFromDate || '',
+        appointedAuditToDate: auditorToDate || ''
       }
     };
     saveCampaign(updatedCamp);
