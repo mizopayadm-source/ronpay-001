@@ -25,6 +25,7 @@ import {
 const tableCacheMap = new Map<string, { data: any[]; timestamp: number }>();
 const activeSharedChannels = new Map<string, any>();
 const sharedTableListeners = new Map<string, Set<(payload: any) => void>>();
+const realtimeFallbackTables = new Set<string>();
 
 export const subscribeToTable = (
   table: string, 
@@ -35,7 +36,8 @@ export const subscribeToTable = (
   }
   sharedTableListeners.get(table)!.add(onUpdate);
 
-  if (!activeSharedChannels.has(table)) {
+  // Skip opening a WebSocket if quota is blocked or Realtime already fell back to SSE/polling for this table
+  if (!activeSharedChannels.has(table) && !isSupabaseQuotaBlocked() && !realtimeFallbackTables.has(table)) {
     const channelName = `ronpay-shared-sync-${table}`;
     const channel = supabase.channel(channelName);
     try {
@@ -59,8 +61,17 @@ export const subscribeToTable = (
           }
         )
         .subscribe((status, err) => {
-          if (status === 'CHANNEL_ERROR' || err) {
-            console.debug(`[SupabaseSync] Realtime WebSocket fallback active for ${table}:`, status);
+          if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || err) {
+            if (!realtimeFallbackTables.has(table)) {
+              realtimeFallbackTables.add(table);
+              console.debug(`[SupabaseSync] Realtime WebSocket switched to SSE/polling fallback for ${table} (${status})`);
+            }
+            // Detach the failing channel so supabase-js stops infinite background WebSocket retries
+            const ch = activeSharedChannels.get(table);
+            if (ch) {
+              activeSharedChannels.delete(table);
+              try { supabase.removeChannel(ch); } catch {}
+            }
           }
         });
       activeSharedChannels.set(table, channel);
@@ -1017,25 +1028,31 @@ export const verifySupabaseSingleSourceOfTruth = async (): Promise<SSOTVerificat
 // =========================================================================
 // Startup Sequence Cleanup & Verification
 // =========================================================================
+let startupCleanupPromise: Promise<void> | null = null;
+
 export const runStartupCleanupSequence = async () => {
-  try {
-    if (typeof localStorage === 'undefined') return;
+  if (startupCleanupPromise) return startupCleanupPromise;
+  startupCleanupPromise = (async () => {
+    try {
+      if (typeof localStorage === 'undefined') return;
 
-    localStorage.removeItem('ronpay_hard_purge_timestamp_v1');
-    localStorage.setItem('ronpay_use_supabase_only', 'true');
-    localStorage.setItem('ronpay_supabase_ssot_active', 'true');
-    localStorage.removeItem('ronpay_supabase_pending_txs');
+      localStorage.removeItem('ronpay_hard_purge_timestamp_v1');
+      localStorage.setItem('ronpay_use_supabase_only', 'true');
+      localStorage.setItem('ronpay_supabase_ssot_active', 'true');
+      localStorage.removeItem('ronpay_supabase_pending_txs');
 
-    if (isSupabaseQuotaBlocked()) return;
+      if (isSupabaseQuotaBlocked()) return;
 
-    // Run SSOT verification
-    const verification = await verifySupabaseSingleSourceOfTruth();
-    console.log('[SupabaseSync] Live Supabase SSOT Verification:', verification);
+      // Run SSOT verification once on startup
+      const verification = await verifySupabaseSingleSourceOfTruth();
+      console.log('[SupabaseSync] Live Supabase SSOT Verification:', verification);
 
-    // SSOT active - do not auto-purge cloud members on client startup
-  } catch (e) {
-    console.warn('[SupabaseSync] Startup cleanup warning:', e);
-  }
+      // SSOT active - do not auto-purge cloud members on client startup
+    } catch (e) {
+      console.warn('[SupabaseSync] Startup cleanup warning:', e);
+    }
+  })();
+  return startupCleanupPromise;
 };
 
 /*

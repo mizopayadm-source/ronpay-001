@@ -1179,14 +1179,20 @@ export function subscribeServerEvents(onChanged: () => void): () => void {
     } catch {}
   }
 
-  // 2. Secondary: Supabase Realtime Channel
+  // 2. Secondary: Supabase Realtime Channel (auto-detach on CHANNEL_ERROR so SSE handles sync cleanly)
   let channel: any = null;
   try {
     channel = supabase.channel('public:transactions')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions' }, () => {
         if (!isCleanedUp) onChanged();
       })
-      .subscribe();
+      .subscribe((status) => {
+        if ((status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') && channel) {
+          const broken = channel;
+          channel = null;
+          try { supabase.removeChannel(broken); } catch {}
+        }
+      });
   } catch {}
 
   return () => {
