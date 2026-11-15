@@ -478,7 +478,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
     'July', 'August', 'September', 'October', 'November', 'December'
   ];
 
-  const defaultCategories = ['BMP Fund', 'General'];
+  const defaultCategories = useMemo(() => ['BMP Fund', 'General'], []);
 
   // Track open state and initialTab to prevent background sync from kicking user away from active tab
   const prevIsOpenRef = useRef(false);
@@ -603,27 +603,29 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
       if (selectedCampaignId !== 'all') {
         const camp = allowedCampaigns.find(c => c.id === selectedCampaignId);
         if (camp) {
-          setQuickEntryCampaignId(camp.id);
-          setRegTargetCampaignId(camp.id);
-          setPrintOrgScope(camp.id);
+          setQuickEntryCampaignId(prev => prev === camp.id ? prev : camp.id);
+          setRegTargetCampaignId(prev => prev === camp.id ? prev : camp.id);
+          setPrintOrgScope(prev => prev === camp.id ? prev : camp.id);
           if (camp.orgCode) {
-            setNewOrgCode(camp.orgCode);
+            setNewOrgCode(prev => prev === camp.orgCode ? prev : camp.orgCode!);
           }
         }
       } else {
-        setPrintOrgScope(allowedCampaigns.length > 0 ? (allowedCampaigns[0]?.id || 'all') : 'all');
+        const nextScope = allowedCampaigns.length > 0 ? (allowedCampaigns[0]?.id || 'all') : 'all';
+        setPrintOrgScope(prev => prev === nextScope ? prev : nextScope);
         const firstCamp = allowedCampaigns[0];
         if (firstCamp) {
-          setQuickEntryCampaignId(firstCamp.id);
-          setRegTargetCampaignId(firstCamp.id);
+          setQuickEntryCampaignId(prev => prev === firstCamp.id ? prev : firstCamp.id);
+          setRegTargetCampaignId(prev => prev === firstCamp.id ? prev : firstCamp.id);
           if (firstCamp.orgCode) {
-            setNewOrgCode(firstCamp.orgCode);
+            setNewOrgCode(prev => prev === firstCamp.orgCode ? prev : firstCamp.orgCode!);
           }
         }
       }
       setSelectedMember(null);
     }
-  }, [isOpen, selectedCampaignId, allowedCampaigns, isPrivilegedUser]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, selectedCampaignId, isPrivilegedUser]);
 
   // Active campaign object based on quick entry / active filter
   const activeScopedCampaign = (selectedCampaignId !== 'all' 

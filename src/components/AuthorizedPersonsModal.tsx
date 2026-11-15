@@ -2873,7 +2873,6 @@ export const AuthorizedPersonsModal: React.FC<AuthorizedPersonsModalProps> = ({
               setAuditorGrants(getStoredAuditorGrants(campaign.id));
             }
             setAuditorTick(t => t + 1);
-            if (onCampaignUpdated && effectiveCampaign) onCampaignUpdated(effectiveCampaign);
           }}
         />
 

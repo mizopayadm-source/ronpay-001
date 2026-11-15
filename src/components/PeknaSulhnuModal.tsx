@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { 
   X, 
   History, 
@@ -145,22 +145,31 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
     }
   }, [isOpen, isGuestUser]);
 
+  const onRefreshDataRef = useRef(onRefreshData);
+  useEffect(() => {
+    onRefreshDataRef.current = onRefreshData;
+  }, [onRefreshData]);
+
+  const profilePhoneKey = creatorProfile?.phone || creatorProfile?.phoneNumber || '';
+  const profileRoleKey = creatorProfile?.role || '';
+  const paidIdsKey = safeUserPaidIds.length;
+
   // Automatically refresh local data and pull latest cross-device sync with query-level role enforcement
   useEffect(() => {
     if (isOpen) {
       setDeletedTxIds(getDeletedTransactionIds());
-      if (onRefreshData) {
-        onRefreshData();
+      if (onRefreshDataRef.current) {
+        onRefreshDataRef.current();
       }
       fetchTableData('transactions', {
         userProfile: creatorProfile,
         userPaidIds: safeUserPaidIds,
       }).then((txs) => {
         if (Array.isArray(txs)) setSupabaseTxns(txs as Transaction[]);
-        if (onRefreshData) onRefreshData();
       }).catch(() => {});
     }
-  }, [isOpen, onRefreshData, creatorProfile, safeUserPaidIds]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, profilePhoneKey, profileRoleKey, paidIdsKey]);
 
   const handleManualRefresh = async () => {
     setIsRefreshing(true);
@@ -174,8 +183,8 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
     } catch (e) {
       console.warn('PeknaSulhnu manual refresh error:', e);
     }
-    if (onRefreshData) {
-      onRefreshData();
+    if (onRefreshDataRef.current) {
+      onRefreshDataRef.current();
     }
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('ronpay_trigger_sync'));
@@ -203,7 +212,8 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
     load();
     const unsub = subscribeToTable('transactions', load);
     return () => { isMounted = false; unsub.unsubscribe(); };
-  }, [isOpen, creatorProfile, safeUserPaidIds]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, profilePhoneKey, profileRoleKey, paidIdsKey]);
 
   // Defensive array checks - uses in-memory transactions immediately for instant 0ms rendering
   const safeTransactions = useMemo(() => {

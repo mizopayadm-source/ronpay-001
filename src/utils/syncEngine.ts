@@ -20,6 +20,7 @@ import {
   getStoredStaffAccounts,
   saveStoredStaffAccounts,
   getDeletedTransactionIds,
+  saveDeletedTransactionIds,
   markTransactionAsDeleted,
   PROTECTED_CANONICAL_TX_IDS,
   CANONICAL_BMP_RECEIPTS,
@@ -380,13 +381,10 @@ export async function syncAllWithServer(forceAuthoritative: boolean = false): Pr
 
         // 4. Update transactions
         if (Array.isArray(serverData.transactions)) {
-          const deletedIds = getDeletedTransactionIds();
-          if (Array.isArray(serverData.deletedTransactionIds)) {
-            for (const tId of serverData.deletedTransactionIds) {
-              const cleanTId = String(tId).toLowerCase().trim();
-              deletedIds.add(cleanTId);
-            }
+          if (Array.isArray(serverData.deletedTransactionIds) && serverData.deletedTransactionIds.length > 0) {
+            saveDeletedTransactionIds(serverData.deletedTransactionIds);
           }
+          const deletedIds = getDeletedTransactionIds();
 
           const currentTxs = getStoredTransactions();
           const txMap = new Map<string, any>();
@@ -462,7 +460,6 @@ export async function syncAllWithServer(forceAuthoritative: boolean = false): Pr
 
           // 2. Reconcile with local transactions:
           const newLocalTxsToPush: Transaction[] = [];
-          const nowMs = Date.now();
           for (const ct of currentTxs) {
             if (ct && ct.id) {
               const k = String(ct.id).toLowerCase().trim();
@@ -480,21 +477,25 @@ export async function syncAllWithServer(forceAuthoritative: boolean = false): Pr
                 const mergedItem = mergeRecordAuditorState(existing, ct, localTime >= serverTime);
                 txMap.set(k, { ...mergedItem, isSynced: true });
               } else {
-                // Not in serverData.transactions!
-                const isFreshOffline = ((ct as any).isOfflinePending === true || ct.isSynced === false) &&
-                  ct.createdAt ? (nowMs - new Date(ct.createdAt).getTime() < 5 * 60 * 1000) : false;
-                if (isFreshOffline) {
-                  txMap.set(k, ct);
-                  newLocalTxsToPush.push(ct);
-                } else {
-                  // Retain valid local transaction unless explicitly in serverData.deletedTransactionIds
-                  txMap.set(k, ct);
-                }
+                // Valid local transaction not yet on server/Supabase — retain and push UP to Supabase/server!
+                txMap.set(k, ct);
+                newLocalTxsToPush.push(ct);
               }
             }
           }
 
-
+          if (newLocalTxsToPush.length > 0) {
+            import('../services/supabaseService').then(({ insertSupabaseTransaction }) => {
+              newLocalTxsToPush.forEach(t => {
+                insertSupabaseTransaction(t).catch(() => {});
+                safeApiFetch('/api/transactions', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(t)
+                }).catch(() => {});
+              });
+            }).catch(() => {});
+          }
 
           const cleanTxs = Array.from(txMap.values());
           cleanTxs.sort((a, b) => {
@@ -1022,6 +1023,9 @@ export async function pullLatestServerState(): Promise<SyncDataState | null> {
 
         // 4. Transactions - merge authoritative server data with genuine offline creations
         if (Array.isArray(serverData.transactions)) {
+          if (Array.isArray(serverData.deletedTransactionIds) && serverData.deletedTransactionIds.length > 0) {
+            saveDeletedTransactionIds(serverData.deletedTransactionIds);
+          }
           const currentTxs = getStoredTransactions();
           const deletedIds = getDeletedTransactionIds();
           const txMap = new Map<string, Transaction>();
@@ -1047,9 +1051,6 @@ export async function pullLatestServerState(): Promise<SyncDataState | null> {
               }
               const amt = Number(lt.amount);
               if (!isFinite(amt) || isNaN(amt) || amt <= 0) continue;
-
-              const isFreshOffline = (lt.isSynced === false || (lt as any).isOfflinePending === true) &&
-                lt.createdAt ? (nowMs - new Date(lt.createdAt).getTime() < 5 * 60 * 1000) : false;
 
               if (txMap.has(k)) {
                 const existing = txMap.get(k)!;
@@ -1080,16 +1081,25 @@ export async function pullLatestServerState(): Promise<SyncDataState | null> {
                   txMap.set(k, merged);
                 }
               } else {
-                // Retain valid local transaction unless explicitly in serverData.deletedTransactionIds
+                // Valid local transaction not yet on server/Supabase — retain and push UP to Supabase/server!
                 txMap.set(k, lt);
-                if (isFreshOffline) {
-                  unpushedFreshOfflineTxs.push(lt);
-                }
+                unpushedFreshOfflineTxs.push(lt);
               }
             }
           }
 
-
+          if (unpushedFreshOfflineTxs.length > 0) {
+            import('../services/supabaseService').then(({ insertSupabaseTransaction }) => {
+              unpushedFreshOfflineTxs.forEach(t => {
+                insertSupabaseTransaction(t).catch(() => {});
+                safeApiFetch('/api/transactions', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(t)
+                }).catch(() => {});
+              });
+            }).catch(() => {});
+          }
 
           const cleanTxs = Array.from(txMap.values());
           cleanTxs.sort((a, b) => {

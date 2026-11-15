@@ -16,7 +16,8 @@ import {
   getDeletedTransactionIds,
   saveStoredAuditorGrants,
   getStoredDeletedAuditorGrantIds,
-  saveStoredDeletedAuditorGrantIds
+  saveStoredDeletedAuditorGrantIds,
+  reconcileWithAuthoritativeTransactions
 } from '../utils/storage';
 import { broadcastStateChange } from './crossTabSync';
 
@@ -630,24 +631,18 @@ export async function fetchSupabaseFundPool(poolId: string = 'public_pool'): Pro
   const todayStr = new Date().toISOString().slice(0, 10);
 
   try {
-    let query = supabase
+    const { data: txns, error } = await supabase
       .from('transactions')
-      .select('amount, status, timestamp, created_at, campaign_title, campaign_id')
-      .neq('status', 'deleted')
-      .or('campaign_title.ilike.%shillong%,campaign_id.ilike.%bmp%,campaign_title.ilike.%bmp%');
+      .select('id, amount, status, timestamp, created_at')
+      .neq('status', 'deleted');
 
-    let { data: txns, error } = await query;
+    const delIds = getDeletedTransactionIds();
 
-    if (error || !txns || txns.length === 0) {
-      const fallbackRes = await supabase
-        .from('transactions')
-        .select('amount, status, timestamp, created_at, campaign_title, campaign_id')
-        .neq('status', 'deleted');
-      txns = fallbackRes.data;
-    }
-
-    if (txns) {
+    if (!error && txns) {
       txns.forEach((t: any) => {
+        const rawId = String(t.id || '').trim();
+        const cleanId = rawId.toLowerCase();
+        if (!rawId || rawId.startsWith('VCH-') || rawId.startsWith('EXP-') || delIds.has(cleanId)) return;
         const s = String(t.status || '').toLowerCase().trim();
         const isConfirmed = s === '' || s === 'completed' || s === 'paid' || s === 'verified' || s === 'success' || s === 'payment_success';
         const amt = Number(t.amount) || 0;
@@ -708,24 +703,18 @@ export async function recalibrateSupabaseFundPool(poolId: string = 'public_pool'
   const todayStr = new Date().toISOString().slice(0, 10);
 
   try {
-    let query = supabase
+    const { data: txns, error } = await supabase
       .from('transactions')
-      .select('amount, status, timestamp, created_at, campaign_title, campaign_id')
-      .neq('status', 'deleted')
-      .or('campaign_title.ilike.%shillong%,campaign_id.ilike.%bmp%,campaign_title.ilike.%bmp%');
+      .select('id, amount, status, timestamp, created_at')
+      .neq('status', 'deleted');
 
-    let { data: txns, error } = await query;
+    const delIds = getDeletedTransactionIds();
 
-    if (error || !txns || txns.length === 0) {
-      const fallbackRes = await supabase
-        .from('transactions')
-        .select('amount, status, timestamp, created_at, campaign_title, campaign_id')
-        .neq('status', 'deleted');
-      txns = fallbackRes.data;
-    }
-
-    if (txns) {
+    if (!error && txns) {
       txns.forEach((t: any) => {
+        const rawId = String(t.id || '').trim();
+        const cleanId = rawId.toLowerCase();
+        if (!rawId || rawId.startsWith('VCH-') || rawId.startsWith('EXP-') || delIds.has(cleanId)) return;
         const s = String(t.status || '').toLowerCase().trim();
         const isConfirmed = s === '' || s === 'completed' || s === 'paid' || s === 'verified' || s === 'success' || s === 'payment_success';
         const amt = Number(t.amount) || 0;
@@ -1710,12 +1699,6 @@ export async function loadSupabaseInitialState(): Promise<{
     ]);
 
     let finalTxns = Array.isArray(txns) && txns.length > 0 ? txns : [];
-    const local108 = getStoredTransactions();
-    if (local108.length > 0 && finalTxns.length > local108.length) {
-      console.info(`[Supabase Reconciliation] Supabase has ${finalTxns.length} txns, local has ${local108.length}. Reconciling Supabase to match 108 local transactions...`);
-      reconcileSupabaseToMatchLocal108().catch(e => console.warn('Auto reconciliation note:', e));
-      finalTxns = local108;
-    }
 
     if (finalTxns.length === 0) {
       try {
@@ -1723,16 +1706,25 @@ export async function loadSupabaseInitialState(): Promise<{
         if (res.ok) {
           const json = await res.json();
           if (json?.data?.transactions && Array.isArray(json.data.transactions) && json.data.transactions.length > 0) {
-            finalTxns = json.data.transactions;
+            finalTxns = reconcileWithAuthoritativeTransactions(
+              getStoredTransactions(),
+              json.data.transactions,
+              json.data.deletedTransactionIds
+            );
           }
         }
       } catch {}
+    } else {
+      finalTxns = reconcileWithAuthoritativeTransactions(getStoredTransactions(), finalTxns);
     }
-    if (finalTxns.length === 0) {
+
+    if (finalTxns.length > 0) {
+      saveStoredTransactions(finalTxns, true);
+    } else {
       finalTxns = getStoredTransactions();
-    }
-    if (finalTxns.length === 0) {
-      finalTxns = findAllBrowserCachedTransactions();
+      if (finalTxns.length === 0) {
+        finalTxns = findAllBrowserCachedTransactions();
+      }
     }
 
     // Auto-Restore Safeguard: If Supabase was wiped/deleted (txns is 0) but we have cached transactions (> 0),

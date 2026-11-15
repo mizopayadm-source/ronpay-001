@@ -217,7 +217,8 @@ export const WorkspaceRouterModal: React.FC<WorkspaceRouterModalProps> = ({
     return () => {
       isMounted = false;
     };
-  }, [isOpen, formattedE164, clean10Digits, campaigns, creatorProfile]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, formattedE164, clean10Digits, campaigns?.length, creatorProfile?.phone, creatorProfile?.role]);
 
   // Compute live financial statistics, chart series, and unified ledger for selectedOrg
   const orgAnalytics = useMemo(() => {

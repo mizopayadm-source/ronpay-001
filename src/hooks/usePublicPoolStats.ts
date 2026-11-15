@@ -95,44 +95,31 @@ export function usePublicPoolStats(): {
         return;
       }
 
-      // Check if we have recent cached stats (< 5 minutes old) to save Supabase Egress
       try {
-        const cachedRaw = localStorage.getItem('ronpay_public_pool_stats_v1');
-        if (cachedRaw) {
-          const cached = JSON.parse(cachedRaw);
-          if (cached && cached.lastUpdated) {
-            const ageMs = Date.now() - new Date(cached.lastUpdated).getTime();
-            if (ageMs < 5 * 60 * 1000 && cached.totalCount > 0) {
-              if (isMounted) {
-                setStats(cached);
-                setLoading(false);
-              }
-              return;
-            }
-          }
-        }
-      } catch {}
-
-      try {
-        const { data, error: supaError, count } = await supabase
+        const { data, error: supaError } = await supabase
           .from('transactions')
-          .select('amount, timestamp, created_at, status', { count: 'exact' });
+          .select('id, amount, total_amount, timestamp, created_at, status')
+          .neq('status', 'deleted');
 
         if (supaError) {
           throw supaError;
         }
 
         let totalAmount = 0;
+        let confirmedCount = 0;
         let todayCount = 0;
         const todayStr = new Date().toISOString().slice(0, 10);
 
         if (data && Array.isArray(data)) {
           data.forEach((tx: any) => {
+            const rawId = String(tx.id || '').trim();
+            if (!rawId || rawId.startsWith('VCH-') || rawId.startsWith('EXP-')) return;
             const s = String(tx.status || '').toLowerCase().trim();
             const isConfirmed = s === '' || s === 'completed' || s === 'paid' || s === 'verified' || s === 'success' || s === 'payment_success';
-            if (isConfirmed) {
-              const amt = Number(tx.amount) || Number(tx.total_amount) || 0;
+            const amt = Number(tx.amount) || Number(tx.total_amount) || 0;
+            if (isConfirmed && amt > 0) {
               totalAmount += amt;
+              confirmedCount += 1;
 
               const txDate = (tx.timestamp || tx.created_at || '').slice(0, 10);
               if (txDate === todayStr) {
@@ -145,7 +132,7 @@ export function usePublicPoolStats(): {
         if (isMounted) {
           const liveStats: PublicPoolStats = {
             totalAmount: Math.round(totalAmount * 100) / 100,
-            totalCount: count !== null && count !== undefined ? count : (data ? data.length : 0),
+            totalCount: confirmedCount,
             todayCount,
             lastUpdated: new Date().toISOString(),
           };
@@ -180,12 +167,16 @@ export function usePublicPoolStats(): {
 
     window.addEventListener('ronpay_data_synced', handleSync);
     window.addEventListener('ronpay_stats_updated', handleSync);
+    window.addEventListener('ronpay_transactions_updated', handleSync);
+    window.addEventListener('ronpay-transactions-updated', handleSync);
     window.addEventListener('storage', handleSync);
 
     return () => {
       isMounted = false;
       window.removeEventListener('ronpay_data_synced', handleSync);
       window.removeEventListener('ronpay_stats_updated', handleSync);
+      window.removeEventListener('ronpay_transactions_updated', handleSync);
+      window.removeEventListener('ronpay-transactions-updated', handleSync);
       window.removeEventListener('storage', handleSync);
     };
   }, [refreshFromLocal]);

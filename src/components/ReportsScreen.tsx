@@ -82,7 +82,8 @@ import {
   getDeletedTransactionIds,
   PERMANENTLY_PURGED_TX_IDS,
   getStoredTransactions,
-  saveStoredTransactions
+  saveStoredTransactions,
+  reconcileWithAuthoritativeTransactions
 } from '../utils/storage';
 import { getUserRole } from '../utils/rbac';
 import { INITIAL_TRANSACTIONS } from '../data/initialData';
@@ -318,31 +319,34 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
   }, []);
 
   const effectiveTransactions = useMemo(() => {
-    // Authoritative Transactions: Merge serverTransactions, prop transactions, and getStoredTransactions by updatedAt
-    const mergedMap = new Map<string, Transaction>();
-    const addListToMap = (list: Transaction[] | null | undefined) => {
-      if (!Array.isArray(list)) return;
-      for (const t of list) {
-        if (!t || !t.id) continue;
-        const k = String(t.id).toLowerCase().trim();
-        const existing = mergedMap.get(k);
-        if (!existing) {
-          mergedMap.set(k, t);
-        } else {
-          const tTime = new Date((t as any).updatedAt || t.createdAt || t.timestamp || 0).getTime();
-          const eTime = new Date((existing as any).updatedAt || existing.createdAt || existing.timestamp || 0).getTime();
-          if (tTime >= eTime) {
-            mergedMap.set(k, { ...existing, ...t });
+    let baseList: Transaction[] = [];
+    if (Array.isArray(serverTransactions) && serverTransactions.length > 0) {
+      baseList = reconcileWithAuthoritativeTransactions(getStoredTransactions(), serverTransactions);
+    } else {
+      const mergedMap = new Map<string, Transaction>();
+      const addListToMap = (list: Transaction[] | null | undefined) => {
+        if (!Array.isArray(list)) return;
+        for (const t of list) {
+          if (!t || !t.id) continue;
+          const k = String(t.id).toLowerCase().trim();
+          const existing = mergedMap.get(k);
+          if (!existing) {
+            mergedMap.set(k, t);
+          } else {
+            const tTime = new Date((t as any).updatedAt || t.createdAt || t.timestamp || 0).getTime();
+            const eTime = new Date((existing as any).updatedAt || existing.createdAt || existing.timestamp || 0).getTime();
+            if (tTime >= eTime) {
+              mergedMap.set(k, { ...existing, ...t });
+            }
           }
         }
-      }
-    };
+      };
 
-    addListToMap(serverTransactions);
-    addListToMap(transactions);
-    addListToMap(getStoredTransactions());
+      addListToMap(transactions);
+      addListToMap(getStoredTransactions());
+      baseList = Array.from(mergedMap.values());
+    }
 
-    let baseList = Array.from(mergedMap.values());
     if (baseList.length === 0 && Array.isArray(INITIAL_TRANSACTIONS) && INITIAL_TRANSACTIONS.length > 0) {
       baseList = [...INITIAL_TRANSACTIONS];
     }

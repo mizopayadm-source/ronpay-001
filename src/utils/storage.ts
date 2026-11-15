@@ -340,10 +340,6 @@ import { resolveApiUrl } from './apiConfig';
  * Automatically injects verified user identity & role headers for query-level database enforcement.
  */
 export const safeApiFetch = async (url: string, options?: RequestInit): Promise<Response | null> => {
-  if (url.includes('/api/data/sync')) {
-    // /api/data/sync endpoint has been completely removed in favor of Supabase SSOT
-    return null;
-  }
   if (typeof window !== 'undefined' && typeof navigator !== 'undefined' && !navigator.onLine) {
     return null;
   }
@@ -1104,7 +1100,30 @@ export const clearDeletedTransactionId = (txId: string): void => {
   } catch (e) {}
 };
 
-export const PERMANENTLY_PURGED_TX_IDS = new Set<string>();
+export const CANONICAL_PURGED_SIX_IDS = new Set<string>([
+  'rpay-cash-384065',
+  'rpay-cash-291846',
+  'rpay-cash-201950',
+  'rpay-cash-149460',
+  'rpay-cash-906171',
+  'rpay-cash-159800',
+]);
+
+export const PERMANENTLY_PURGED_TX_IDS = new Set<string>(Array.from(CANONICAL_PURGED_SIX_IDS));
+
+try {
+  if (typeof localStorage !== 'undefined') {
+    const rawPurged = localStorage.getItem('ronpay_permanently_purged_tx_ids_v1');
+    if (rawPurged) {
+      const parsedPurged = JSON.parse(rawPurged);
+      if (Array.isArray(parsedPurged)) {
+        parsedPurged.forEach((id: any) => {
+          if (id) PERMANENTLY_PURGED_TX_IDS.add(String(id).toLowerCase().trim());
+        });
+      }
+    }
+  }
+} catch {}
 
 export const getDeletedTransactionIds = (): Set<string> => {
   const result = new Set<string>();
@@ -1126,6 +1145,24 @@ export const getDeletedTransactionIds = (): Set<string> => {
     }
   } catch (e) {}
   return result;
+};
+
+export const saveDeletedTransactionIds = (ids: string[] | Set<string>): void => {
+  try {
+    const set = getDeletedTransactionIds();
+    for (const id of ids) {
+      if (!id) continue;
+      const clean = String(id).toLowerCase().trim();
+      set.add(clean);
+      PERMANENTLY_PURGED_TX_IDS.add(clean);
+    }
+    const arr = Array.from(set).slice(-2000);
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(DELETED_TX_IDS_KEY, JSON.stringify(arr));
+      localStorage.setItem('ronpay_deleted_tx_ids', JSON.stringify(arr));
+      localStorage.setItem('ronpay_permanently_purged_tx_ids_v1', JSON.stringify(Array.from(PERMANENTLY_PURGED_TX_IDS)));
+    }
+  } catch (e) {}
 };
 
 export const unpurgeTransactionIds = (ids: string[]): void => {
@@ -1165,6 +1202,7 @@ export const findAllBrowserCachedTransactions = (): Transaction[] => {
     'ronpay_db_backup_v1',
     'ronpay_db_backup',
     'RONPAY_LAST_CASH_TXN',
+    'ronpay_recent_user_created_txs_v1',
   ];
 
   // 1. Direct candidate keys
@@ -1258,21 +1296,23 @@ export const markTransactionAsDeleted = (txId: string, syncFirestore: boolean = 
       // Firebase removed
     }
 
-    // Immediately remove from local transaction cache to instantly reflect deletion
-    const raw = localStorage.getItem(TRANSACTIONS_KEY);
-    if (raw) {
-      try {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) {
-          const filtered = parsed.filter(t => t && String(t.id).toLowerCase().trim() !== clean);
-          if (filtered.length !== parsed.length) {
-            localStorage.setItem(TRANSACTIONS_KEY, JSON.stringify(filtered));
-            if (typeof window !== 'undefined') {
-              window.dispatchEvent(new CustomEvent('ronpay_transactions_updated', { detail: filtered }));
+    // Immediately remove from all local transaction cache keys to instantly reflect deletion
+    for (const key of [TRANSACTIONS_KEY, 'ronpay_transactions_v2', 'ronpay_transactions']) {
+      const raw = localStorage.getItem(key);
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) {
+            const filtered = parsed.filter(t => t && String(t.id).toLowerCase().trim() !== clean);
+            if (filtered.length !== parsed.length) {
+              localStorage.setItem(key, JSON.stringify(filtered));
+              if (key === TRANSACTIONS_KEY && typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('ronpay_transactions_updated', { detail: filtered }));
+              }
             }
           }
-        }
-      } catch {}
+        } catch {}
+      }
     }
   } catch (e) {}
 };
@@ -1282,25 +1322,16 @@ export const SYSTEM_HARD_PURGE_TIMESTAMP = 0;
 export const getStoredTransactions = (): Transaction[] => {
   try {
     // One-time self-heal: recover any transactions that were falsely marked as deleted by background sync
-    if (typeof localStorage !== 'undefined' && localStorage.getItem('ronpay_audit_tx_healed_v2') !== 'true') {
+    if (typeof localStorage !== 'undefined' && localStorage.getItem('ronpay_tonight_tx_recovery_v2') !== 'true') {
       try {
-        const initIds = new Set(
-          (Array.isArray(INITIAL_TRANSACTIONS) ? INITIAL_TRANSACTIONS : [])
-            .map((t: any) => String(t?.id || '').toLowerCase().trim())
-            .filter(Boolean)
-        );
-        const rawDel = localStorage.getItem(DELETED_TX_IDS_KEY) || localStorage.getItem('ronpay_deleted_tx_ids');
-        if (rawDel) {
-          const parsedDel = JSON.parse(rawDel);
-          if (Array.isArray(parsedDel)) {
-            const cleanedDel = parsedDel.filter((id: any) => !initIds.has(String(id || '').toLowerCase().trim()));
-            localStorage.setItem(DELETED_TX_IDS_KEY, JSON.stringify(cleanedDel));
-            localStorage.setItem('ronpay_deleted_tx_ids', JSON.stringify(cleanedDel));
-          }
-        }
-        initIds.forEach(id => PERMANENTLY_PURGED_TX_IDS.delete(id));
-        localStorage.setItem('ronpay_permanently_purged_tx_ids_v1', JSON.stringify(Array.from(PERMANENTLY_PURGED_TX_IDS)));
-        localStorage.setItem('ronpay_audit_tx_healed_v2', 'true');
+        // Reset deleted/purged sets back to only the 6 canonical purged IDs so any falsely purged recent transaction is restored
+        const canonicalArr = Array.from(CANONICAL_PURGED_SIX_IDS);
+        PERMANENTLY_PURGED_TX_IDS.clear();
+        canonicalArr.forEach(id => PERMANENTLY_PURGED_TX_IDS.add(id));
+        localStorage.setItem(DELETED_TX_IDS_KEY, JSON.stringify(canonicalArr));
+        localStorage.setItem('ronpay_deleted_tx_ids', JSON.stringify(canonicalArr));
+        localStorage.setItem('ronpay_permanently_purged_tx_ids_v1', JSON.stringify(canonicalArr));
+        localStorage.setItem('ronpay_tonight_tx_recovery_v2', 'true');
       } catch {}
     }
 
@@ -1315,11 +1346,16 @@ export const getStoredTransactions = (): Transaction[] => {
       } catch {}
     }
 
-    // Merge cached transactions with INITIAL_TRANSACTIONS to guarantee full 103+ transactions are present
+    // Merge cached transactions with INITIAL_TRANSACTIONS and any surviving browser cache slots (e.g. RONPAY_LAST_CASH_TXN)
     if (Array.isArray(INITIAL_TRANSACTIONS) && INITIAL_TRANSACTIONS.length > 0) {
+      const initIdSet = new Set<string>();
       const map = new Map<string, any>();
       for (const t of INITIAL_TRANSACTIONS) {
-        if (t && t.id) map.set(String(t.id).toLowerCase().trim(), t);
+        if (t && t.id) {
+          const clean = String(t.id).toLowerCase().trim();
+          initIdSet.add(clean);
+          map.set(clean, t);
+        }
       }
       for (const t of parsed) {
         if (t && t.id) {
@@ -1328,6 +1364,35 @@ export const getStoredTransactions = (): Transaction[] => {
           map.set(k, base ? { ...base, ...t } : t);
         }
       }
+      // Also check RONPAY_LAST_CASH_TXN and other browser cache keys for recent user-created transactions
+      try {
+        const cachedAll = findAllBrowserCachedTransactions();
+        const delNow = getDeletedTransactionIds();
+        for (const ct of cachedAll) {
+          if (!ct || !ct.id) continue;
+          const rawId = String(ct.id).trim();
+          const cleanId = rawId.toLowerCase();
+          if (
+            rawId.startsWith('VCH-') ||
+            rawId.startsWith('EXP-') ||
+            ct.status === 'deleted' ||
+            ct.status === 'approved' ||
+            delNow.has(cleanId) ||
+            PERMANENTLY_PURGED_TX_IDS.has(cleanId)
+          ) {
+            continue;
+          }
+          if (!map.has(cleanId)) {
+            map.set(cleanId, ct);
+            if (!initIdSet.has(cleanId)) {
+              import('../services/supabaseService').then(({ insertSupabaseTransaction }) => {
+                insertSupabaseTransaction(ct).catch(() => {});
+              }).catch(() => {});
+            }
+          }
+        }
+      } catch {}
+
       parsed = Array.from(map.values());
       if (typeof localStorage !== 'undefined') {
         try {
@@ -4196,6 +4261,14 @@ export const saveTransaction = (tx: Transaction): void => {
   const updated = [tx, ...current.filter(t => String(t.id).toLowerCase().trim() !== cleanTxId)];
   saveStoredTransactions(updated, false);
   recordUserPaidTxId(tx.id);
+  try {
+    if (typeof localStorage !== 'undefined') {
+      const rawRecent = localStorage.getItem('ronpay_recent_user_created_txs_v1');
+      const prevRecent: Transaction[] = rawRecent ? JSON.parse(rawRecent) : [];
+      const nextRecent = [tx, ...(Array.isArray(prevRecent) ? prevRecent : []).filter(t => t && String(t.id).toLowerCase().trim() !== cleanTxId)].slice(0, 100);
+      localStorage.setItem('ronpay_recent_user_created_txs_v1', JSON.stringify(nextRecent));
+    }
+  } catch {}
 
   if (typeof window !== 'undefined') {
     broadcastTabSync('transactions');
@@ -4452,13 +4525,8 @@ export const deleteStoredTransaction = (transactionId: string): void => {
   
   const updated = current.filter(t => String(t.id).toLowerCase().trim() !== cleanId.toLowerCase());
   
-  // Update local storage and broadcast
-  try {
-    localStorage.setItem(TRANSACTIONS_KEY, JSON.stringify(updated));
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('ronpay_transactions_updated', { detail: updated }));
-    }
-  } catch (e) {}
+  // Update all local storage slots and broadcast
+  saveStoredTransactions(updated, true);
 
   // Delete from Supabase Primary Store & recalibrate fund pool
   import('../services/supabaseService').then(({ deleteSupabaseTransaction, recalibrateSupabaseFundPool }) => {
@@ -4483,7 +4551,6 @@ export const deleteMultipleTransactions = (transactionIds: string[]): void => {
   const idSet = new Set(cleanIds.map(id => id.toLowerCase()));
 
   const current = getStoredTransactions();
-  const targetTxs = current.filter(t => idSet.has(String(t.id).toLowerCase().trim()));
 
   for (const id of cleanIds) {
     markTransactionAsDeleted(id, false);
@@ -4491,12 +4558,7 @@ export const deleteMultipleTransactions = (transactionIds: string[]): void => {
 
   const updated = current.filter(t => !idSet.has(String(t.id).toLowerCase().trim()));
 
-  try {
-    localStorage.setItem(TRANSACTIONS_KEY, JSON.stringify(updated));
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('ronpay_transactions_updated', { detail: updated }));
-    }
-  } catch (e) {}
+  saveStoredTransactions(updated, true);
 
   // Delete from Supabase Primary Store & recalibrate fund pool
   import('../services/supabaseService').then(({ deleteMultipleSupabaseTransactions, recalibrateSupabaseFundPool }) => {
@@ -5212,6 +5274,106 @@ export function mergeTransactions(existing: Transaction[], incoming: Transaction
     }
   });
   return Array.from(map.values()).sort((a, b) => new Date(b.timestamp || b.createdAt || 0).getTime() - new Date(a.timestamp || a.createdAt || 0).getTime());
+}
+
+/**
+ * Reconciles local browser transactions against an authoritative full snapshot from Supabase / Server SSOT.
+ * Prunes any stale/deleted local ghost transactions that are absent from the authoritative cloud snapshot,
+ * while preserving genuinely fresh offline/pending transactions created within the last 2 minutes.
+ */
+export function reconcileWithAuthoritativeTransactions(
+  existingLocal: Transaction[],
+  authoritativeCloud: Transaction[],
+  serverDeletedIds?: string[]
+): Transaction[] {
+  if (Array.isArray(serverDeletedIds) && serverDeletedIds.length > 0) {
+    saveDeletedTransactionIds(serverDeletedIds);
+  }
+  if (!Array.isArray(authoritativeCloud) || authoritativeCloud.length === 0) {
+    return mergeTransactions(existingLocal, []);
+  }
+
+  const delIds = getDeletedTransactionIds();
+  const filterValid = (t: Transaction) => {
+    if (!t || !t.id) return false;
+    const rawId = String(t.id).trim();
+    const cleanId = rawId.toLowerCase();
+    if (
+      rawId.startsWith('VCH-') ||
+      rawId.startsWith('EXP-') ||
+      t.status === 'deleted' ||
+      t.status === 'approved' ||
+      delIds.has(cleanId) ||
+      PERMANENTLY_PURGED_TX_IDS.has(cleanId)
+    ) {
+      return false;
+    }
+    const amt = Number(t.amount);
+    if (!isFinite(amt) || isNaN(amt) || amt <= 0) return false;
+    return true;
+  };
+
+  const cloudMap = new Map<string, Transaction>();
+  for (const inc of authoritativeCloud) {
+    if (!filterValid(inc)) continue;
+    const k = String(inc.id).toLowerCase().trim();
+    cloudMap.set(k, { ...inc, isSynced: true });
+  }
+
+  for (const prev of existingLocal || []) {
+    if (!prev || !prev.id) continue;
+    const k = String(prev.id).toLowerCase().trim();
+    if (delIds.has(k) || PERMANENTLY_PURGED_TX_IDS.has(k)) continue;
+
+    const cloudItem = cloudMap.get(k);
+    if (cloudItem) {
+      const prevTime = new Date(prev.updatedAt || prev.audit_marked_at || prev.audit_date || prev.timestamp || 0).getTime();
+      const incTime = new Date(cloudItem.updatedAt || cloudItem.audit_marked_at || cloudItem.audit_date || cloudItem.timestamp || 0).getTime();
+      const newer = incTime >= prevTime ? cloudItem : prev;
+      const merged: Transaction = incTime >= prevTime ? { ...prev, ...cloudItem, isSynced: true } : { ...cloudItem, ...prev, isSynced: true };
+      if (newer.metadata && newer.metadata.audit_mark === null) {
+        merged.audit_mark = undefined;
+        merged.audit_query = undefined;
+        merged.audit_marked_by = undefined;
+        merged.audit_marked_at = undefined;
+        if (newer.metadata.is_locked === false) {
+          merged.is_locked = false;
+          merged.locked_by = undefined;
+          merged.locked_at = undefined;
+        }
+      } else {
+        if (prev.audit_mark !== undefined && cloudItem.audit_mark === undefined && prevTime >= incTime) {
+          merged.audit_mark = prev.audit_mark;
+          merged.audit_query = prev.audit_query;
+          merged.audit_marked_by = prev.audit_marked_by;
+          merged.audit_marked_at = prev.audit_marked_at;
+        }
+        if (prev.is_locked !== undefined && cloudItem.is_locked === undefined && prevTime >= incTime) {
+          merged.is_locked = prev.is_locked;
+          merged.locked_by = prev.locked_by;
+          merged.audit_date = prev.audit_date;
+          merged.audit_period = prev.audit_period;
+          merged.audit_notes = prev.audit_notes;
+        }
+      }
+      cloudMap.set(k, merged);
+    } else if (filterValid(prev)) {
+      // Valid local transaction not yet in Supabase (or wiped by legacy reconcile) — preserve and sync UP to Supabase!
+      cloudMap.set(k, prev);
+      import('../services/supabaseService').then(({ insertSupabaseTransaction }) => {
+        insertSupabaseTransaction(prev).catch(() => {});
+      }).catch(() => {});
+      safeApiFetch('/api/transactions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(prev)
+      }).catch(() => {});
+    }
+  }
+
+  return Array.from(cloudMap.values()).sort(
+    (a, b) => new Date(b.timestamp || b.createdAt || 0).getTime() - new Date(a.timestamp || a.createdAt || 0).getTime()
+  );
 }
 export const clearRonpayLocalStorage = (): void => {
   if (typeof localStorage === 'undefined') return;

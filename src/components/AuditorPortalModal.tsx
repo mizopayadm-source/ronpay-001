@@ -109,7 +109,8 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
   const [liveOpeningBalance, setLiveOpeningBalance] = useState<number | null>(null);
   const [showDiscrepancyPanel, setShowDiscrepancyPanel] = useState<boolean>(false);
 
-  const handleSyncPortalData = async () => {
+  const handleSyncPortalData = async (notifyOrEvent: boolean | React.MouseEvent = false) => {
+    const notifyParent = typeof notifyOrEvent === 'boolean' ? notifyOrEvent : true;
     setIsSyncingPortal(true);
     try {
       await Promise.allSettled([
@@ -125,7 +126,7 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
         fetchExpensesFromFirestore(true)
       ]);
       setTick(t => t + 1);
-      if (onRecordsUpdated) onRecordsUpdated();
+      if (notifyParent && onRecordsUpdated) onRecordsUpdated();
     } catch {
       // Ignore network errors cleanly
     } finally {
@@ -137,7 +138,7 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
   useEffect(() => {
     if (!isOpen) return;
     setLiveOpeningBalance(null);
-    handleSyncPortalData();
+    handleSyncPortalData(false);
 
     const onSyncEvent = () => setTick(t => t + 1);
     window.addEventListener(RONPAY_SYNC_EVENT, onSyncEvent);
@@ -380,20 +381,23 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
     }
   }, [isRestrictedAuditor, appointedFromDate, appointedToDate, appointedPeriodLabel]);
 
+  const grantAuditorName = accessInfo?.grant?.auditorName || accessInfo?.grant?.auditor_name || '';
+  const grantAuditorPhone = accessInfo?.grant?.auditorPhone || accessInfo?.grant?.auditor_phone || '';
+  const profileNameVal = creatorProfile?.name || '';
+  const profilePhoneVal = creatorProfile?.phone || creatorProfile?.phoneNumber || '';
+
   useEffect(() => {
-    const grantName = accessInfo?.grant?.auditorName || accessInfo?.grant?.auditor_name;
-    const grantPhone = accessInfo?.grant?.auditorPhone || accessInfo?.grant?.auditor_phone;
-    if (grantName) {
-      setAuditorName(grantName);
-    } else if (creatorProfile?.name && creatorProfile.name !== 'Guest User') {
-      setAuditorName(creatorProfile.name);
+    if (grantAuditorName) {
+      setAuditorName(prev => prev === grantAuditorName ? prev : grantAuditorName);
+    } else if (profileNameVal && profileNameVal !== 'Guest User') {
+      setAuditorName(prev => prev === profileNameVal ? prev : profileNameVal);
     }
-    if (grantPhone) {
-      setAuditorPhone(grantPhone);
-    } else if (creatorProfile?.phone || creatorProfile?.phoneNumber) {
-      setAuditorPhone(creatorProfile.phone || creatorProfile.phoneNumber || '');
+    if (grantAuditorPhone) {
+      setAuditorPhone(prev => prev === grantAuditorPhone ? prev : grantAuditorPhone);
+    } else if (profilePhoneVal) {
+      setAuditorPhone(prev => prev === profilePhoneVal ? prev : profilePhoneVal);
     }
-  }, [accessInfo, creatorProfile]);
+  }, [grantAuditorName, grantAuditorPhone, profileNameVal, profilePhoneVal]);
 
   const toggleChecklistItem = (key: string) => {
     if (!canAudit || !campaign) return;

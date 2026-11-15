@@ -51,6 +51,7 @@ import {
   ensureCampaignImagesOptimizedAndSynced,
   saveAdminAuthState,
   mergeTransactions,
+  reconcileWithAuthoritativeTransactions,
   wipeAllClientStorage,
   findAllBrowserCachedTransactions,
   getActiveAuditorGrantsForUser,
@@ -366,12 +367,24 @@ export default function App() {
     setCampaigns(freshCampaigns);
     setAuditorPortalCampaign(prev => prev ? (freshCampaigns.find(c => c.id === prev.id) || prev) : null);
     setCreators(getStoredCreatorsList());
-    setCreatorProfile(getStoredCreatorProfile());
-    setPricingConfig(getStoredPricingConfig());
-    setAnnouncement(getStoredAnnouncement());
+    setCreatorProfile(prev => {
+      const next = getStoredCreatorProfile();
+      return JSON.stringify(prev) === JSON.stringify(next) ? prev : next;
+    });
+    setPricingConfig(prev => {
+      const next = getStoredPricingConfig();
+      return JSON.stringify(prev) === JSON.stringify(next) ? prev : next;
+    });
+    setAnnouncement(prev => {
+      const next = getStoredAnnouncement();
+      return JSON.stringify(prev) === JSON.stringify(next) ? prev : next;
+    });
     setAuditLogs(getStoredAuditLogs());
     setMembersState(getMembers());
-    setUserPaidIds(getStoredUserPaidTxIds());
+    setUserPaidIds(prev => {
+      const next = getStoredUserPaidTxIds();
+      return prev.length === next.length && prev.every((id, i) => id === next[i]) ? prev : next;
+    });
   }, []);
 
   // Automatic Silent Cache Inspection & Recovery on boot if Supabase has 0 txns:
@@ -417,12 +430,12 @@ export default function App() {
         await runStartupCleanupSequence().catch(() => {});
         const state = await loadSupabaseInitialState();
         if (isMounted) {
-          if (Array.isArray(state.transactions)) {
-            const merged = mergeTransactions(getStoredTransactions(), state.transactions);
-            setTransactions(merged);
-            saveStoredTransactions(merged, true);
+          if (Array.isArray(state.transactions) && state.transactions.length > 0) {
+            const reconciled = reconcileWithAuthoritativeTransactions(getStoredTransactions(), state.transactions);
+            setTransactions(reconciled);
+            saveStoredTransactions(reconciled, true);
             try {
-              window.dispatchEvent(new CustomEvent('ronpay_transactions_updated', { detail: merged }));
+              window.dispatchEvent(new CustomEvent('ronpay_transactions_updated', { detail: reconciled }));
             } catch {}
           }
           if (state.campaigns && state.campaigns.length > 0) {
@@ -471,9 +484,9 @@ export default function App() {
       txDebounceTimer = setTimeout(() => {
         fetchTableData('transactions', { forceAll: true }).then(txs => {
           if (isMounted && Array.isArray(txs) && txs.length > 0) {
-            const merged = mergeTransactions(getStoredTransactions(), txs as Transaction[]);
-            setTransactions(merged);
-            saveStoredTransactions(merged, true);
+            const reconciled = reconcileWithAuthoritativeTransactions(getStoredTransactions(), txs as Transaction[]);
+            setTransactions(reconciled);
+            saveStoredTransactions(reconciled, true);
           }
         }).catch(() => {});
       }, 1500);
@@ -522,7 +535,8 @@ export default function App() {
       setSelectedCampaign(prev => {
         if (!prev) return null;
         const matched = freshList.find(c => c.id.toLowerCase() === prev.id.toLowerCase());
-        return matched ? { ...prev, ...matched } : prev;
+        if (!matched) return prev;
+        return JSON.stringify(prev) === JSON.stringify(matched) ? prev : matched;
       });
     };
 
@@ -578,7 +592,8 @@ export default function App() {
         setSelectedCampaign(prev => {
           if (!prev) return null;
           const matched = freshList.find(c => c.id.toLowerCase() === prev.id.toLowerCase());
-          return matched ? { ...prev, ...matched } : prev;
+          if (!matched) return prev;
+          return JSON.stringify(prev) === JSON.stringify(matched) ? prev : matched;
         });
       } else if (e.key === 'ronpay_transactions' || e.key === 'ronpay_transactions_v2') {
         setTransactions(getStoredTransactions());
@@ -724,9 +739,9 @@ export default function App() {
         fetchTableData('campaigns').catch(() => [])
       ]);
       if (Array.isArray(txs) && txs.length > 0) {
-        const merged = mergeTransactions(getStoredTransactions(), txs as Transaction[]);
-        setTransactions(merged);
-        saveStoredTransactions(merged, true);
+        const reconciled = reconcileWithAuthoritativeTransactions(getStoredTransactions(), txs as Transaction[]);
+        setTransactions(reconciled);
+        saveStoredTransactions(reconciled, true);
       }
       if (Array.isArray(camps) && camps.length > 0) {
         setCampaigns(camps as Campaign[]);
@@ -1193,14 +1208,14 @@ export default function App() {
   useEffect(() => {
     if (selectedCampaign && campaigns.length > 0) {
       const matched = campaigns.find(c => c.id.toLowerCase() === selectedCampaign.id.toLowerCase());
-      if (matched && (
+      if (matched && matched !== selectedCampaign && (
         matched.status !== selectedCampaign.status ||
         matched.title !== selectedCampaign.title ||
         matched.targetAmount !== selectedCampaign.targetAmount ||
         matched.upiId !== selectedCampaign.upiId ||
         matched.officerPasscode !== selectedCampaign.officerPasscode ||
         matched.allowPublicGroupDeposits !== selectedCampaign.allowPublicGroupDeposits ||
-        matched.updatedAt !== selectedCampaign.updatedAt
+        (matched.updatedAt && matched.updatedAt !== selectedCampaign.updatedAt)
       )) {
         setSelectedCampaign(matched);
       }

@@ -161,7 +161,14 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
   // Ground truth confirmed transactions from safeTransactions (matches ReportsScreen 100%)
   const confirmedTxns = useMemo(() => {
-    return safeTransactions.filter(t => t && isConfirmedTransaction(t) && Number(t.amount) > 0);
+    const deletedIds = getDeletedTransactionIds();
+    return safeTransactions.filter(t => {
+      if (!t || !t.id) return false;
+      const rawId = String(t.id).trim();
+      const cleanId = rawId.toLowerCase();
+      if (rawId.startsWith('VCH-') || rawId.startsWith('EXP-') || deletedIds.has(cleanId)) return false;
+      return isConfirmedTransaction(t) && Number(t.amount) > 0;
+    });
   }, [safeTransactions]);
 
   const ledgerTotalAmount = useMemo(() => {
@@ -311,11 +318,11 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
   // Organization Campaigns available for the Dedicated Organization Dashboard (Strict zero-leakage scope)
   const availableOrgCampaigns = useMemo(() => {
-    const kumtluangList = campaignsList.filter(c => c && !c.isVoided && c.category === 'kumtluang');
+    const kumtluangList = safeCampaigns.filter(c => c && !c.isVoided && c.category === 'kumtluang');
 
     // 1. Super Admin sees all kumtluang campaigns
     if (isAuthorizedAdmin) {
-      return kumtluangList.length > 0 ? kumtluangList : campaignsList.filter(c => c && !c.isVoided);
+      return kumtluangList.length > 0 ? kumtluangList : safeCampaigns.filter(c => c && !c.isVoided);
     }
 
     // 2. Authenticated Creator / Officer / Auditor: strictly limited to authorized campaigns
@@ -341,7 +348,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     // Default: strictly single active campaign (e.g. BCM Ebenezer or first available), never the full list of all orgs
     const defaultCamp = kumtluangList.find(c => c.id === 'cmp-kumtluang-1') || kumtluangList[0];
     return defaultCamp ? [defaultCamp] : [];
-  }, [campaignsList, isGuestUser, isAuthorizedAdmin, creatorProfile, selectedOrgCampaignId]);
+  }, [safeCampaigns, isGuestUser, isAuthorizedAdmin, creatorProfile, selectedOrgCampaignId]);
 
   const activeOrgCampaign = useMemo(() => {
     if (selectedOrgCampaignId) {
@@ -381,9 +388,11 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   // Comprehensive Statistics & Reports for the Active Organization Dashboard
   const orgDashboardStats = useMemo(() => {
     if (!activeOrgCampaign) return null;
-    const deletedIds = new Set(getDeletedTransactionIds());
-    const validTxns = transactions.filter(tx => {
-      if (!tx || deletedIds.has(tx.id)) return false;
+    const deletedIds = getDeletedTransactionIds();
+    const validTxns = safeTransactions.filter(tx => {
+      if (!tx || !tx.id) return false;
+      const rawId = String(tx.id).trim();
+      if (rawId.startsWith('VCH-') || rawId.startsWith('EXP-') || deletedIds.has(rawId.toLowerCase())) return false;
       if (!isConfirmedTransaction(tx)) return false;
       return isTransactionForCampaign(tx, activeOrgCampaign);
     });
@@ -534,7 +543,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
       maxMonthlyVal,
       recentLedger: combinedLedger.slice(0, 12),
     };
-  }, [activeOrgCampaign, transactions]);
+  }, [activeOrgCampaign, safeTransactions]);
 
   // Check if a campaign is active (not expired, voided, completed, cancelled, or archived)
   const isCampaignActive = (c: Campaign): boolean => {
@@ -648,7 +657,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     return () => {
       window.removeEventListener('kut_app_location_updated', handleLocationUpdated);
     };
-  }, [requestUserGPS, userCoords]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requestUserGPS]);
 
   // Memoized distance lookup (in km) from current user position to each campaign
   const campaignDistances = useMemo(() => {
@@ -2428,7 +2438,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             const campDistance = campaignDistances.get(camp.id);
             const effectiveValidity = camp.validityDate || camp.expiry_date || camp.valid_until || (camp as any).validity_date || (camp as any).metadata?.validityDate || (camp as any).metadata?.expiry_date || (camp as any).metadata?.valid_until || (camp.category === 'ralna' && camp.createdAt ? new Date(new Date(camp.createdAt).getTime() + 3 * 24 * 3600 * 1000).toISOString() : undefined);
             const isExpired = isCampaignExpired(effectiveValidity, camp.status, camp.category, camp.createdAt);
-            const campTransactions = transactions.filter(t => isTransactionForCampaign(t, camp) && isConfirmedTransaction(t));
+            const campTransactions = safeTransactions.filter(t => isTransactionForCampaign(t, camp) && isConfirmedTransaction(t));
             const totalRaised = campTransactions.reduce((sum, t) => sum + t.amount, 0);
             const hasTarget = typeof camp.targetAmount === 'number' && camp.targetAmount > 0;
             const target = hasTarget ? camp.targetAmount : 0;
