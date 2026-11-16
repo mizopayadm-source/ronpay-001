@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { 
   X, 
   ShieldCheck, 
@@ -318,6 +318,7 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
   const [showDiscrepancyDrawer, setShowDiscrepancyDrawer] = useState<boolean>(false);
   const [showQuickAssignDrawer, setShowQuickAssignDrawer] = useState<boolean>(false);
   const [qaMode, setQaMode] = useState<'single' | 'dual'>('single');
+  const [qaScope, setQaScope] = useState<'both' | 'expenditure_only'>('both');
   const [qaName1, setQaName1] = useState<string>('');
   const [qaPhone1, setQaPhone1] = useState<string>('');
   const [qaPin1, setQaPin1] = useState<string>('1234');
@@ -325,9 +326,105 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
   const [qaPhone2, setQaPhone2] = useState<string>('');
   const [qaPin2, setQaPin2] = useState<string>('1234');
 
+  const effectiveAuditScope = useMemo((): 'both' | 'expenditure_only' => {
+    const freshCamp = campaign?.id
+      ? getStoredCampaigns().find(c => String(c.id).toLowerCase().trim() === String(campaign.id).toLowerCase().trim()) || campaign
+      : campaign;
+    const scope =
+      campaignAppointedGrant?.auditScope ||
+      campaignAppointedGrant?.audit_scope ||
+      freshCamp?.auditScope ||
+      (freshCamp as any)?.metadata?.auditScope ||
+      'both';
+    return scope === 'expenditure_only' ? 'expenditure_only' : 'both';
+  }, [campaignAppointedGrant, campaign, tick]);
+
+  const isExpenditureOnlyAudit = effectiveAuditScope === 'expenditure_only';
+
+  const handleToggleAuditScope = (nextScope: 'both' | 'expenditure_only') => {
+    if (!campaign) return;
+    const nowIso = new Date().toISOString();
+    const rawGrants = getStoredAuditorGrants(campaign.id);
+    rawGrants.forEach(g => {
+      if (g && g.status === 'active') {
+        saveAuditorGrant({
+          ...g,
+          auditScope: nextScope,
+          audit_scope: nextScope,
+          updatedAt: nowIso,
+          updated_at: nowIso
+        });
+      }
+    });
+    const updatedGrants = getStoredAuditorGrants(campaign.id);
+    saveCampaign({
+      ...campaign,
+      auditorGrants: updatedGrants,
+      auditScope: nextScope,
+      metadata: {
+        ...(campaign.metadata || {}),
+        auditorGrants: updatedGrants,
+        auditScope: nextScope
+      }
+    });
+    setQaScope(nextScope);
+    setTick(t => t + 1);
+    setLockToast(
+      nextScope === 'expenditure_only'
+        ? '📉 Sum Chhuak (Expenditure) Chauh Audit Mode: Sum Lut (Income/Receipts) chu Collector/Treasurer thun sa anga pawm a ni a, audit hran a ngai lo.'
+        : '⚖️ Sum Lut (Income) & Sum Chhuak (Expenditure) Pahnih Audit Mode thlan a ni e.'
+    );
+    if (onRecordsUpdated) onRecordsUpdated();
+    setTimeout(() => setLockToast(null), 3500);
+  };
+
   const currentAuditorKey = useMemo(() => {
+    const matchedByNameOrPhone = appointedAuditors.find(a => {
+      const pClean = String(auditorPhone || '').replace(/\D/g, '').slice(-10);
+      if (pClean.length === 10 && a.auditorKey === pClean) return true;
+      const nClean = String(auditorName || '').toLowerCase().trim();
+      if (nClean && a.auditorName.toLowerCase().trim() === nClean) return true;
+      return false;
+    });
+    if (matchedByNameOrPhone) return matchedByNameOrPhone.auditorKey;
     return normalizeAuditorKey(auditorPhone || creatorProfile?.phone, auditorName || creatorProfile?.name);
-  }, [auditorPhone, auditorName, creatorProfile]);
+  }, [auditorPhone, auditorName, creatorProfile, appointedAuditors]);
+
+  const effectiveAuditorPhone = useMemo(() => {
+    const matched = appointedAuditors.find(a => a.auditorKey === currentAuditorKey);
+    return matched?.auditorPhone || auditorPhone || creatorProfile?.phone || '';
+  }, [appointedAuditors, currentAuditorKey, auditorPhone, creatorProfile]);
+
+  const getRecordAuditCategory = useCallback(
+    (rec: any, recordType: 'transaction' | 'expense'): 'audited' | 'unaudited' | 'flagged' => {
+      if (recordType === 'transaction' && isExpenditureOnlyAudit) {
+        return 'audited';
+      }
+      const verMap: Record<string, any> = {
+        ...(rec?.metadata?.auditor_verifications || {}),
+        ...(rec?.auditor_verifications || {})
+      };
+      const isViewerCoAuditor = isDualAuditMode && appointedAuditors.some(a => a.auditorKey === currentAuditorKey);
+      if (isViewerCoAuditor) {
+        const myEntry = verMap[currentAuditorKey];
+        if (myEntry && myEntry.mark) {
+          if (myEntry.mark === 'flagged') return 'flagged';
+          if (myEntry.mark === 'verified') return 'audited';
+          if (myEntry.mark === 'unchecked') return 'unaudited';
+        }
+        const otherCoAuditorHasEntry = appointedAuditors.some(
+          a => a.auditorKey !== currentAuditorKey && verMap[a.auditorKey]?.mark
+        );
+        if (otherCoAuditorHasEntry) {
+          return 'unaudited';
+        }
+      }
+      if (rec?.audit_mark === 'flagged') return 'flagged';
+      if (rec?.audit_mark === 'verified' || Boolean(rec?.is_locked)) return 'audited';
+      return 'unaudited';
+    },
+    [isExpenditureOnlyAudit, isDualAuditMode, appointedAuditors, currentAuditorKey]
+  );
 
   // Flag query input state
   const [flaggingRecordId, setFlaggingRecordId] = useState<string | null>(null);
@@ -481,7 +578,7 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
       auditorName || creatorProfile?.name || 'Auditor',
       nextMark === 'flagged' ? (queryText || 'Enfiah ngai / Query awm') : '',
       true, // forceUnlock = true, allowing check/uncheck/undo before final period lock
-      auditorPhone || creatorProfile?.phone || ''
+      effectiveAuditorPhone
     );
 
     if (ok) {
@@ -517,9 +614,8 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
   const handleVerifyAllRecords = (targetType: 'transaction' | 'expense') => {
     if (!canAudit) return;
     const records = targetType === 'transaction' ? filteredTransactions : filteredExpenses;
-    const effPhone = auditorPhone || creatorProfile?.phone || '';
     const idsToVerify = records
-      .filter(r => r.audit_mark !== 'verified' || !r.is_locked)
+      .filter(r => getRecordAuditCategory(r, targetType) !== 'audited' || !r.is_locked)
       .map(r => r.id);
     const count = markBatchRecordsAuditVerification(
       idsToVerify,
@@ -528,7 +624,7 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
       auditorName || creatorProfile?.name || 'Auditor',
       '',
       true,
-      effPhone
+      effectiveAuditorPhone
     );
     if (count > 0) {
       setTick(t => t + 1);
@@ -579,15 +675,15 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
 
     const lockedTxList = verifiedTx.filter(t => t.is_locked);
     const unlockedTxList = verifiedTx.filter(t => !t.is_locked);
-    const auditVerifiedTxList = verifiedTx.filter(t => t.audit_mark === 'verified');
-    const auditFlaggedTxList = verifiedTx.filter(t => t.audit_mark === 'flagged');
-    const uncheckedTxList = verifiedTx.filter(t => !t.audit_mark);
+    const auditVerifiedTxList = verifiedTx.filter(t => getRecordAuditCategory(t, 'transaction') === 'audited');
+    const auditFlaggedTxList = verifiedTx.filter(t => getRecordAuditCategory(t, 'transaction') === 'flagged');
+    const uncheckedTxList = verifiedTx.filter(t => getRecordAuditCategory(t, 'transaction') === 'unaudited');
 
     const lockedExpList = allExpenses.filter(e => e.is_locked);
     const unlockedExpList = allExpenses.filter(e => !e.is_locked);
-    const auditVerifiedExpList = allExpenses.filter(e => e.audit_mark === 'verified');
-    const auditFlaggedExpList = allExpenses.filter(e => e.audit_mark === 'flagged');
-    const uncheckedExpList = allExpenses.filter(e => !e.audit_mark);
+    const auditVerifiedExpList = allExpenses.filter(e => getRecordAuditCategory(e, 'expense') === 'audited');
+    const auditFlaggedExpList = allExpenses.filter(e => getRecordAuditCategory(e, 'expense') === 'flagged');
+    const uncheckedExpList = allExpenses.filter(e => getRecordAuditCategory(e, 'expense') === 'unaudited');
 
     return {
       openingBalance,
@@ -623,7 +719,7 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
       totalAuditFlagged: auditFlaggedTxList.length + auditFlaggedExpList.length,
       totalUnchecked: uncheckedTxList.length + uncheckedExpList.length
     };
-  }, [allTransactions, allExpenses, effectiveOpeningBalance]);
+  }, [allTransactions, allExpenses, effectiveOpeningBalance, getRecordAuditCategory]);
 
   // Cross-Check & Reconciliation Analytics (Bank/UPI vs Cash, Member Roll, Section-wise, Collector-wise, Anomaly Scanner)
   const crossCheckData = useMemo(() => {
@@ -942,11 +1038,12 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
       };
 
       const amt = Number(t.amount) || 0;
+      const cat = getRecordAuditCategory(t, 'transaction');
       grp.totalAmount += amt;
       grp.count += 1;
-      if (t.audit_mark === 'verified' || t.is_locked) {
+      if (cat === 'audited') {
         grp.verifiedCount += 1;
-      } else if (t.audit_mark === 'flagged') {
+      } else if (cat === 'flagged') {
         grp.flaggedCount += 1;
       } else {
         grp.uncheckedCount += 1;
@@ -964,7 +1061,7 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
       if (pA === 10 && a.baseHead !== b.baseHead) return a.baseHead.localeCompare(b.baseHead);
       return a.sortKey.localeCompare(b.sortKey);
     });
-  }, [filteredTransactions, campaign]);
+  }, [filteredTransactions, campaign, getRecordAuditCategory]);
 
   // Unified Cash Book (Receipts & Payments) with Date Range & Audited/Unaudited Distinction
   const cashBookAuditData = useMemo(() => {
@@ -1099,13 +1196,7 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
 
     inRangeTxs.forEach(t => {
       const iso = getTxIsoDate(t);
-      const isAudited = t.audit_mark === 'verified' || Boolean(t.is_locked);
-      const isFlagged = t.audit_mark === 'flagged';
-      const auditCategory: 'audited' | 'unaudited' | 'flagged' = isFlagged
-        ? 'flagged'
-        : isAudited
-        ? 'audited'
-        : 'unaudited';
+      const auditCategory = getRecordAuditCategory(t, 'transaction');
 
       const isGroup = t.donorType === 'group' || (Boolean(t.groupName) && t.groupName!.trim().length > 0) || (Boolean(t.donorName) && t.donorName!.toLowerCase().startsWith('group'));
       const isGeneral = t.donorType === 'general' || Boolean((t as any).generalCollectionTitle) || (Boolean(t.donorName) && (t.donorName!.toLowerCase().includes('inkhawm') || t.donorName!.toLowerCase().includes('inkawm') || t.donorName!.toLowerCase().includes('pathianni') || t.donorName!.toLowerCase().includes('general')));
@@ -1152,13 +1243,7 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
 
     inRangeExps.forEach(e => {
       const iso = getExpIsoDate(e);
-      const isAudited = e.audit_mark === 'verified' || Boolean(e.is_locked);
-      const isFlagged = e.audit_mark === 'flagged';
-      const auditCategory: 'audited' | 'unaudited' | 'flagged' = isFlagged
-        ? 'flagged'
-        : isAudited
-        ? 'audited'
-        : 'unaudited';
+      const auditCategory = getRecordAuditCategory(e, 'expense');
 
       const payee = e.paidTo || e.payeeName || (e as any).payee || 'Vendor';
       const head = e.head || e.expenseHead || 'Senso';
@@ -1317,7 +1402,7 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
       filteredPayments,
       receiptHeadGroups
     };
-  }, [allTransactions, allExpenses, campaign, cbPreset, cbFromDate, cbToDate, cbAuditFilter, searchQuery, effectiveOpeningBalance, isRestrictedAuditor, appointedFromDate, appointedToDate, appointedPeriodLabel]);
+  }, [allTransactions, allExpenses, campaign, cbPreset, cbFromDate, cbToDate, cbAuditFilter, searchQuery, effectiveOpeningBalance, isRestrictedAuditor, appointedFromDate, appointedToDate, appointedPeriodLabel, getRecordAuditCategory]);
 
   // Dual / Co-Auditor Consensus, Progress & Discrepancy Engine
   const dualAuditSummary = useMemo(() => {
@@ -1481,7 +1566,9 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
       }
     };
 
-    cashBookAuditData.inRangeTxs.forEach(t => inspectRecord(t, 'transaction'));
+    if (!isExpenditureOnlyAudit) {
+      cashBookAuditData.inRangeTxs.forEach(t => inspectRecord(t, 'transaction'));
+    }
     cashBookAuditData.inRangeExps.forEach(e => inspectRecord(e, 'expense'));
 
     // Sort discrepancyItems so Expenses (Senso / Payments) appear first when inspecting discrepancies
@@ -2235,6 +2322,43 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                   </span>
                 )}
 
+                {(isAdmin || isCreator) ? (
+                  <div className="inline-flex rounded-xl bg-slate-950/90 p-0.5 border border-slate-700 items-center">
+                    <button
+                      type="button"
+                      onClick={() => handleToggleAuditScope('expenditure_only')}
+                      title="Income/Receipts chu Collector/Treasurer thun sa anga pawmin Sum Chhuak (Expenditure) chauh audit tir rawh"
+                      className={`px-2.5 py-1 rounded-lg text-[10px] font-black transition cursor-pointer flex items-center gap-1 ${
+                        isExpenditureOnlyAudit
+                          ? 'bg-rose-500 text-white shadow-2xs'
+                          : 'text-slate-300 hover:text-white'
+                      }`}
+                    >
+                      <span>📉 Sum Chhuak Chauh (Income Audit Ngai Lo)</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleToggleAuditScope('both')}
+                      title="Sum Lut (Receipts) leh Sum Chhuak (Expenditure) a pahnihin audit tir rawh"
+                      className={`px-2.5 py-1 rounded-lg text-[10px] font-black transition cursor-pointer flex items-center gap-1 ${
+                        !isExpenditureOnlyAudit
+                          ? 'bg-emerald-500 text-slate-950 shadow-2xs'
+                          : 'text-slate-300 hover:text-white'
+                      }`}
+                    >
+                      <span>⚖️ Sum Lut &amp; Sum Chhuak Audit</span>
+                    </button>
+                  </div>
+                ) : (
+                  <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-lg border flex items-center gap-1 ${
+                    isExpenditureOnlyAudit
+                      ? 'bg-rose-500/20 text-rose-200 border-rose-400/40'
+                      : 'bg-emerald-500/20 text-emerald-300 border-emerald-400/40'
+                  }`}>
+                    <span>{isExpenditureOnlyAudit ? '📉 Sum Chhuak Chauh Audit (Income Pawm Sa)' : '⚖️ Sum Lut & Sum Chhuak Audit'}</span>
+                  </span>
+                )}
+
                 {isAdmin && (
                   <button
                     type="button"
@@ -2263,9 +2387,15 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                       <span className="font-black">
                         {idx + 1}. {aud.auditorName}{isMe ? ' (Nangmah)' : ''}
                       </span>
-                      <span className="px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 font-bold text-[9.5px]" title="Receipts (Sum Lut) Audit Zat">
-                        Lut: ✓{aud.txVerifiedCount} (₹{aud.txVerifiedAmount.toLocaleString('en-IN')})
-                      </span>
+                      {!isExpenditureOnlyAudit ? (
+                        <span className="px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 font-bold text-[9.5px]" title="Receipts (Sum Lut) Audit Zat">
+                          Lut: ✓{aud.txVerifiedCount} (₹{aud.txVerifiedAmount.toLocaleString('en-IN')})
+                        </span>
+                      ) : (
+                        <span className="px-1.5 py-0.2 rounded bg-emerald-500/15 text-emerald-300 font-bold text-[9.5px]" title="Income/Receipts chu Treasurer thun sa anga pawm a ni">
+                          Lut: ✓Pawm Sa
+                        </span>
+                      )}
                       <span className="px-1.5 py-0.2 rounded bg-rose-500/20 text-rose-300 font-bold text-[9.5px]" title="Payments / Expenditure (Sum Chhuak) Audit Zat">
                         Senso: ✓{aud.expVerifiedCount} (₹{aud.expVerifiedAmount.toLocaleString('en-IN')})
                       </span>
@@ -2560,6 +2690,37 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                   </div>
                 )}
 
+                {/* Optional Income/Receipts Audit Scope inside Quick Assign */}
+                <div className="flex items-center justify-between gap-2 flex-wrap pt-1 border-t border-slate-700">
+                  <span className="text-[10.5px] text-slate-300 font-bold">
+                    Sum Lut (Income) Audit Tel Duh leh Duh Loh (Optional):
+                  </span>
+                  <div className="inline-flex rounded-lg bg-slate-900 p-0.5 border border-slate-700">
+                    <button
+                      type="button"
+                      onClick={() => setQaScope('expenditure_only')}
+                      className={`px-2.5 py-1 rounded-md text-[10px] font-black transition cursor-pointer ${
+                        qaScope === 'expenditure_only'
+                          ? 'bg-rose-500 text-white'
+                          : 'text-slate-300 hover:text-white'
+                      }`}
+                    >
+                      📉 Sum Chhuak Chauh (Income Audit Ngai Lo)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setQaScope('both')}
+                      className={`px-2.5 py-1 rounded-md text-[10px] font-black transition cursor-pointer ${
+                        qaScope === 'both'
+                          ? 'bg-emerald-500 text-slate-950'
+                          : 'text-slate-300 hover:text-white'
+                      }`}
+                    >
+                      ⚖️ Sum Lut &amp; Sum Chhuak Pahnih Audit
+                    </button>
+                  </div>
+                </div>
+
                 <div className="flex items-center justify-between gap-2 flex-wrap pt-1">
                   <span className="text-[10.5px] text-slate-300">
                     Audit Hun Bi: <strong className="text-amber-300">{cashBookAuditData.rangeLabel}</strong> (Darkar 72 / Ni 3 Access)
@@ -2600,7 +2761,9 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                         auditFromDate: cashBookAuditData.effFrom || '',
                         audit_from_date: cashBookAuditData.effFrom || '',
                         auditToDate: cashBookAuditData.effTo || '',
-                        audit_to_date: cashBookAuditData.effTo || ''
+                        audit_to_date: cashBookAuditData.effTo || '',
+                        auditScope: qaScope,
+                        audit_scope: qaScope
                       };
                       saveAuditorGrant(g1);
 
@@ -2630,7 +2793,9 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                           auditFromDate: cashBookAuditData.effFrom || '',
                           audit_from_date: cashBookAuditData.effFrom || '',
                           auditToDate: cashBookAuditData.effTo || '',
-                          audit_to_date: cashBookAuditData.effTo || ''
+                          audit_to_date: cashBookAuditData.effTo || '',
+                          auditScope: qaScope,
+                          audit_scope: qaScope
                         };
                         saveAuditorGrant(g2);
                       }
@@ -2641,10 +2806,12 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                         ...campaign,
                         auditorGrants: updatedGrants,
                         requireDualAuditorConsensus: isDualNow,
+                        auditScope: qaScope,
                         metadata: {
                           ...(campaign.metadata || {}),
                           auditorGrants: updatedGrants,
-                          requireDualAuditorConsensus: isDualNow
+                          requireDualAuditorConsensus: isDualNow,
+                          auditScope: qaScope
                         }
                       });
                       setQaName1('');
@@ -3265,6 +3432,26 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                         </div>
                       </div>
 
+                      {isExpenditureOnlyAudit && (
+                        <div className="bg-emerald-950 text-emerald-200 px-3 py-2 border-b border-emerald-800 text-[10.5px] flex items-center justify-between flex-wrap gap-2">
+                          <div className="flex items-center gap-1.5 font-bold">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                            <span>
+                              <strong>Income (Sum Lut) Audit Ngai Lo Mode:</strong> Sum Lut hi Collector / Treasurer thun sa anga pawm a ni a, Auditor-in <strong>Sum Chhuak (Cr. Payments)</strong> chauh endik a ngai.
+                            </span>
+                          </div>
+                          {(isAdmin || isCreator) && (
+                            <button
+                              type="button"
+                              onClick={() => handleToggleAuditScope('both')}
+                              className="px-2 py-0.5 rounded bg-emerald-800 hover:bg-emerald-700 text-white font-black text-[9.5px] cursor-pointer shrink-0"
+                            >
+                              Sum Lut Audit Tel Tir Rawh
+                            </button>
+                          )}
+                        </div>
+                      )}
+
                       <div className={`overflow-x-auto ${cbFullHeight ? '' : 'max-h-[58vh] overflow-y-auto'}`}>
                         <table className="w-full text-left border-collapse text-xs">
                           <thead className="sticky top-0 z-10 bg-emerald-50 border-b border-emerald-200 text-[10px] font-black uppercase text-emerald-950">
@@ -3273,7 +3460,7 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                               <th className="p-2">Particulars (Sum Lut)</th>
                               <th className="p-2 text-center">Audit</th>
                               <th className="p-2 text-right">Amount (₹)</th>
-                              {canAudit && <th className="p-2 text-center">Action</th>}
+                              {canAudit && !isExpenditureOnlyAudit && <th className="p-2 text-center">Action</th>}
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-100">
@@ -3295,12 +3482,12 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                               <td className="p-2 text-right font-black text-slate-900 whitespace-nowrap tabular-nums">
                                 ₹{cashBookAuditData.openingBalance.toLocaleString('en-IN')}
                               </td>
-                              {canAudit && <td className="p-2 text-center text-slate-400">—</td>}
+                              {canAudit && !isExpenditureOnlyAudit && <td className="p-2 text-center text-slate-400">—</td>}
                             </tr>
 
                             {cashBookAuditData.filteredReceipts.length === 0 ? (
                               <tr>
-                                <td colSpan={canAudit ? 5 : 4} className="p-6 text-center text-slate-400 font-semibold">
+                                <td colSpan={canAudit && !isExpenditureOnlyAudit ? 5 : 4} className="p-6 text-center text-slate-400 font-semibold">
                                   He filter/range chhungah hian Receipts (Sum Lut) a awm rih lo.
                                 </td>
                               </tr>
@@ -3324,11 +3511,17 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                                           <span>{grpIdx + 1}. To {grp.baseHead} ({grp.monthYearLabel})</span>
                                         </div>
                                         <div className="text-[10px] text-slate-600">
-                                          ✓ Audit: {grp.auditedCount} • ⏳ La Audit Loh: {grp.unauditedCount} (Subsidiary: {grp.count} entries)
+                                          {isExpenditureOnlyAudit
+                                            ? `✓ Pawm Sa (${grp.count} entries — Audit ngai lo)`
+                                            : `✓ Audit: ${grp.auditedCount} • ⏳ La Audit Loh: ${grp.unauditedCount} (Subsidiary: ${grp.count} entries)`}
                                         </div>
                                       </td>
                                       <td className="p-2 text-center align-top whitespace-nowrap">
-                                        {allHeadAudited ? (
+                                        {isExpenditureOnlyAudit ? (
+                                          <span className="inline-flex items-center gap-1 text-[9px] font-black px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                            <span>✓ PAWM SA</span>
+                                          </span>
+                                        ) : allHeadAudited ? (
                                           <span className="inline-flex items-center gap-1 text-[9px] font-black px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
                                             <span>✓ AUDITED</span>
                                           </span>
@@ -3341,28 +3534,27 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                                       <td className="p-2 text-right font-black text-emerald-800 align-top whitespace-nowrap tabular-nums">
                                         ₹{grp.totalAmount.toLocaleString('en-IN')}
                                       </td>
-                                      {canAudit && (
+                                      {canAudit && !isExpenditureOnlyAudit && (
                                         <td className="p-2 text-center align-top whitespace-nowrap" onClick={e => e.stopPropagation()}>
                                           {grp.unauditedCount > 0 ? (
                                             <button
                                               type="button"
                                               onClick={() => {
-                                                const effPhone = auditorPhone || creatorProfile?.phone || '';
-                                                grp.items.forEach(item => {
-                                                  if (item.auditCategory !== 'audited') {
-                                                    markRecordAuditVerification(
-                                                      item.id,
-                                                      'transaction',
-                                                      'verified',
-                                                      auditorName || creatorProfile?.name || 'Auditor',
-                                                      '',
-                                                      true,
-                                                      effPhone
-                                                    );
-                                                  }
-                                                });
+                                                const effName = auditorName || creatorProfile?.name || 'Auditor';
+                                                const ids = grp.items.map(i => i.id);
+                                                markBatchRecordsAuditVerification(
+                                                  ids,
+                                                  'transaction',
+                                                  'verified',
+                                                  effName,
+                                                  '',
+                                                  true,
+                                                  effectiveAuditorPhone
+                                                );
                                                 setTick(t => t + 1);
+                                                setLockToast(`✅ '${grp.baseHead} (${grp.monthYearLabel})' chhunga receipt ${ids.length} chu '✓ Audited' tiin chhinchhiah a ni e!`);
                                                 if (onRecordsUpdated) onRecordsUpdated();
+                                                setTimeout(() => setLockToast(null), 2500);
                                               }}
                                               className="px-2 py-1 rounded-lg text-[10px] font-black bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer"
                                             >
@@ -3372,22 +3564,21 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                                             <button
                                               type="button"
                                               onClick={() => {
-                                                const effPhone = auditorPhone || creatorProfile?.phone || '';
-                                                grp.items.forEach(item => {
-                                                  markRecordAuditVerification(
-                                                    item.id,
-                                                    'transaction',
-                                                    undefined,
-                                                    auditorName || creatorProfile?.name || 'Auditor',
-                                                    '',
-                                                    true,
-                                                    effPhone
-                                                  );
-                                                });
+                                                const effName = auditorName || creatorProfile?.name || 'Auditor';
+                                                const ids = grp.items.map(i => i.id);
+                                                markBatchRecordsAuditVerification(
+                                                  ids,
+                                                  'transaction',
+                                                  undefined,
+                                                  effName,
+                                                  '',
+                                                  true,
+                                                  effectiveAuditorPhone
+                                                );
                                                 setTick(t => t + 1);
                                                 setLockToast(`↩️ '${grp.headName}' Head audit-na sut (Undo) a ni e.`);
                                                 if (onRecordsUpdated) onRecordsUpdated();
-                                                setTimeout(() => setLockToast(null), 3000);
+                                                setTimeout(() => setLockToast(null), 2500);
                                               }}
                                               title="Audit tawh a ni. Click la sut rawh."
                                               className="px-2 py-0.5 rounded-lg text-[10px] font-black bg-emerald-100 hover:bg-amber-100 text-emerald-800 hover:text-amber-900 border border-emerald-300 hover:border-amber-400 cursor-pointer transition"
@@ -3409,7 +3600,9 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                                           <div className="text-[10px] text-slate-500">{r.particulars} • Mode: {r.paymentMode}</div>
                                         </td>
                                         <td className="p-2 text-center align-top whitespace-nowrap">
-                                          {r.auditCategory === 'audited' ? (
+                                          {isExpenditureOnlyAudit ? (
+                                            <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800">✓ Pawm Sa</span>
+                                          ) : r.auditCategory === 'audited' ? (
                                             <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800">✓ Audited</span>
                                           ) : r.auditCategory === 'flagged' ? (
                                             <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-rose-100 text-rose-800">⚠️ Query</span>
@@ -3420,11 +3613,11 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                                         <td className="p-2 text-right font-bold text-emerald-700 align-top whitespace-nowrap tabular-nums">
                                           ₹{r.amount.toLocaleString('en-IN')}
                                         </td>
-                                        {canAudit && (
+                                        {canAudit && !isExpenditureOnlyAudit && (
                                           <td className="p-2 text-center align-top whitespace-nowrap">
                                             <button
                                               type="button"
-                                              onClick={() => handleMarkItem('transaction', r.id, r.audit_mark, 'verified', undefined, r.is_locked)}
+                                              onClick={() => handleMarkItem('transaction', r.id, r.audit_mark, 'verified', undefined, r.is_locked, r.auditCategory, r.isoDate)}
                                               title={r.auditCategory === 'audited' ? "Audit tawh a ni (Click la sut rawh / uncheck)" : "Audit / Dik tiin chhinchhiah rawh"}
                                               className={`px-1.5 py-0.5 rounded text-[9.5px] font-black border transition cursor-pointer ${
                                                 r.auditCategory === 'audited'
@@ -3467,7 +3660,12 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                                     )}
                                   </td>
                                   <td className="p-2 text-center align-top whitespace-nowrap">
-                                    {r.auditCategory === 'audited' ? (
+                                    {isExpenditureOnlyAudit ? (
+                                      <span className="inline-flex items-center gap-1 text-[9px] font-black px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                        <CheckCircle2 className="w-2.5 h-2.5" />
+                                        <span>✓ PAWM SA</span>
+                                      </span>
+                                    ) : r.auditCategory === 'audited' ? (
                                       <span className="inline-flex items-center gap-1 text-[9px] font-black px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
                                         {r.is_locked ? <Lock className="w-2.5 h-2.5" /> : <CheckCircle2 className="w-2.5 h-2.5" />}
                                         <span>✓ AUDITED</span>
@@ -3485,12 +3683,12 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                                   <td className="p-2 text-right font-black text-emerald-700 align-top whitespace-nowrap tabular-nums">
                                     ₹{r.amount.toLocaleString('en-IN')}
                                   </td>
-                                  {canAudit && (
+                                  {canAudit && !isExpenditureOnlyAudit && (
                                     <td className="p-2 text-center align-top whitespace-nowrap">
                                       <div className="inline-flex items-center gap-1">
                                         <button
                                           type="button"
-                                          onClick={() => handleMarkItem('transaction', r.id, r.audit_mark, 'verified', undefined, r.is_locked)}
+                                          onClick={() => handleMarkItem('transaction', r.id, r.audit_mark, 'verified', undefined, r.is_locked, r.auditCategory, r.isoDate)}
                                           title={r.auditCategory === 'audited' ? "Audit tawh a ni (Click la sut rawh / uncheck)" : "Audit / Dik tiin chhinchhiah rawh"}
                                           className={`px-2 py-1 rounded-lg text-[10px] font-black border transition cursor-pointer ${
                                             r.auditCategory === 'audited'

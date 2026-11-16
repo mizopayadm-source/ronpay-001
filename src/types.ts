@@ -168,6 +168,7 @@ export interface Campaign {
   auditorGrants?: AuditorAccessGrant[];
   auditSignOffs?: AuditorSignOffEntry[];
   requireDualAuditorConsensus?: boolean;
+  auditScope?: 'both' | 'expenditure_only';
   auditReconciliation?: {
     bankBalance?: number;
     cashInHand?: number;
@@ -370,6 +371,8 @@ export interface AuditorAccessGrant {
   audit_from_date?: string;
   auditToDate?: string;
   audit_to_date?: string;
+  auditScope?: 'both' | 'expenditure_only';
+  audit_scope?: 'both' | 'expenditure_only';
   createdAt?: string;
   created_at?: string;
   updatedAt?: string;

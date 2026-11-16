@@ -100,6 +100,11 @@ export const AuthorizedPersonsModal: React.FC<AuthorizedPersonsModalProps> = ({
     const activeCount = (campaign?.auditorGrants || []).filter(g => g.status === 'active').length;
     return campaign?.requireDualAuditorConsensus || activeCount >= 2 ? 'dual' : 'single';
   });
+  const [auditScopeMode, setAuditScopeMode] = useState<'both' | 'expenditure_only'>(() => {
+    const activeGrantScope = (campaign?.auditorGrants || []).find(g => g.status === 'active')?.auditScope ||
+                             (campaign?.auditorGrants || []).find(g => g.status === 'active')?.audit_scope;
+    return campaign?.auditScope || (campaign as any)?.metadata?.auditScope || activeGrantScope || 'both';
+  });
   const [auditorNameInput, setAuditorNameInput] = useState<string>('');
   const [auditorPhoneInput, setAuditorPhoneInput] = useState<string>('');
   const [auditorPinInput, setAuditorPinInput] = useState<string>('1234');
@@ -1063,6 +1068,8 @@ export const AuthorizedPersonsModal: React.FC<AuthorizedPersonsModalProps> = ({
       audit_from_date: auditorFromDate || '',
       auditToDate: auditorToDate || '',
       audit_to_date: auditorToDate || '',
+      auditScope: auditScopeMode,
+      audit_scope: auditScopeMode,
       notes: auditorNotesInput.trim() || `Financial Audit Access (${auditorDurationHours} Hours)`,
       permissions: ['AUDIT_FINANCIAL_REPORTS', 'MANAGE_AUDITOR_GRANTS']
     };
@@ -1098,16 +1105,25 @@ export const AuthorizedPersonsModal: React.FC<AuthorizedPersonsModalProps> = ({
         audit_from_date: auditorFromDate || '',
         auditToDate: auditorToDate || '',
         audit_to_date: auditorToDate || '',
+        auditScope: auditScopeMode,
+        audit_scope: auditScopeMode,
         notes: auditorNotesInput.trim() || `Co-Auditor Financial Audit Access (${auditorDurationHours} Hours)`,
         permissions: ['AUDIT_FINANCIAL_REPORTS', 'MANAGE_AUDITOR_GRANTS']
       };
       saveAuditorGrant(coGrant);
     }
 
-    // Also synchronize any other active grants on this campaign to the Creator's newly appointed date range so Co-Auditors always share the exact same locked period
+    // Also synchronize any other active grants on this campaign to the Creator's newly appointed date range and audit scope so Co-Auditors always share the exact same locked period & scope
     const rawGrants = getStoredAuditorGrants(campaign.id);
     rawGrants.forEach(g => {
-      if (g && g.status === 'active' && (g.auditFromDate !== (auditorFromDate || '') || g.auditToDate !== (auditorToDate || '') || g.auditPeriod !== effectivePeriodLabel)) {
+      if (
+        g &&
+        g.status === 'active' &&
+        (g.auditFromDate !== (auditorFromDate || '') ||
+          g.auditToDate !== (auditorToDate || '') ||
+          g.auditPeriod !== effectivePeriodLabel ||
+          g.auditScope !== auditScopeMode)
+      ) {
         saveAuditorGrant({
           ...g,
           auditPeriod: effectivePeriodLabel,
@@ -1116,6 +1132,8 @@ export const AuthorizedPersonsModal: React.FC<AuthorizedPersonsModalProps> = ({
           audit_from_date: auditorFromDate || '',
           auditToDate: auditorToDate || '',
           audit_to_date: auditorToDate || '',
+          auditScope: auditScopeMode,
+          audit_scope: auditScopeMode,
           updatedAt: now.toISOString(),
           updated_at: now.toISOString()
         });
@@ -1128,10 +1146,12 @@ export const AuthorizedPersonsModal: React.FC<AuthorizedPersonsModalProps> = ({
       ...campaign,
       auditorGrants: updatedGrants,
       requireDualAuditorConsensus: isNowDual,
+      auditScope: auditScopeMode,
       metadata: {
         ...(campaign.metadata || {}),
         auditorGrants: updatedGrants,
         requireDualAuditorConsensus: isNowDual,
+        auditScope: auditScopeMode,
         appointedAuditPeriod: effectivePeriodLabel,
         appointedAuditFromDate: auditorFromDate || '',
         appointedAuditToDate: auditorToDate || ''
@@ -1925,6 +1945,93 @@ export const AuthorizedPersonsModal: React.FC<AuthorizedPersonsModalProps> = ({
                     </div>
                   </div>
                 )}
+
+                {/* Optional Income/Receipts Audit Toggle (Both Income & Expenditure vs. Expenditure-Only) */}
+                <div className="pt-2.5 border-t border-slate-700/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+                      <h4 className="font-black text-xs sm:text-sm text-white">
+                        Sum Lut (Income / Receipts) Audit Tel Duh leh Duh Loh Thlanna
+                      </h4>
+                      <span className="text-[9.5px] font-black uppercase px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
+                        Optional
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-300 mt-0.5">
+                      Income (Sum Lut) hi Collector / Treasurer-te thun sa anga pawma <strong>Sum Chhuak (Expenditure) chauh</strong> audit tir duh chuan a hnuaiah hian thlang rawh.
+                    </p>
+                  </div>
+
+                  <div className="inline-flex rounded-xl bg-slate-800 p-1 border border-slate-700 shrink-0 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAuditScopeMode('expenditure_only');
+                        if (campaign) {
+                          const nowIso = new Date().toISOString();
+                          const rawGrants = getStoredAuditorGrants(campaign.id);
+                          rawGrants.forEach(g => {
+                            if (g && g.status === 'active') {
+                              saveAuditorGrant({ ...g, auditScope: 'expenditure_only', audit_scope: 'expenditure_only', updatedAt: nowIso, updated_at: nowIso });
+                            }
+                          });
+                          const updatedGrants = getStoredAuditorGrants(campaign.id);
+                          const updatedCamp: Campaign = {
+                            ...campaign,
+                            auditorGrants: updatedGrants,
+                            auditScope: 'expenditure_only',
+                            metadata: { ...(campaign.metadata || {}), auditorGrants: updatedGrants, auditScope: 'expenditure_only' }
+                          };
+                          saveCampaign(updatedCamp);
+                          setAuditorGrants(updatedGrants);
+                          if (onCampaignUpdated) onCampaignUpdated(updatedCamp);
+                        }
+                        showToast('📉 Sum Chhuak (Expenditure) Chauh Audit Mode: Income/Receipts chu audit ngai lo tura set a ni e.');
+                      }}
+                      className={`px-3 py-1.5 rounded-lg text-[11px] font-black transition cursor-pointer flex items-center gap-1.5 ${
+                        auditScopeMode === 'expenditure_only'
+                          ? 'bg-rose-500 text-white shadow-2xs'
+                          : 'text-slate-300 hover:text-white'
+                      }`}
+                    >
+                      <span>📉 Sum Chhuak Chauh (Income Audit Ngai Lo)</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAuditScopeMode('both');
+                        if (campaign) {
+                          const nowIso = new Date().toISOString();
+                          const rawGrants = getStoredAuditorGrants(campaign.id);
+                          rawGrants.forEach(g => {
+                            if (g && g.status === 'active') {
+                              saveAuditorGrant({ ...g, auditScope: 'both', audit_scope: 'both', updatedAt: nowIso, updated_at: nowIso });
+                            }
+                          });
+                          const updatedGrants = getStoredAuditorGrants(campaign.id);
+                          const updatedCamp: Campaign = {
+                            ...campaign,
+                            auditorGrants: updatedGrants,
+                            auditScope: 'both',
+                            metadata: { ...(campaign.metadata || {}), auditorGrants: updatedGrants, auditScope: 'both' }
+                          };
+                          saveCampaign(updatedCamp);
+                          setAuditorGrants(updatedGrants);
+                          if (onCampaignUpdated) onCampaignUpdated(updatedCamp);
+                        }
+                        showToast('⚖️ Sum Lut (Income) & Sum Chhuak (Expenditure) Pahnih Audit Mode thlan a ni e.');
+                      }}
+                      className={`px-3 py-1.5 rounded-lg text-[11px] font-black transition cursor-pointer flex items-center gap-1.5 ${
+                        auditScopeMode === 'both'
+                          ? 'bg-emerald-500 text-slate-950 shadow-2xs'
+                          : 'text-slate-300 hover:text-white'
+                      }`}
+                    >
+                      <span>⚖️ Sum Lut &amp; Sum Chhuak Pahnih Audit</span>
+                    </button>
+                  </div>
+                </div>
               </div>
 
               {/* Add Auditor Form */}
@@ -2282,6 +2389,64 @@ export const AuthorizedPersonsModal: React.FC<AuthorizedPersonsModalProps> = ({
                           className="w-full text-xs p-2.5 rounded-xl bg-white border border-amber-200 focus:outline-none focus:ring-2 focus:ring-amber-500 font-mono font-bold"
                         />
                       </div>
+                    </div>
+                  </div>
+
+                  {/* Audit Scope Option: Expenditure-Only vs Both Income & Expenditure */}
+                  <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3.5 space-y-2">
+                    <div className="flex items-center justify-between flex-wrap gap-1">
+                      <label className="text-xs font-black text-slate-900 flex items-center gap-1.5">
+                        <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                        <span>Sum Lut (Income / Receipts) Audit Tel Duh leh Duh Loh (Optional)</span>
+                      </label>
+                      <span className="text-[10px] font-bold text-slate-600 bg-white px-2 py-0.5 rounded-full border border-slate-200">
+                        Income hi Collector / Treasurer thun sa a nih avangin audit tel loh theih a ni
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setAuditScopeMode('expenditure_only')}
+                        className={`p-2.5 rounded-xl border text-left transition cursor-pointer flex items-start gap-2 ${
+                          auditScopeMode === 'expenditure_only'
+                            ? 'bg-rose-50 border-rose-400 text-rose-950 shadow-2xs ring-1 ring-rose-400'
+                            : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100'
+                        }`}
+                      >
+                        <div className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 mt-0.5 ${
+                          auditScopeMode === 'expenditure_only' ? 'border-rose-600 bg-rose-600 text-white' : 'border-slate-400'
+                        }`}>
+                          {auditScopeMode === 'expenditure_only' && <Check className="w-2.5 h-2.5" />}
+                        </div>
+                        <div>
+                          <div className="text-xs font-black">📉 Sum Chhuak (Expenditure) Chauh Audit</div>
+                          <div className="text-[10.5px] text-slate-600 mt-0.5">
+                            Sum Lut (Income/Receipts) chu Collector/Treasurer thun sa anga pawm a ni ang a, Auditor-in endik hran a ngai lo vang.
+                          </div>
+                        </div>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setAuditScopeMode('both')}
+                        className={`p-2.5 rounded-xl border text-left transition cursor-pointer flex items-start gap-2 ${
+                          auditScopeMode === 'both'
+                            ? 'bg-emerald-50 border-emerald-400 text-emerald-950 shadow-2xs ring-1 ring-emerald-400'
+                            : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100'
+                        }`}
+                      >
+                        <div className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 mt-0.5 ${
+                          auditScopeMode === 'both' ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-slate-400'
+                        }`}>
+                          {auditScopeMode === 'both' && <Check className="w-2.5 h-2.5" />}
+                        </div>
+                        <div>
+                          <div className="text-xs font-black">⚖️ Sum Lut &amp; Sum Chhuak Pahnih Audit</div>
+                          <div className="text-[10.5px] text-slate-600 mt-0.5">
+                            Auditor-in Sum Lut (Receipts) leh Sum Chhuak (Expenditure Vouchers) zawng zawng a pahnihin a endik ve ve ang.
+                          </div>
+                        </div>
+                      </button>
                     </div>
                   </div>
 
