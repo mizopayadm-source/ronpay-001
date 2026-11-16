@@ -6466,9 +6466,23 @@ export const markBatchRecordsAuditVerification = (
       ...(rec.metadata?.auditor_verifications || {}),
       ...(rec.auditor_verifications || {})
     };
+    const recCampId = String(rec.campaignId || rec.campaign_id || '').toLowerCase().trim();
+    const activeCampGrants = recCampId
+      ? getStoredAuditorGrants(recCampId).filter(g => g && g.status === 'active')
+      : [];
+    const appointedKeySet = new Set(
+      activeCampGrants
+        .map(g => normalizeAuditorKey(g.auditorPhone || g.auditor_phone, g.auditorName || g.auditor_name))
+        .filter(Boolean)
+    );
+    const isCallerAppointedCoAuditor = appointedKeySet.size >= 2 && appointedKeySet.has(aKey);
+
     if (isClearing) {
-      // Mark all existing keys as 'unchecked' so undoing a record or head reliably resets it to unaudited
       for (const existingKey of Object.keys(existingMap)) {
+        // If caller is one of the 2 appointed Co-Auditors, do NOT wipe the other appointed Co-Auditor's mark!
+        if (isCallerAppointedCoAuditor && existingKey !== aKey && appointedKeySet.has(existingKey)) {
+          continue;
+        }
         const prevEntry = existingMap[existingKey] || {};
         existingMap[existingKey] = {
           ...prevEntry,

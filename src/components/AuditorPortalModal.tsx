@@ -446,16 +446,26 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
       ? getStoredTransactions().find(t => String(t.id).toLowerCase().trim() === cleanTargetId)
       : getStoredExpenses().find(e => String(e.id).toLowerCase().trim() === cleanTargetId);
 
-    const isAlreadyVerified =
-      currentMark === 'verified' ||
-      itemAuditCategory === 'audited' ||
-      Boolean(isCurrentlyLocked) ||
-      targetObj?.audit_mark === 'verified' ||
-      Boolean(targetObj?.is_locked);
-    const isAlreadyFlagged =
-      currentMark === 'flagged' ||
-      itemAuditCategory === 'flagged' ||
-      targetObj?.audit_mark === 'flagged';
+    const verMap: Record<string, any> = {
+      ...(targetObj?.metadata?.auditor_verifications || {}),
+      ...(targetObj?.auditor_verifications || {})
+    };
+    const isCurrentUserAppointedCoAuditor =
+      isDualAuditMode && appointedAuditors.some(a => a.auditorKey === currentAuditorKey);
+    const myPersonalMark = verMap[currentAuditorKey]?.mark;
+
+    const isAlreadyVerified = isCurrentUserAppointedCoAuditor
+      ? myPersonalMark === 'verified'
+      : (currentMark === 'verified' ||
+          itemAuditCategory === 'audited' ||
+          Boolean(isCurrentlyLocked) ||
+          targetObj?.audit_mark === 'verified' ||
+          Boolean(targetObj?.is_locked));
+    const isAlreadyFlagged = isCurrentUserAppointedCoAuditor
+      ? myPersonalMark === 'flagged'
+      : (currentMark === 'flagged' ||
+          itemAuditCategory === 'flagged' ||
+          targetObj?.audit_mark === 'flagged');
 
     let nextMark: 'verified' | 'flagged' | undefined = desiredMark;
     if (desiredMark === 'verified' && isAlreadyVerified && queryText === undefined) {
@@ -1080,6 +1090,7 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
       audit_remark?: string;
       audited_by?: string;
       is_locked?: boolean;
+      auditor_verifications?: Record<string, any>;
       auditCategory: 'audited' | 'unaudited' | 'flagged';
       runningBalance: number;
     };
@@ -1130,6 +1141,10 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
         audit_remark: (t as any).audit_remark || t.audit_query,
         audited_by: (t as any).audited_by || t.audit_marked_by,
         is_locked: Boolean(t.is_locked),
+        auditor_verifications: {
+          ...(t.metadata?.auditor_verifications || {}),
+          ...(t.auditor_verifications || {})
+        },
         auditCategory,
         runningBalance: 0
       });
@@ -1165,6 +1180,10 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
         audit_remark: (e as any).audit_remark || e.audit_query,
         audited_by: (e as any).audited_by || e.audit_marked_by,
         is_locked: Boolean(e.is_locked),
+        auditor_verifications: {
+          ...(e.metadata?.auditor_verifications || {}),
+          ...(e.auditor_verifications || {})
+        },
         auditCategory,
         runningBalance: 0
       });
@@ -1322,6 +1341,10 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
       auditorPhone: string;
       verifiedCount: number;
       flaggedCount: number;
+      txVerifiedCount: number;
+      txVerifiedAmount: number;
+      expVerifiedCount: number;
+      expVerifiedAmount: number;
       hasSignedOff: boolean;
       signedAt?: string;
     }>();
@@ -1337,6 +1360,10 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
         auditorPhone: a.auditorPhone,
         verifiedCount: 0,
         flaggedCount: 0,
+        txVerifiedCount: 0,
+        txVerifiedAmount: 0,
+        expVerifiedCount: 0,
+        expVerifiedAmount: 0,
         hasSignedOff: Boolean(s),
         signedAt: s?.signedAt
       });
@@ -1344,6 +1371,8 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
 
     let consensusVerifiedCount = 0;
     let partialVerifiedCount = 0;
+    let consensusExpCount = 0;
+    let partialExpCount = 0;
     const discrepancyItems: Array<{
       id: string;
       recordType: 'transaction' | 'expense';
@@ -1359,6 +1388,7 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
         ...(rec.metadata?.auditor_verifications || {}),
         ...(rec.auditor_verifications || {})
       };
+      const amt = Number(rec.amount) || 0;
       const allActiveEntries = Object.values(verMap).filter((v: any) => v && (v.mark === 'verified' || v.mark === 'flagged'));
       // Filter verifications to active appointed auditors if any are appointed, so deleted/revoked auditors do not reappear
       const activeEntries = activeAppointedKeySet.size > 0
@@ -1370,11 +1400,19 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
 
       activeEntries.forEach((v: any) => {
         const k = String(v.auditorKey || normalizeAuditorKey(v.auditorPhone, v.auditorName));
-        // Only add to auditorStatsMap if they are an active appointed auditor
         if (activeAppointedKeySet.size > 0 && !activeAppointedKeySet.has(k)) return;
         const st = auditorStatsMap.get(k);
         if (st) {
-          if (v.mark === 'verified') st.verifiedCount += 1;
+          if (v.mark === 'verified') {
+            st.verifiedCount += 1;
+            if (recordType === 'transaction') {
+              st.txVerifiedCount += 1;
+              st.txVerifiedAmount += amt;
+            } else {
+              st.expVerifiedCount += 1;
+              st.expVerifiedAmount += amt;
+            }
+          }
           if (v.mark === 'flagged') st.flaggedCount += 1;
           auditorStatsMap.set(k, st);
         }
@@ -1383,36 +1421,77 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
       const verCnt = activeEntries.filter((v: any) => v.mark === 'verified').length;
       const flagCnt = activeEntries.filter((v: any) => v.mark === 'flagged').length;
 
+      const perAuditorStatusList = appointedAuditors.map(a => {
+        const entry = verMap[a.auditorKey];
+        const m = entry?.mark === 'verified' ? 'verified' : entry?.mark === 'flagged' ? 'flagged' : 'unchecked';
+        return {
+          auditorKey: a.auditorKey,
+          auditorName: a.auditorName,
+          mark: m,
+          query: entry?.query || ''
+        };
+      });
+
+      const itemTitle = recordType === 'transaction'
+        ? (rec.donorName || 'Receipt')
+        : `${rec.head || rec.expenseHead || 'Voucher'}${rec.paidTo || rec.payeeName ? ` (${rec.paidTo || rec.payeeName})` : ''}`;
+      const itemDate = formatDateDDMMYYYY(rec.timestamp || rec.spentDate || rec.date || rec.createdAt || '');
+
       if (verCnt > 0 && flagCnt > 0) {
-        // Explicit disagreement between Auditor 1 and Auditor 2!
         discrepancyItems.push({
           id: rec.id,
           recordType,
-          title: recordType === 'transaction' ? (rec.donorName || 'Receipt') : (rec.head || rec.paidTo || 'Voucher'),
-          amount: Number(rec.amount) || 0,
-          displayDate: formatDateDDMMYYYY(rec.timestamp || rec.spentDate || rec.date || rec.createdAt || ''),
-          reason: 'Auditor pahnih chhinchhiah dan a inang lo (Pakhatin Dik a ti a, pakhatin Query a siam)',
-          verifications: activeEntries as any
+          title: itemTitle,
+          amount: amt,
+          displayDate: itemDate,
+          reason: perAuditorStatusList
+            .map(p => `${p.auditorName}: ${p.mark === 'verified' ? '✓ Dik' : p.mark === 'flagged' ? `⚠️ Query (${p.query || 'Enfiah ngai'})` : '⏳ La Audit Lo'}`)
+            .join('  •  '),
+          verifications: perAuditorStatusList
         });
       } else if (flagCnt > 0) {
         discrepancyItems.push({
           id: rec.id,
           recordType,
-          title: recordType === 'transaction' ? (rec.donorName || 'Receipt') : (rec.head || rec.paidTo || 'Voucher'),
-          amount: Number(rec.amount) || 0,
-          displayDate: formatDateDDMMYYYY(rec.timestamp || rec.spentDate || rec.date || rec.createdAt || ''),
-          reason: activeEntries.map((f: any) => `${f.auditorName}: ${f.query || 'Query'}`).join(' | '),
-          verifications: activeEntries as any
+          title: itemTitle,
+          amount: amt,
+          displayDate: itemDate,
+          reason: activeEntries.map((f: any) => `${f.auditorName}: ⚠️ ${f.query || 'Query'}`).join(' | '),
+          verifications: perAuditorStatusList.length > 0 ? perAuditorStatusList : (activeEntries as any)
         });
       } else if (verCnt >= 2) {
         consensusVerifiedCount += 1;
+        if (recordType === 'expense') consensusExpCount += 1;
       } else if (verCnt === 1) {
         partialVerifiedCount += 1;
+        if (recordType === 'expense') partialExpCount += 1;
+        if (appointedAuditors.length >= 2) {
+          discrepancyItems.push({
+            id: rec.id,
+            recordType,
+            title: itemTitle,
+            amount: amt,
+            displayDate: itemDate,
+            reason: perAuditorStatusList
+              .map(p => `${p.auditorName}: ${p.mark === 'verified' ? '✓ Dik (Audited)' : '⏳ La Audit Lo (Unchecked)'}`)
+              .join('  •  '),
+            verifications: perAuditorStatusList
+          });
+        }
       }
     };
 
     cashBookAuditData.inRangeTxs.forEach(t => inspectRecord(t, 'transaction'));
     cashBookAuditData.inRangeExps.forEach(e => inspectRecord(e, 'expense'));
+
+    // Sort discrepancyItems so Expenses (Senso / Payments) appear first when inspecting discrepancies
+    discrepancyItems.sort((a, b) => {
+      if (a.recordType !== b.recordType) return a.recordType === 'expense' ? -1 : 1;
+      return b.amount - a.amount;
+    });
+
+    const expDiscrepancyItems = discrepancyItems.filter(i => i.recordType === 'expense');
+    const txDiscrepancyItems = discrepancyItems.filter(i => i.recordType === 'transaction');
 
     const auditorsList = Array.from(auditorStatsMap.values());
     const signedCount = auditorsList.filter(a => a.hasSignedOff).length;
@@ -1423,7 +1502,11 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
       signedCount,
       consensusVerifiedCount,
       partialVerifiedCount,
+      consensusExpCount,
+      partialExpCount,
       discrepancyItems,
+      expDiscrepancyItems,
+      txDiscrepancyItems,
       hasDiscrepancies: discrepancyItems.length > 0,
       isJointFinalized: isDualAuditMode ? signedCount >= 2 && discrepancyItems.length === 0 : Boolean(freshCamp?.lastAuditedAt)
     };
@@ -2020,13 +2103,13 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                   </button>
                 )}
 
-                {/* Per-Auditor Live Status Pills */}
+                {/* Per-Auditor Live Status Pills with Receipts (Lut) & Expenditure (Senso) Breakdown */}
                 {dualAuditSummary.auditorsList.map((aud, idx) => {
                   const isMe = aud.auditorKey === currentAuditorKey;
                   return (
                     <div
                       key={aud.auditorKey}
-                      className={`px-2.5 py-0.5 rounded-xl border text-[10.5px] flex items-center gap-1.5 ${
+                      className={`px-2.5 py-1 rounded-xl border text-[10.5px] flex items-center gap-1.5 flex-wrap ${
                         aud.hasSignedOff
                           ? 'bg-emerald-950/80 border-emerald-500/50 text-emerald-200'
                           : isMe
@@ -2037,7 +2120,12 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                       <span className="font-black">
                         {idx + 1}. {aud.auditorName}{isMe ? ' (Nangmah)' : ''}
                       </span>
-                      <span className="text-emerald-400 font-bold">✓{aud.verifiedCount}</span>
+                      <span className="px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 font-bold text-[9.5px]" title="Receipts (Sum Lut) Audit Zat">
+                        Lut: ✓{aud.txVerifiedCount} (₹{aud.txVerifiedAmount.toLocaleString('en-IN')})
+                      </span>
+                      <span className="px-1.5 py-0.2 rounded bg-rose-500/20 text-rose-300 font-bold text-[9.5px]" title="Payments / Expenditure (Sum Chhuak) Audit Zat">
+                        Senso: ✓{aud.expVerifiedCount} (₹{aud.expVerifiedAmount.toLocaleString('en-IN')})
+                      </span>
                       {aud.flaggedCount > 0 && <span className="text-rose-400 font-bold">⚠️{aud.flaggedCount}</span>}
                       {aud.hasSignedOff ? (
                         <span className="px-1.5 py-0.2 rounded bg-emerald-500/30 text-emerald-200 font-black text-[9px]">
@@ -2079,12 +2167,14 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                       ✓✓ Pahnih Inang: {dualAuditSummary.consensusVerifiedCount}
                     </span>
                     {dualAuditSummary.partialVerifiedCount > 0 && (
-                      <span
-                        title="Auditor pakhat chauhin a la endik zat (Auditor lehlam endik nghah mek)"
-                        className="px-2 py-0.5 rounded-lg bg-amber-500/20 border border-amber-400/30 text-amber-300 font-bold text-[10px]"
+                      <button
+                        type="button"
+                        onClick={() => setShowDiscrepancyDrawer(prev => !prev)}
+                        title="Click la Auditor pahnih inang lo (1/2 Checked) zawng zawng en rawh"
+                        className="px-2 py-0.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/40 text-amber-300 font-bold text-[10px] cursor-pointer transition"
                       >
-                        ⏳ 1/2 Checked: {dualAuditSummary.partialVerifiedCount}
-                      </span>
+                        ⏳ 1/2 Checked: {dualAuditSummary.partialVerifiedCount} (Senso: {dualAuditSummary.expDiscrepancyItems.length} • Lut: {dualAuditSummary.txDiscrepancyItems.length})
+                      </button>
                     )}
                   </>
                 )}
@@ -2093,10 +2183,12 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                   <button
                     type="button"
                     onClick={() => setShowDiscrepancyDrawer(prev => !prev)}
-                    className="px-2.5 py-0.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-black text-[10px] flex items-center gap-1 cursor-pointer shadow-xs animate-pulse"
+                    className="px-2.5 py-0.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-black text-[10px] flex items-center gap-1 cursor-pointer shadow-xs"
                   >
                     <AlertCircle className="w-3 h-3" />
-                    <span>⚡ Inang Lo / Query ({dualAuditSummary.discrepancyItems.length}) — Enfiah Rawh</span>
+                    <span>
+                      ⚡ Inang Lo / Query ({dualAuditSummary.discrepancyItems.length} — Senso: {dualAuditSummary.expDiscrepancyItems.length}, Lut: {dualAuditSummary.txDiscrepancyItems.length}) — {showDiscrepancyDrawer ? 'Khâr Rawh' : 'Enfiah Rawh'}
+                    </span>
                   </button>
                 ) : isDualAuditMode && dualAuditSummary.isJointFinalized ? (
                   <span className="px-2.5 py-0.5 rounded-lg bg-emerald-600 text-white font-black text-[10px] flex items-center gap-1">
@@ -2107,42 +2199,93 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
               </div>
             </div>
 
-            {/* Collapsible Discrepancy / Mismatch Drawer when Auditors disagree or raise queries */}
+            {/* Collapsible Discrepancy / Mismatch Drawer when Auditors disagree, have 1/2 partial checks, or raise queries */}
             {showDiscrepancyDrawer && dualAuditSummary.hasDiscrepancies && (
-              <div className="bg-rose-950/90 border border-rose-500/50 rounded-xl p-2.5 space-y-2 text-[11px]">
-                <div className="flex items-center justify-between">
+              <div className="bg-rose-950/95 border border-rose-500/50 rounded-xl p-3 space-y-2.5 text-[11px]">
+                <div className="flex items-center justify-between flex-wrap gap-2">
                   <span className="font-black text-rose-200 flex items-center gap-1.5">
-                    <AlertCircle className="w-3.5 h-3.5 text-rose-400" />
-                    <span>Auditor Pahnih Hmuhchhuah Inang Lo / Query Awmte ({dualAuditSummary.discrepancyItems.length} items):</span>
+                    <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+                    <span>
+                      🔍 Auditor Pahnih ({dualAuditSummary.auditorsList.map(a => a.auditorName).join(' vs ')}) Audit Inang Lo &amp; Khaikhinna ({dualAuditSummary.discrepancyItems.length} items):
+                    </span>
                   </span>
                   <button
                     type="button"
                     onClick={() => setShowDiscrepancyDrawer(false)}
-                    className="text-[10px] text-rose-300 hover:text-white underline cursor-pointer"
+                    className="text-[10px] px-2 py-0.5 rounded bg-rose-900 hover:bg-rose-800 text-rose-200 font-bold cursor-pointer"
                   >
-                    Khâr Rawh
+                    ✕ Khâr Rawh
                   </button>
                 </div>
-                <div className="max-h-36 overflow-y-auto divide-y divide-rose-800/60">
-                  {dualAuditSummary.discrepancyItems.map(item => (
-                    <div key={item.id} className="py-1.5 flex items-center justify-between gap-2 flex-wrap">
-                      <div>
-                        <span className="font-black text-white">{item.title}</span>
-                        <span className="text-rose-300 ml-1.5 font-mono">₹{item.amount.toLocaleString('en-IN')}</span>
-                        <span className="text-rose-300/80 ml-1.5">({item.displayDate})</span>
-                        <div className="text-[10px] text-amber-300 font-semibold">{item.reason}</div>
+
+                {/* Side-by-Side Auditor Comparison Summary Card */}
+                {dualAuditSummary.auditorsList.length >= 2 && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 bg-slate-950/70 p-2.5 rounded-xl border border-rose-500/30">
+                    {dualAuditSummary.auditorsList.map((aud, idx) => (
+                      <div key={aud.auditorKey} className="bg-slate-900/90 border border-slate-700/80 rounded-lg p-2 flex flex-col gap-1">
+                        <div className="font-black text-white text-xs flex items-center justify-between">
+                          <span>👤 Auditor {idx + 1}: {aud.auditorName}</span>
+                          <span className="text-[10px] font-mono text-slate-400">{aud.auditorPhone}</span>
+                        </div>
+                        <div className="flex items-center justify-between text-[10.5px] text-emerald-300 font-bold">
+                          <span>Dr. Receipts (Sum Lut) Audit:</span>
+                          <span>{aud.txVerifiedCount} items • ₹{aud.txVerifiedAmount.toLocaleString('en-IN')}</span>
+                        </div>
+                        <div className="flex items-center justify-between text-[10.5px] text-rose-300 font-bold">
+                          <span>Cr. Payments (Expenditure / Senso) Audit:</span>
+                          <span>{aud.expVerifiedCount} vouchers • ₹{aud.expVerifiedAmount.toLocaleString('en-IN')}</span>
+                        </div>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSearchQuery(item.id);
-                          setActiveTab(item.recordType === 'transaction' ? 'transactions' : 'expenses');
-                          setShowDiscrepancyDrawer(false);
-                        }}
-                        className="px-2 py-1 rounded-lg bg-white text-rose-900 font-black text-[10px] hover:bg-rose-100 cursor-pointer shrink-0"
-                      >
-                        Enfiah &amp; Siamrem →
-                      </button>
+                    ))}
+                  </div>
+                )}
+
+                <div className="max-h-60 overflow-y-auto divide-y divide-rose-800/60 pr-1">
+                  {dualAuditSummary.discrepancyItems.map(item => (
+                    <div key={item.id} className="py-2 flex items-center justify-between gap-2 flex-wrap">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className={`px-1.5 py-0.5 rounded text-[9px] font-black uppercase ${
+                            item.recordType === 'expense'
+                              ? 'bg-rose-500 text-white'
+                              : 'bg-emerald-600 text-white'
+                          }`}>
+                            {item.recordType === 'expense' ? 'SENSO / EXPENDITURE' : 'RECEIPT / SUM LUT'}
+                          </span>
+                          <span className="font-black text-white">{item.title}</span>
+                          <span className="text-amber-300 font-black font-mono">₹{item.amount.toLocaleString('en-IN')}</span>
+                          <span className="text-rose-300/80 text-[10px]">({item.displayDate})</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {item.verifications.map(v => (
+                            <span
+                              key={v.auditorKey}
+                              className={`px-2 py-0.5 rounded-md text-[10px] font-black border ${
+                                v.mark === 'verified'
+                                  ? 'bg-emerald-950/90 text-emerald-300 border-emerald-500/50'
+                                  : v.mark === 'flagged'
+                                  ? 'bg-rose-900 text-rose-200 border-rose-400'
+                                  : 'bg-amber-950/90 text-amber-300 border-amber-500/50'
+                              }`}
+                            >
+                              {v.auditorName}: {v.mark === 'verified' ? '✓ Dik (Audited)' : v.mark === 'flagged' ? `⚠️ Query (${v.query || 'Enfiah ngai'})` : '⏳ La Audit Lo'}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSearchQuery(item.id);
+                            setActiveTab(item.recordType === 'transaction' ? 'transactions' : 'expenses');
+                            setShowDiscrepancyDrawer(false);
+                          }}
+                          className="px-2.5 py-1 rounded-lg bg-white text-rose-950 font-black text-[10px] hover:bg-rose-100 cursor-pointer shrink-0"
+                        >
+                          Enfiah &amp; Siamrem →
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -3212,7 +3355,7 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                       mobileLedgerPane === 'receipts' ? 'hidden xl:flex' : 'flex'
                     }`}>
                       <div>
-                        <div className="bg-rose-900 text-white px-3 sm:px-3.5 py-2 sm:py-2.5 flex items-center justify-between">
+                        <div className="bg-rose-900 text-white px-3 sm:px-3.5 py-2 sm:py-2.5 flex items-center justify-between flex-wrap gap-2">
                           <div className="font-black text-xs sm:text-sm tracking-wide flex items-center gap-1.5">
                             <TrendingDown className="w-4 h-4 text-rose-300 shrink-0" />
                             <span>Cr. PAYMENTS (SUM CHHUAK / SENSO)</span>
@@ -3222,13 +3365,40 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                           </span>
                         </div>
 
+                        {/* Co-Auditor Expenditure Comparison Banner right inside Cr. PAYMENTS */}
+                        {isDualAuditMode && dualAuditSummary.auditorsList.length >= 2 && (
+                          <div className="bg-rose-950/95 text-white px-3 py-2 border-b border-rose-800 text-[10.5px] flex items-center justify-between flex-wrap gap-2">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-black text-amber-300 uppercase tracking-wider">⚖️ Senso Audit Khaikhinna:</span>
+                              {dualAuditSummary.auditorsList.map((aud, i) => (
+                                <span key={aud.auditorKey} className="px-2 py-0.5 rounded bg-white/10 border border-white/15 font-bold">
+                                  {i + 1}. {aud.auditorName}: <strong className="text-emerald-300">✓{aud.expVerifiedCount}/{cashBookAuditData.inRangeExps.length}</strong> (₹{aud.expVerifiedAmount.toLocaleString('en-IN')})
+                                </span>
+                              ))}
+                            </div>
+                            {dualAuditSummary.expDiscrepancyItems.length > 0 ? (
+                              <button
+                                type="button"
+                                onClick={() => setShowDiscrepancyDrawer(true)}
+                                className="px-2 py-0.5 rounded bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-[10px] cursor-pointer transition"
+                              >
+                                ⚠️ Vouchers {dualAuditSummary.expDiscrepancyItems.length} Inang Lo — En Rawh
+                              </button>
+                            ) : (
+                              <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 font-black text-[10px]">
+                                ✓✓ Senso Pahnih Inang Vek
+                              </span>
+                            )}
+                          </div>
+                        )}
+
                       <div className={`overflow-x-auto ${cbFullHeight ? '' : 'max-h-[58vh] overflow-y-auto'}`}>
                         <table className="w-full text-left border-collapse text-xs">
                           <thead className="sticky top-0 z-10 bg-rose-50 border-b border-rose-200 text-[10px] font-black uppercase text-rose-950">
                             <tr>
                               <th className="p-2">Date &amp; Voucher</th>
                               <th className="p-2">Particulars (Sum Chhuak)</th>
-                              <th className="p-2 text-center">Audit</th>
+                              <th className="p-2 text-center">Audit Status</th>
                               <th className="p-2 text-right">Amount (₹)</th>
                               {canAudit && <th className="p-2 text-center">Action</th>}
                             </tr>
@@ -3241,11 +3411,31 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                                 </td>
                               </tr>
                             ) : (
-                              cashBookAuditData.filteredPayments.map(p => (
+                              cashBookAuditData.filteredPayments.map(p => {
+                                const verMap = p.auditor_verifications || {};
+                                const isMeCoAuditor = isDualAuditMode && appointedAuditors.some(a => a.auditorKey === currentAuditorKey);
+                                const myVerified = isMeCoAuditor
+                                  ? verMap[currentAuditorKey]?.mark === 'verified'
+                                  : p.auditCategory === 'audited';
+                                const perAuditorBadges = isDualAuditMode && appointedAuditors.length >= 2
+                                  ? appointedAuditors.map(a => ({
+                                      auditorKey: a.auditorKey,
+                                      auditorName: a.auditorName,
+                                      mark: verMap[a.auditorKey]?.mark || 'unchecked'
+                                    }))
+                                  : [];
+                                const allCoAuditorsVerified =
+                                  perAuditorBadges.length >= 2 && perAuditorBadges.every(b => b.mark === 'verified');
+                                const someCoAuditorVerified =
+                                  perAuditorBadges.length >= 2 && perAuditorBadges.some(b => b.mark === 'verified') && !allCoAuditorsVerified;
+
+                                return (
                                 <tr
                                   key={p.id}
                                   className={`hover:bg-slate-50 transition ${
-                                    p.auditCategory === 'audited'
+                                    someCoAuditorVerified
+                                      ? 'bg-amber-50/40'
+                                      : p.auditCategory === 'audited'
                                       ? 'bg-emerald-50/20'
                                       : p.auditCategory === 'flagged'
                                       ? 'bg-rose-50/30'
@@ -3266,20 +3456,46 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                                     )}
                                   </td>
                                   <td className="p-2 text-center align-top whitespace-nowrap">
-                                    {p.auditCategory === 'audited' ? (
-                                      <span className="inline-flex items-center gap-1 text-[9px] font-black px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
-                                        {p.is_locked ? <Lock className="w-2.5 h-2.5" /> : <CheckCircle2 className="w-2.5 h-2.5" />}
-                                        <span>✓ AUDITED</span>
-                                      </span>
-                                    ) : p.auditCategory === 'flagged' ? (
-                                      <span className="inline-flex items-center gap-1 text-[9px] font-black px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-300">
-                                        <span>⚠️ QUERY AWM</span>
-                                      </span>
-                                    ) : (
-                                      <span className="inline-flex items-center gap-1 text-[9px] font-black px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300">
-                                        <span>⏳ LA AUDIT LOH</span>
-                                      </span>
-                                    )}
+                                    <div className="flex flex-col items-center gap-1">
+                                      {p.auditCategory === 'flagged' ? (
+                                        <span className="inline-flex items-center gap-1 text-[9px] font-black px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-300">
+                                          <span>⚠️ QUERY AWM</span>
+                                        </span>
+                                      ) : someCoAuditorVerified ? (
+                                        <span className="inline-flex items-center gap-1 text-[9px] font-black px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300" title="Auditor pakhat chauhin a la nemnghet (Inang lo / 1 of 2)">
+                                          <span>⚡ 1/2 INANG LO</span>
+                                        </span>
+                                      ) : p.auditCategory === 'audited' ? (
+                                        <span className="inline-flex items-center gap-1 text-[9px] font-black px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                          {p.is_locked ? <Lock className="w-2.5 h-2.5" /> : <CheckCircle2 className="w-2.5 h-2.5" />}
+                                          <span>{allCoAuditorsVerified ? '✓✓ 2/2 AUDITED' : '✓ AUDITED'}</span>
+                                        </span>
+                                      ) : (
+                                        <span className="inline-flex items-center gap-1 text-[9px] font-black px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300">
+                                          <span>⏳ LA AUDIT LOH</span>
+                                        </span>
+                                      )}
+
+                                      {/* Per-Auditor Verification Badges (RCL vs Mami Sailo) */}
+                                      {perAuditorBadges.length >= 2 && (
+                                        <div className="flex flex-col gap-0.5 mt-0.5">
+                                          {perAuditorBadges.map(b => (
+                                            <span
+                                              key={b.auditorKey}
+                                              className={`text-[8.5px] font-extrabold px-1.5 py-0.2 rounded border ${
+                                                b.mark === 'verified'
+                                                  ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                                                  : b.mark === 'flagged'
+                                                  ? 'bg-rose-50 text-rose-800 border-rose-300'
+                                                  : 'bg-amber-50 text-amber-800 border-amber-300'
+                                              }`}
+                                            >
+                                              {b.auditorName}: {b.mark === 'verified' ? '✓ Dik' : b.mark === 'flagged' ? '⚠️ Query' : '⏳ La Audit Lo'}
+                                            </span>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </div>
                                   </td>
                                   <td className="p-2 text-right font-black text-rose-700 align-top whitespace-nowrap tabular-nums">
                                     ₹{p.amount.toLocaleString('en-IN')}
@@ -3289,15 +3505,15 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                                       <div className="inline-flex items-center gap-1">
                                         <button
                                           type="button"
-                                          onClick={() => handleMarkItem('expense', p.id, p.audit_mark, 'verified', undefined, p.is_locked)}
-                                          title={p.auditCategory === 'audited' ? "Audit tawh a ni (Click la sut rawh / uncheck)" : "Audit / Dik tiin chhinchhiah rawh"}
+                                          onClick={() => handleMarkItem('expense', p.id, p.audit_mark, 'verified', undefined, p.is_locked, p.auditCategory, p.isoDate)}
+                                          title={myVerified ? "I audit tawh (Click la i audit-na sut rawh / Undo)" : "Audit / Dik tiin chhinchhiah rawh"}
                                           className={`px-2 py-1 rounded-lg text-[10px] font-black border transition cursor-pointer ${
-                                            p.auditCategory === 'audited'
-                                              ? 'bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700'
+                                            myVerified
+                                              ? 'bg-emerald-600 text-white border-emerald-600 hover:bg-amber-600 hover:border-amber-600'
                                               : 'bg-white text-emerald-700 border-emerald-300 hover:bg-emerald-50'
                                           }`}
                                         >
-                                          ✓ Dik
+                                          {myVerified ? '✓ Dik (Undo)' : '✓ Dik'}
                                         </button>
                                         <button
                                           type="button"
@@ -3319,7 +3535,8 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                                     </td>
                                   )}
                                 </tr>
-                              ))
+                                );
+                              })
                             )}
 
                             {/* Closing Balance C/D Row */}
@@ -4879,6 +5096,31 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                               </span>
                             )}
                           </div>
+                          {isDualAuditMode && appointedAuditors.length >= 2 && (
+                            <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                              {appointedAuditors.map(a => {
+                                const verMap = {
+                                  ...((exp as any).metadata?.auditor_verifications || {}),
+                                  ...(exp.auditor_verifications || {})
+                                };
+                                const m = verMap[a.auditorKey]?.mark || 'unchecked';
+                                return (
+                                  <span
+                                    key={a.auditorKey}
+                                    className={`text-[9px] font-extrabold px-2 py-0.5 rounded-md border ${
+                                      m === 'verified'
+                                        ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                                        : m === 'flagged'
+                                        ? 'bg-rose-50 text-rose-800 border-rose-300'
+                                        : 'bg-amber-50 text-amber-800 border-amber-300'
+                                    }`}
+                                  >
+                                    {a.auditorName}: {m === 'verified' ? '✓ Dik (Audited)' : m === 'flagged' ? '⚠️ Query' : '⏳ La Audit Lo'}
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          )}
                           <div className="text-[11px] text-slate-500 flex items-center gap-2 flex-wrap">
                             <span>{formatDateDDMMYYYY(exp.spentDate || exp.date || exp.createdAt || '')}</span>
                             {(exp.purpose || exp.description) && (

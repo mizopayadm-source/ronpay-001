@@ -599,6 +599,27 @@ export async function syncAllWithServer(forceAuthoritative: boolean = false): Pr
               const verS = existing?.auditor_verifications || existing?.metadata?.auditor_verifications;
               const verL = le?.auditor_verifications || le?.metadata?.auditor_verifications;
               const baseExp = localTime >= serverTime ? { ...existing, ...le } : { ...le, ...existing };
+              // Self-heal spentDate/date, paidTo/payee, purpose, and voucherNo if local copy had empty strings or raw ISO timestamp as spentDate
+              const isCleanDate = (d: any) => typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d.trim());
+              if (isCleanDate(existing.spentDate) && !isCleanDate(baseExp.spentDate)) {
+                baseExp.spentDate = existing.spentDate;
+                baseExp.date = existing.date || existing.spentDate;
+              } else if (isCleanDate(le.spentDate) && !isCleanDate(baseExp.spentDate)) {
+                baseExp.spentDate = le.spentDate;
+                baseExp.date = le.date || le.spentDate;
+              }
+              if (!baseExp.paidTo && (existing.paidTo || existing.payee || le.paidTo || (le as any).payee)) {
+                baseExp.paidTo = existing.paidTo || existing.payee || le.paidTo || (le as any).payee;
+                baseExp.payee = baseExp.paidTo;
+                baseExp.payeeName = baseExp.paidTo;
+              }
+              if (!baseExp.purpose && (existing.purpose || le.purpose)) {
+                baseExp.purpose = existing.purpose || le.purpose;
+                baseExp.description = baseExp.purpose;
+              }
+              if (!baseExp.voucherNo && (existing.voucherNo || le.voucherNo)) {
+                baseExp.voucherNo = existing.voucherNo || le.voucherNo;
+              }
               if (verS || verL) {
                 const mergedVer: Record<string, any> = {};
                 const keys = new Set([...Object.keys(verS || {}), ...Object.keys(verL || {})]);

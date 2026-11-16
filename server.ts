@@ -5113,6 +5113,27 @@ function mergeCollections<T extends Record<string, any>>(serverList: T[], client
         };
       }
     }
+    // Self-heal expense fields (spentDate/date, paidTo/payee, purpose, voucherNo) so a stale client never wipes clean YYYY-MM-DD dates or details
+    const isCleanDateStr = (d: any) => typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d.trim());
+    if (isCleanDateStr(olderObj?.spentDate) && !isCleanDateStr(baseMerged.spentDate)) {
+      baseMerged.spentDate = olderObj.spentDate;
+      baseMerged.date = olderObj.date || olderObj.spentDate;
+    } else if (isCleanDateStr(newerObj?.spentDate) && !isCleanDateStr(baseMerged.spentDate)) {
+      baseMerged.spentDate = newerObj.spentDate;
+      baseMerged.date = newerObj.date || newerObj.spentDate;
+    }
+    if (!baseMerged.paidTo && (olderObj?.paidTo || olderObj?.payee || newerObj?.paidTo || newerObj?.payee)) {
+      baseMerged.paidTo = newerObj?.paidTo || newerObj?.payee || olderObj?.paidTo || olderObj?.payee;
+      baseMerged.payee = baseMerged.paidTo;
+      baseMerged.payeeName = baseMerged.paidTo;
+    }
+    if (!baseMerged.purpose && (olderObj?.purpose || newerObj?.purpose)) {
+      baseMerged.purpose = newerObj?.purpose || olderObj?.purpose;
+      baseMerged.description = baseMerged.purpose;
+    }
+    if (!baseMerged.voucherNo && (olderObj?.voucherNo || newerObj?.voucherNo)) {
+      baseMerged.voucherNo = newerObj?.voucherNo || olderObj?.voucherNo;
+    }
     return baseMerged;
   };
 
@@ -5248,6 +5269,8 @@ let lastServerSupabaseSync = 0;
 let lastServerFullTablesSync = 0;
 let lastKnownSupaTxCount = -1;
 let lastKnownSupaLatestUpdatedAt = '';
+let lastKnownSupaExpCount = -1;
+let lastKnownSupaExpLatestUpdatedAt = '';
 
 async function syncFromSupabase(db: DatabaseSchema, force: boolean = false): Promise<boolean> {
   try {
@@ -5255,7 +5278,8 @@ async function syncFromSupabase(db: DatabaseSchema, force: boolean = false): Pro
     if (now < serverSupabaseBlockedUntil) return false;
     // Egress Protection: 5-second debounce for delta checks unless forced or empty
     const hasTransactions = Array.isArray(db.transactions) && db.transactions.length > 0;
-    if (!force && hasTransactions && (now - lastServerSupabaseSync < 5 * 1000)) {
+    const hasExpenses = Array.isArray(db.expenses) && db.expenses.length > 0;
+    if (!force && hasTransactions && hasExpenses && (now - lastServerSupabaseSync < 5 * 1000)) {
       return false;
     }
     const sbConfig = (db as any).supabaseConfig || {};
@@ -5263,22 +5287,40 @@ async function syncFromSupabase(db: DatabaseSchema, force: boolean = false): Pro
     const sbKey = sbConfig.anonKey || process.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable__zS5fiKvBI5u6HYgour64g_g_tJj5WL';
     if (!sbUrl || !sbKey) return false;
 
-    // 1. Ultra-lightweight 120-byte Delta Probe on transactions (checks exact count & latest updated_at)
+    // 1. Ultra-lightweight 120-byte Delta Probe on transactions & expenses (checks exact count & latest updated_at)
     let txChanged = !hasTransactions || force || lastKnownSupaTxCount < 0;
-    if (!txChanged) {
+    let expChanged = !hasExpenses || force || lastKnownSupaExpCount < 0;
+    if (!txChanged || !expChanged) {
       try {
-        const probeRes = await fetch(
-          `${sbUrl}/rest/v1/transactions?select=id,updated_at&status=neq.deleted&order=updated_at.desc&limit=1`,
-          {
-            headers: {
-              'apikey': sbKey,
-              'Authorization': `Bearer ${sbKey}`,
-              'Prefer': 'count=exact'
-            },
-            signal: AbortSignal.timeout(6000)
-          }
-        );
-        if (probeRes.ok) {
+        const [probeRes, expProbeRes] = await Promise.all([
+          !txChanged
+            ? fetch(
+                `${sbUrl}/rest/v1/transactions?select=id,updated_at&status=neq.deleted&order=updated_at.desc&limit=1`,
+                {
+                  headers: {
+                    'apikey': sbKey,
+                    'Authorization': `Bearer ${sbKey}`,
+                    'Prefer': 'count=exact'
+                  },
+                  signal: AbortSignal.timeout(6000)
+                }
+              )
+            : Promise.resolve(null),
+          !expChanged
+            ? fetch(
+                `${sbUrl}/rest/v1/expenses?select=id,updated_at&order=updated_at.desc&limit=1`,
+                {
+                  headers: {
+                    'apikey': sbKey,
+                    'Authorization': `Bearer ${sbKey}`,
+                    'Prefer': 'count=exact'
+                  },
+                  signal: AbortSignal.timeout(6000)
+                }
+              )
+            : Promise.resolve(null)
+        ]);
+        if (probeRes && probeRes.ok) {
           const contentRange = probeRes.headers.get('content-range') || '';
           const totalMatch = contentRange.match(/\/(\d+)$/);
           const remoteCount = totalMatch ? parseInt(totalMatch[1], 10) : -1;
@@ -5288,21 +5330,32 @@ async function syncFromSupabase(db: DatabaseSchema, force: boolean = false): Pro
             txChanged = true;
           }
         }
+        if (expProbeRes && expProbeRes.ok) {
+          const contentRange = expProbeRes.headers.get('content-range') || '';
+          const totalMatch = contentRange.match(/\/(\d+)$/);
+          const remoteExpCount = totalMatch ? parseInt(totalMatch[1], 10) : -1;
+          const expProbeRows: any[] = await expProbeRes.json();
+          const remoteExpLatestUpd = Array.isArray(expProbeRows) && expProbeRows.length > 0 ? String(expProbeRows[0].updated_at || '') : '';
+          if (remoteExpCount !== lastKnownSupaExpCount || remoteExpLatestUpd !== lastKnownSupaExpLatestUpdatedAt) {
+            expChanged = true;
+          }
+        }
       } catch {}
     }
 
-    if (!txChanged && !force && (now - lastServerFullTablesSync < 10 * 60 * 1000)) {
+    if (!txChanged && !expChanged && !force && (now - lastServerFullTablesSync < 10 * 60 * 1000)) {
       lastServerSupabaseSync = now;
       return false;
     }
 
-    const res = await fetch(`${sbUrl}/rest/v1/transactions?select=*`, {
-      headers: {
-        'apikey': sbKey,
-        'Authorization': `Bearer ${sbKey}`
-      },
-      signal: AbortSignal.timeout(10000)
-    });
+    if (txChanged || force) {
+      const res = await fetch(`${sbUrl}/rest/v1/transactions?select=*`, {
+        headers: {
+          'apikey': sbKey,
+          'Authorization': `Bearer ${sbKey}`
+        },
+        signal: AbortSignal.timeout(10000)
+      });
     if (!res.ok) {
       if (res.status === 402 || res.status === 429) {
         console.warn('[Server Supabase Circuit Breaker] Pausing REST sync due to quota/rate limit (status: ' + res.status + ')');
@@ -5395,9 +5448,91 @@ async function syncFromSupabase(db: DatabaseSchema, force: boolean = false): Pro
         if (u > maxUpd) maxUpd = u;
       }
       lastKnownSupaLatestUpdatedAt = maxUpd;
+      }
     }
 
-    // 2. Fetch campaigns, expenses & members from Supabase only if forced or > 10 minutes since last full sync (saves large base64 image Egress)
+    // 2. Fetch expenses immediately whenever expChanged or forced (only ~4KB, no base64 images)
+    if (expChanged || force || lastServerFullTablesSync === 0 || (now - lastServerFullTablesSync >= 10 * 60 * 1000)) {
+      try {
+        const expRes = await fetch(`${sbUrl}/rest/v1/expenses?select=*&order=created_at.desc`, {
+          headers: {
+            'apikey': sbKey,
+            'Authorization': `Bearer ${sbKey}`
+          },
+          signal: AbortSignal.timeout(10000)
+        });
+        if (expRes.ok) {
+          const expRows: any[] = await expRes.json();
+          if (Array.isArray(expRows)) {
+            const delExpSet = new Set([
+              'exp-1791226950000',
+              'exp-1793291773290',
+              ...(db.deletedExpenseIds || []).map((id: string) => String(id).toLowerCase().trim())
+            ]);
+            const normalizedExps = expRows
+              .filter(r => r && r.id && !delExpSet.has(String(r.id).toLowerCase().trim()) && Number(r.amount) !== 6565)
+              .map((r: any) => {
+                const meta = r.metadata || {};
+                const trueDate = (r.date && /^\d{4}-\d{2}-\d{2}/.test(String(r.date)))
+                  ? String(r.date).slice(0, 10)
+                  : (meta.spentDate && /^\d{4}-\d{2}-\d{2}/.test(String(meta.spentDate))
+                    ? String(meta.spentDate).slice(0, 10)
+                    : String(r.date || r.spentDate || r.created_at || '').slice(0, 10));
+                const payeeVal = r.payee || r.paidTo || meta.paidTo || meta.payee || '';
+                const purposeVal = r.purpose || meta.purpose || meta.description || '';
+                const voucherVal = r.voucher_no || r.voucherNo || meta.voucherNo || '';
+                const headVal = meta.head || r.head || 'Miscellaneous';
+                return {
+                  ...meta,
+                  id: r.id,
+                  campaignId: r.campaign_id || r.campaignId,
+                  voucherNo: voucherVal,
+                  payee: payeeVal,
+                  paidTo: payeeVal,
+                  payeeName: payeeVal,
+                  purpose: purposeVal,
+                  description: purposeVal,
+                  amount: Number(r.amount) || 0,
+                  date: trueDate,
+                  spentDate: trueDate,
+                  createdAt: r.created_at || r.createdAt,
+                  updatedAt: r.updated_at || r.updatedAt,
+                  head: headVal,
+                  expenseHead: headVal,
+                  paymentMode: meta.paymentMode || r.paymentMode || 'Cash',
+                  recordedBy: meta.recordedBy || r.recordedBy || 'Admin',
+                  recordedByPhone: meta.recordedByPhone || r.recordedByPhone,
+                  status: meta.status || r.status || 'approved',
+                  attachmentUrl: meta.attachmentUrl || r.attachmentUrl || null,
+                  campaignTitle: meta.campaignTitle || r.campaignTitle,
+                  audit_mark: meta.audit_mark || r.audit_mark || undefined,
+                  audit_query: meta.audit_query || r.audit_query || undefined,
+                  audit_marked_by: meta.audit_marked_by || r.audit_marked_by || undefined,
+                  audit_marked_at: meta.audit_marked_at || r.audit_marked_at || undefined,
+                  auditor_verifications: meta.auditor_verifications || r.auditor_verifications || undefined,
+                  is_locked: Boolean(meta.is_locked ?? r.is_locked ?? false),
+                  locked_by: meta.locked_by || r.locked_by || undefined,
+                  locked_at: meta.locked_at || r.locked_at || undefined,
+                  audit_date: meta.audit_date || r.audit_date || undefined,
+                  audit_period: meta.audit_period || r.audit_period || undefined,
+                  audit_notes: meta.audit_notes || r.audit_notes || undefined,
+                  metadata: meta
+                };
+              });
+            db.expenses = mergeCollections(db.expenses || [], normalizedExps, 'id', delExpSet);
+            lastKnownSupaExpCount = expRows.length;
+            let maxExpUpd = '';
+            for (const r of expRows) {
+              const u = String(r.updated_at || '');
+              if (u > maxExpUpd) maxExpUpd = u;
+            }
+            lastKnownSupaExpLatestUpdatedAt = maxExpUpd;
+          }
+        }
+      } catch {}
+    }
+
+    // 3. Fetch campaigns & members from Supabase only if forced or > 10 minutes since last full sync (saves large base64 image Egress)
     const shouldSyncHeavyTables = force || lastServerFullTablesSync === 0 || (now - lastServerFullTablesSync >= 10 * 60 * 1000);
     if (shouldSyncHeavyTables) {
       lastServerFullTablesSync = now;
@@ -5513,65 +5648,6 @@ async function syncFromSupabase(db: DatabaseSchema, force: boolean = false): Pro
           if (extractedGrants.length > 0) {
             db.auditorGrants = mergeCollections(db.auditorGrants || [], extractedGrants, 'id', delGrantsSet);
           }
-        }
-      }
-    } catch {}
-
-    // 3. Fetch expenses from Supabase (skipping deleted dummy items)
-    try {
-      const expRes = await fetch(`${sbUrl}/rest/v1/expenses?select=*&order=created_at.desc`, {
-        headers: {
-          'apikey': sbKey,
-          'Authorization': `Bearer ${sbKey}`
-        },
-        signal: AbortSignal.timeout(10000)
-      });
-      if (expRes.ok) {
-        const expRows: any[] = await expRes.json();
-        if (Array.isArray(expRows)) {
-          const delExpSet = new Set([
-            'exp-1791226950000',
-            ...(db.deletedExpenseIds || []).map((id: string) => String(id).toLowerCase().trim())
-          ]);
-          const normalizedExps = expRows
-            .filter(r => r && r.id && !delExpSet.has(String(r.id).toLowerCase().trim()))
-            .map((r: any) => {
-              const meta = r.metadata || {};
-              return {
-                ...meta,
-                id: r.id,
-                campaignId: r.campaign_id || r.campaignId,
-                voucherNo: r.voucher_no || r.voucherNo,
-                payee: r.payee || r.paidTo,
-                paidTo: r.payee || r.paidTo || '',
-                purpose: r.purpose || '',
-                amount: Number(r.amount) || 0,
-                date: r.date || r.spentDate,
-                spentDate: r.date || r.spentDate || '',
-                createdAt: r.created_at || r.createdAt,
-                updatedAt: r.updated_at || r.updatedAt,
-                head: meta.head || r.head || 'Miscellaneous',
-                paymentMode: meta.paymentMode || r.paymentMode || 'Cash',
-                recordedBy: meta.recordedBy || r.recordedBy || 'Admin',
-                recordedByPhone: meta.recordedByPhone || r.recordedByPhone,
-                status: meta.status || r.status || 'approved',
-                attachmentUrl: meta.attachmentUrl || r.attachmentUrl || null,
-                campaignTitle: meta.campaignTitle || r.campaignTitle,
-                audit_mark: meta.audit_mark || r.audit_mark || undefined,
-                audit_query: meta.audit_query || r.audit_query || undefined,
-                audit_marked_by: meta.audit_marked_by || r.audit_marked_by || undefined,
-                audit_marked_at: meta.audit_marked_at || r.audit_marked_at || undefined,
-                auditor_verifications: meta.auditor_verifications || r.auditor_verifications || undefined,
-                is_locked: Boolean(meta.is_locked ?? r.is_locked ?? false),
-                locked_by: meta.locked_by || r.locked_by || undefined,
-                locked_at: meta.locked_at || r.locked_at || undefined,
-                audit_date: meta.audit_date || r.audit_date || undefined,
-                audit_period: meta.audit_period || r.audit_period || undefined,
-                audit_notes: meta.audit_notes || r.audit_notes || undefined,
-                metadata: meta
-              };
-            });
-          db.expenses = mergeCollections(db.expenses || [], normalizedExps, 'id', delExpSet);
         }
       }
     } catch {}
@@ -5897,9 +5973,26 @@ app.post('/api/audit/sync-action', async (req: Request, res: Response) => {
           ...(rec.metadata?.auditor_verifications || {}),
           ...(rec.auditor_verifications || {})
         };
+        const recCampId = String(rec.campaignId || rec.campaign_id || '').toLowerCase().trim();
+        const delGrantsSet = new Set((db.deletedAuditorGrantIds || []).map((id: string) => String(id).toLowerCase().trim()));
+        const activeCampGrants = (db.auditorGrants || []).filter((g: any) =>
+          g &&
+          g.status === 'active' &&
+          !delGrantsSet.has(String(g.id || '').toLowerCase().trim()) &&
+          String(g.campaignId || g.campaign_id || '').toLowerCase().trim() === recCampId
+        );
+        const appointedKeySet = new Set(
+          activeCampGrants
+            .map((g: any) => String(g.auditorPhone || g.auditor_phone || g.auditorName || g.auditor_name || '').toLowerCase().trim())
+            .filter(Boolean)
+        );
+        const isCallerAppointedCoAuditor = appointedKeySet.size >= 2 && appointedKeySet.has(aKey);
+
         if (isClearing) {
-          // Mark all existing keys as 'unchecked' with latest timestamp so undo reliably resets the record to unaudited
           for (const existingKey of Object.keys(existingMap)) {
+            if (isCallerAppointedCoAuditor && existingKey !== aKey && appointedKeySet.has(existingKey)) {
+              continue;
+            }
             const prevEntry = existingMap[existingKey] || {};
             existingMap[existingKey] = {
               ...prevEntry,

@@ -3491,7 +3491,8 @@
         "is_locked": false
       },
       "isSynced": true,
-      "subCategory": ""
+      "subCategory": "",
+      "auditor_verifications": {}
     },
     {
       "txHash": "CASH-EBEZBK-9912-790689",
@@ -3537,7 +3538,8 @@
         "is_locked": false
       },
       "isSynced": true,
-      "subCategory": ""
+      "subCategory": "",
+      "auditor_verifications": {}
     },
     {
       "txHash": "CASH4W68UU6M",
@@ -3583,7 +3585,8 @@
         "is_locked": false
       },
       "isSynced": true,
-      "subCategory": ""
+      "subCategory": "",
+      "auditor_verifications": {}
     },
     {
       "id": "RPAY-CASH-344941",
@@ -3650,16 +3653,45 @@
       "createdAt": "2026-10-29T14:47:00+00:00",
       "updatedAt": "2026-11-15T16:26:34.452+00:00",
       "metadata": {
-        "audit_mark": null,
+        "audit_mark": "verified",
         "audit_query": null,
-        "audit_marked_by": null,
-        "audit_marked_at": null,
-        "is_locked": false
+        "audit_marked_by": "RCL",
+        "audit_marked_at": "2026-11-16T11:30:07.252Z",
+        "is_locked": false,
+        "locked_at": null,
+        "locked_by": null,
+        "audit_date": null,
+        "audit_notes": null,
+        "audit_period": null,
+        "unlock_expires_at": null,
+        "auditor_verifications": {
+          "7005153902": {
+            "mark": "verified",
+            "query": "",
+            "markedAt": "2026-11-16T11:30:07.252Z",
+            "auditorKey": "7005153902",
+            "auditorName": "RCL",
+            "auditorPhone": "7005153902"
+          }
+        }
       },
       "is_locked": false,
       "section": "Section A",
       "isSynced": true,
-      "subCategory": ""
+      "subCategory": "",
+      "audit_mark": "verified",
+      "audit_marked_by": "RCL",
+      "audit_marked_at": "2026-11-16T11:30:07.252Z",
+      "auditor_verifications": {
+        "7005153902": {
+          "mark": "verified",
+          "query": "",
+          "markedAt": "2026-11-16T11:30:07.252Z",
+          "auditorKey": "7005153902",
+          "auditorName": "RCL",
+          "auditorPhone": "7005153902"
+        }
+      }
     },
     {
       "id": "RPAY-CASH-736597",
@@ -3691,11 +3723,35 @@
         "subCategoryBreakdown": {
           "Pathian Ram": 7500
         },
-        "audit_mark": null,
+        "audit_mark": "verified",
         "audit_query": null,
-        "audit_marked_by": null,
-        "audit_marked_at": null,
-        "is_locked": false
+        "audit_marked_by": "Mami Sailo",
+        "audit_marked_at": "2026-11-16T11:32:20.188Z",
+        "is_locked": false,
+        "locked_at": null,
+        "locked_by": null,
+        "audit_date": null,
+        "audit_notes": null,
+        "audit_period": null,
+        "unlock_expires_at": null,
+        "auditor_verifications": {
+          "9862000001": {
+            "mark": "unchecked",
+            "query": "",
+            "markedAt": "2026-11-16T08:16:58.010Z",
+            "auditorKey": "9862000001",
+            "auditorName": "Super Admin (Master)",
+            "auditorPhone": "9862000001"
+          },
+          "9862525576": {
+            "mark": "verified",
+            "query": "",
+            "markedAt": "2026-11-16T11:32:20.188Z",
+            "auditorKey": "9862525576",
+            "auditorName": "Mami Sailo",
+            "auditorPhone": "9862525576"
+          }
+        }
       },
       "is_locked": false,
       "subCategoryBreakdown": {
@@ -3703,7 +3759,28 @@
       },
       "section": "Bial No II",
       "isSynced": true,
-      "subCategory": ""
+      "subCategory": "",
+      "audit_mark": "verified",
+      "audit_marked_by": "Mami Sailo",
+      "audit_marked_at": "2026-11-16T11:32:20.188Z",
+      "auditor_verifications": {
+        "9862000001": {
+          "mark": "unchecked",
+          "query": "",
+          "markedAt": "2026-11-16T08:16:58.010Z",
+          "auditorKey": "9862000001",
+          "auditorName": "Super Admin (Master)",
+          "auditorPhone": "9862000001"
+        },
+        "9862525576": {
+          "mark": "verified",
+          "query": "",
+          "markedAt": "2026-11-16T11:32:20.188Z",
+          "auditorKey": "9862525576",
+          "auditorName": "Mami Sailo",
+          "auditorPhone": "9862525576"
+        }
+      }
     },
     {
       "id": "RPAY-CASH-417778",
@@ -3730,18 +3807,63 @@
       "createdAt": "2026-10-28T03:42:00+00:00",
       "updatedAt": "2026-11-15T16:26:34.452+00:00",
       "metadata": {
-        "audit_mark": null,
+        "audit_mark": "verified",
         "audit_query": null,
-        "audit_marked_by": null,
-        "audit_marked_at": null,
-        "is_locked": false
+        "audit_marked_by": "Mami Sailo",
+        "audit_marked_at": "2026-11-16T11:32:29.391Z",
+        "is_locked": false,
+        "locked_at": null,
+        "locked_by": null,
+        "audit_date": null,
+        "audit_notes": null,
+        "audit_period": null,
+        "unlock_expires_at": null,
+        "auditor_verifications": {
+          "9862000001": {
+            "mark": "unchecked",
+            "query": "",
+            "markedAt": "2026-11-16T07:58:15.404Z",
+            "auditorKey": "9862000001",
+            "auditorName": "Super Admin (Master)",
+            "auditorPhone": "9862000001"
+          },
+          "9862525576": {
+            "mark": "verified",
+            "query": "",
+            "markedAt": "2026-11-16T11:32:29.391Z",
+            "auditorKey": "9862525576",
+            "auditorName": "Mami Sailo",
+            "auditorPhone": "9862525576"
+          }
+        }
       },
       "is_locked": false,
       "section": "Section A",
       "isSynced": true,
       "utr": "",
       "referenceNo": "",
-      "subCategory": ""
+      "subCategory": "",
+      "audit_mark": "verified",
+      "audit_marked_by": "Mami Sailo",
+      "audit_marked_at": "2026-11-16T11:32:29.391Z",
+      "auditor_verifications": {
+        "9862000001": {
+          "mark": "unchecked",
+          "query": "",
+          "markedAt": "2026-11-16T07:58:15.404Z",
+          "auditorKey": "9862000001",
+          "auditorName": "Super Admin (Master)",
+          "auditorPhone": "9862000001"
+        },
+        "9862525576": {
+          "mark": "verified",
+          "query": "",
+          "markedAt": "2026-11-16T11:32:29.391Z",
+          "auditorKey": "9862525576",
+          "auditorName": "Mami Sailo",
+          "auditorPhone": "9862525576"
+        }
+      }
     },
     {
       "id": "RPAY-CASH-547418",
@@ -3919,11 +4041,27 @@
       "createdAt": "2026-10-25T10:08:00+00:00",
       "updatedAt": "2026-11-15T16:26:34.452+00:00",
       "metadata": {
-        "audit_mark": null,
+        "audit_mark": "verified",
         "audit_query": null,
-        "audit_marked_by": null,
-        "audit_marked_at": null,
-        "is_locked": false
+        "audit_marked_by": "Mami Sailo",
+        "audit_marked_at": "2026-11-16T11:32:32.817Z",
+        "is_locked": false,
+        "locked_at": null,
+        "locked_by": null,
+        "audit_date": null,
+        "audit_notes": null,
+        "audit_period": null,
+        "unlock_expires_at": null,
+        "auditor_verifications": {
+          "9862525576": {
+            "mark": "verified",
+            "query": "",
+            "markedAt": "2026-11-16T11:32:32.817Z",
+            "auditorKey": "9862525576",
+            "auditorName": "Mami Sailo",
+            "auditorPhone": "9862525576"
+          }
+        }
       },
       "is_locked": false,
       "isSynced": true,
@@ -3931,7 +4069,20 @@
       "memberId": "",
       "utr": "",
       "referenceNo": "",
-      "subCategory": ""
+      "subCategory": "",
+      "audit_mark": "verified",
+      "audit_marked_by": "Mami Sailo",
+      "audit_marked_at": "2026-11-16T11:32:32.817Z",
+      "auditor_verifications": {
+        "9862525576": {
+          "mark": "verified",
+          "query": "",
+          "markedAt": "2026-11-16T11:32:32.817Z",
+          "auditorKey": "9862525576",
+          "auditorName": "Mami Sailo",
+          "auditorPhone": "9862525576"
+        }
+      }
     },
     {
       "id": "RPAY-CASH-923930",
@@ -3996,18 +4147,47 @@
       "createdAt": "2026-10-24T17:20:00+00:00",
       "updatedAt": "2026-11-15T16:26:34.452+00:00",
       "metadata": {
-        "audit_mark": null,
+        "audit_mark": "verified",
         "audit_query": null,
-        "audit_marked_by": null,
-        "audit_marked_at": null,
-        "is_locked": false
+        "audit_marked_by": "RCL",
+        "audit_marked_at": "2026-11-16T11:30:07.252Z",
+        "is_locked": false,
+        "locked_at": null,
+        "locked_by": null,
+        "audit_date": null,
+        "audit_notes": null,
+        "audit_period": null,
+        "unlock_expires_at": null,
+        "auditor_verifications": {
+          "7005153902": {
+            "mark": "verified",
+            "query": "",
+            "markedAt": "2026-11-16T11:30:07.252Z",
+            "auditorKey": "7005153902",
+            "auditorName": "RCL",
+            "auditorPhone": "7005153902"
+          }
+        }
       },
       "is_locked": false,
       "section": "Section A",
       "isSynced": true,
       "utr": "",
       "referenceNo": "",
-      "subCategory": ""
+      "subCategory": "",
+      "audit_mark": "verified",
+      "audit_marked_by": "RCL",
+      "audit_marked_at": "2026-11-16T11:30:07.252Z",
+      "auditor_verifications": {
+        "7005153902": {
+          "mark": "verified",
+          "query": "",
+          "markedAt": "2026-11-16T11:30:07.252Z",
+          "auditorKey": "7005153902",
+          "auditorName": "RCL",
+          "auditorPhone": "7005153902"
+        }
+      }
     },
     {
       "id": "RPAY-CASH-483795",
@@ -4034,18 +4214,63 @@
       "createdAt": "2026-10-24T13:35:00+00:00",
       "updatedAt": "2026-11-15T16:26:34.452+00:00",
       "metadata": {
-        "audit_mark": null,
+        "audit_mark": "verified",
         "audit_query": null,
-        "audit_marked_by": null,
-        "audit_marked_at": null,
-        "is_locked": false
+        "audit_marked_by": "Mami Sailo",
+        "audit_marked_at": "2026-11-16T11:32:28.253Z",
+        "is_locked": false,
+        "locked_at": null,
+        "locked_by": null,
+        "audit_date": null,
+        "audit_notes": null,
+        "audit_period": null,
+        "unlock_expires_at": null,
+        "auditor_verifications": {
+          "9862000001": {
+            "mark": "unchecked",
+            "query": "",
+            "markedAt": "2026-11-16T07:58:16.873Z",
+            "auditorKey": "9862000001",
+            "auditorName": "Super Admin (Master)",
+            "auditorPhone": "9862000001"
+          },
+          "9862525576": {
+            "mark": "verified",
+            "query": "",
+            "markedAt": "2026-11-16T11:32:28.253Z",
+            "auditorKey": "9862525576",
+            "auditorName": "Mami Sailo",
+            "auditorPhone": "9862525576"
+          }
+        }
       },
       "is_locked": false,
       "section": "Section A",
       "isSynced": true,
       "utr": "",
       "referenceNo": "",
-      "subCategory": ""
+      "subCategory": "",
+      "audit_mark": "verified",
+      "audit_marked_by": "Mami Sailo",
+      "audit_marked_at": "2026-11-16T11:32:28.253Z",
+      "auditor_verifications": {
+        "9862000001": {
+          "mark": "unchecked",
+          "query": "",
+          "markedAt": "2026-11-16T07:58:16.873Z",
+          "auditorKey": "9862000001",
+          "auditorName": "Super Admin (Master)",
+          "auditorPhone": "9862000001"
+        },
+        "9862525576": {
+          "mark": "verified",
+          "query": "",
+          "markedAt": "2026-11-16T11:32:28.253Z",
+          "auditorKey": "9862525576",
+          "auditorName": "Mami Sailo",
+          "auditorPhone": "9862525576"
+        }
+      }
     },
     {
       "id": "RPAY-CASH-523895",
@@ -4072,18 +4297,47 @@
       "createdAt": "2026-10-24T13:28:00+00:00",
       "updatedAt": "2026-11-15T16:26:34.452+00:00",
       "metadata": {
-        "audit_mark": null,
+        "audit_mark": "verified",
         "audit_query": null,
-        "audit_marked_by": null,
-        "audit_marked_at": null,
-        "is_locked": false
+        "audit_marked_by": "RCL",
+        "audit_marked_at": "2026-11-16T11:30:07.252Z",
+        "is_locked": false,
+        "locked_at": null,
+        "locked_by": null,
+        "audit_date": null,
+        "audit_notes": null,
+        "audit_period": null,
+        "unlock_expires_at": null,
+        "auditor_verifications": {
+          "7005153902": {
+            "mark": "verified",
+            "query": "",
+            "markedAt": "2026-11-16T11:30:07.252Z",
+            "auditorKey": "7005153902",
+            "auditorName": "RCL",
+            "auditorPhone": "7005153902"
+          }
+        }
       },
       "is_locked": false,
       "section": "Section A",
       "isSynced": true,
       "utr": "",
       "referenceNo": "",
-      "subCategory": ""
+      "subCategory": "",
+      "audit_mark": "verified",
+      "audit_marked_by": "RCL",
+      "audit_marked_at": "2026-11-16T11:30:07.252Z",
+      "auditor_verifications": {
+        "7005153902": {
+          "mark": "verified",
+          "query": "",
+          "markedAt": "2026-11-16T11:30:07.252Z",
+          "auditorKey": "7005153902",
+          "auditorName": "RCL",
+          "auditorPhone": "7005153902"
+        }
+      }
     },
     {
       "id": "RPAY-CASH-377079",
@@ -4109,11 +4363,27 @@
       "createdAt": "2026-10-24T13:03:00+00:00",
       "updatedAt": "2026-11-15T16:26:34.452+00:00",
       "metadata": {
-        "audit_mark": null,
+        "audit_mark": "verified",
         "audit_query": null,
-        "audit_marked_by": null,
-        "audit_marked_at": null,
-        "is_locked": false
+        "audit_marked_by": "Mami Sailo",
+        "audit_marked_at": "2026-11-16T11:32:37.801Z",
+        "is_locked": false,
+        "locked_at": null,
+        "locked_by": null,
+        "audit_date": null,
+        "audit_notes": null,
+        "audit_period": null,
+        "unlock_expires_at": null,
+        "auditor_verifications": {
+          "9862525576": {
+            "mark": "verified",
+            "query": "",
+            "markedAt": "2026-11-16T11:32:37.801Z",
+            "auditorKey": "9862525576",
+            "auditorName": "Mami Sailo",
+            "auditorPhone": "9862525576"
+          }
+        }
       },
       "is_locked": false,
       "isSynced": true,
@@ -4121,7 +4391,20 @@
       "memberId": "",
       "utr": "",
       "referenceNo": "",
-      "subCategory": ""
+      "subCategory": "",
+      "audit_mark": "verified",
+      "audit_marked_by": "Mami Sailo",
+      "audit_marked_at": "2026-11-16T11:32:37.801Z",
+      "auditor_verifications": {
+        "9862525576": {
+          "mark": "verified",
+          "query": "",
+          "markedAt": "2026-11-16T11:32:37.801Z",
+          "auditorKey": "9862525576",
+          "auditorName": "Mami Sailo",
+          "auditorPhone": "9862525576"
+        }
+      }
     },
     {
       "id": "RPAY-CASH-194628",
@@ -4186,18 +4469,63 @@
       "createdAt": "2026-10-24T00:00:00+00:00",
       "updatedAt": "2026-11-15T16:26:34.452+00:00",
       "metadata": {
-        "audit_mark": null,
+        "audit_mark": "verified",
         "audit_query": null,
-        "audit_marked_by": null,
-        "audit_marked_at": null,
-        "is_locked": false
+        "audit_marked_by": "Mami Sailo",
+        "audit_marked_at": "2026-11-16T11:32:21.731Z",
+        "is_locked": false,
+        "locked_at": null,
+        "locked_by": null,
+        "audit_date": null,
+        "audit_notes": null,
+        "audit_period": null,
+        "unlock_expires_at": null,
+        "auditor_verifications": {
+          "9862000001": {
+            "mark": "unchecked",
+            "query": "",
+            "markedAt": "2026-11-16T08:17:00.851Z",
+            "auditorKey": "9862000001",
+            "auditorName": "Super Admin (Master)",
+            "auditorPhone": "9862000001"
+          },
+          "9862525576": {
+            "mark": "verified",
+            "query": "",
+            "markedAt": "2026-11-16T11:32:21.731Z",
+            "auditorKey": "9862525576",
+            "auditorName": "Mami Sailo",
+            "auditorPhone": "9862525576"
+          }
+        }
       },
       "is_locked": false,
       "section": "Section A",
       "isSynced": true,
       "utr": "",
       "referenceNo": "",
-      "subCategory": ""
+      "subCategory": "",
+      "audit_mark": "verified",
+      "audit_marked_by": "Mami Sailo",
+      "audit_marked_at": "2026-11-16T11:32:21.731Z",
+      "auditor_verifications": {
+        "9862000001": {
+          "mark": "unchecked",
+          "query": "",
+          "markedAt": "2026-11-16T08:17:00.851Z",
+          "auditorKey": "9862000001",
+          "auditorName": "Super Admin (Master)",
+          "auditorPhone": "9862000001"
+        },
+        "9862525576": {
+          "mark": "verified",
+          "query": "",
+          "markedAt": "2026-11-16T11:32:21.731Z",
+          "auditorKey": "9862525576",
+          "auditorName": "Mami Sailo",
+          "auditorPhone": "9862525576"
+        }
+      }
     },
     {
       "id": "RPAY-CASH-738357",
@@ -4224,18 +4552,63 @@
       "createdAt": "2026-10-24T00:00:00+00:00",
       "updatedAt": "2026-11-15T16:26:34.452+00:00",
       "metadata": {
-        "audit_mark": null,
+        "audit_mark": "verified",
         "audit_query": null,
-        "audit_marked_by": null,
-        "audit_marked_at": null,
-        "is_locked": false
+        "audit_marked_by": "Mami Sailo",
+        "audit_marked_at": "2026-11-16T11:32:29.322Z",
+        "is_locked": false,
+        "locked_at": null,
+        "locked_by": null,
+        "audit_date": null,
+        "audit_notes": null,
+        "audit_period": null,
+        "unlock_expires_at": null,
+        "auditor_verifications": {
+          "9862000001": {
+            "mark": "unchecked",
+            "query": "",
+            "markedAt": "2026-11-16T07:58:15.384Z",
+            "auditorKey": "9862000001",
+            "auditorName": "Super Admin (Master)",
+            "auditorPhone": "9862000001"
+          },
+          "9862525576": {
+            "mark": "verified",
+            "query": "",
+            "markedAt": "2026-11-16T11:32:29.322Z",
+            "auditorKey": "9862525576",
+            "auditorName": "Mami Sailo",
+            "auditorPhone": "9862525576"
+          }
+        }
       },
       "is_locked": false,
       "section": "Section A",
       "isSynced": true,
       "utr": "",
       "referenceNo": "",
-      "subCategory": ""
+      "subCategory": "",
+      "audit_mark": "verified",
+      "audit_marked_by": "Mami Sailo",
+      "audit_marked_at": "2026-11-16T11:32:29.322Z",
+      "auditor_verifications": {
+        "9862000001": {
+          "mark": "unchecked",
+          "query": "",
+          "markedAt": "2026-11-16T07:58:15.384Z",
+          "auditorKey": "9862000001",
+          "auditorName": "Super Admin (Master)",
+          "auditorPhone": "9862000001"
+        },
+        "9862525576": {
+          "mark": "verified",
+          "query": "",
+          "markedAt": "2026-11-16T11:32:29.322Z",
+          "auditorKey": "9862525576",
+          "auditorName": "Mami Sailo",
+          "auditorPhone": "9862525576"
+        }
+      }
     },
     {
       "id": "RPAY-CASH-163801",
@@ -4262,18 +4635,47 @@
       "createdAt": "2026-10-24T00:00:00+00:00",
       "updatedAt": "2026-11-15T16:26:34.452+00:00",
       "metadata": {
-        "audit_mark": null,
+        "audit_mark": "verified",
         "audit_query": null,
-        "audit_marked_by": null,
-        "audit_marked_at": null,
-        "is_locked": false
+        "audit_marked_by": "RCL",
+        "audit_marked_at": "2026-11-16T11:30:07.252Z",
+        "is_locked": false,
+        "locked_at": null,
+        "locked_by": null,
+        "audit_date": null,
+        "audit_notes": null,
+        "audit_period": null,
+        "unlock_expires_at": null,
+        "auditor_verifications": {
+          "7005153902": {
+            "mark": "verified",
+            "query": "",
+            "markedAt": "2026-11-16T11:30:07.252Z",
+            "auditorKey": "7005153902",
+            "auditorName": "RCL",
+            "auditorPhone": "7005153902"
+          }
+        }
       },
       "is_locked": false,
       "section": "Section A",
       "isSynced": true,
       "utr": "",
       "referenceNo": "",
-      "subCategory": ""
+      "subCategory": "",
+      "audit_mark": "verified",
+      "audit_marked_by": "RCL",
+      "audit_marked_at": "2026-11-16T11:30:07.252Z",
+      "auditor_verifications": {
+        "7005153902": {
+          "mark": "verified",
+          "query": "",
+          "markedAt": "2026-11-16T11:30:07.252Z",
+          "auditorKey": "7005153902",
+          "auditorName": "RCL",
+          "auditorPhone": "7005153902"
+        }
+      }
     },
     {
       "id": "RPAY-CASH-820673",
@@ -4300,18 +4702,47 @@
       "createdAt": "2026-10-24T00:00:00+00:00",
       "updatedAt": "2026-11-15T16:26:34.452+00:00",
       "metadata": {
-        "audit_mark": null,
+        "audit_mark": "verified",
         "audit_query": null,
-        "audit_marked_by": null,
-        "audit_marked_at": null,
-        "is_locked": false
+        "audit_marked_by": "RCL",
+        "audit_marked_at": "2026-11-16T11:30:07.252Z",
+        "is_locked": false,
+        "locked_at": null,
+        "locked_by": null,
+        "audit_date": null,
+        "audit_notes": null,
+        "audit_period": null,
+        "unlock_expires_at": null,
+        "auditor_verifications": {
+          "7005153902": {
+            "mark": "verified",
+            "query": "",
+            "markedAt": "2026-11-16T11:30:07.252Z",
+            "auditorKey": "7005153902",
+            "auditorName": "RCL",
+            "auditorPhone": "7005153902"
+          }
+        }
       },
       "is_locked": false,
       "section": "Section A",
       "isSynced": true,
       "utr": "",
       "referenceNo": "",
-      "subCategory": ""
+      "subCategory": "",
+      "audit_mark": "verified",
+      "audit_marked_by": "RCL",
+      "audit_marked_at": "2026-11-16T11:30:07.252Z",
+      "auditor_verifications": {
+        "7005153902": {
+          "mark": "verified",
+          "query": "",
+          "markedAt": "2026-11-16T11:30:07.252Z",
+          "auditorKey": "7005153902",
+          "auditorName": "RCL",
+          "auditorPhone": "7005153902"
+        }
+      }
     },
     {
       "id": "RPAY-CASH-943445",
@@ -4337,11 +4768,27 @@
       "createdAt": "2026-10-24T00:00:00+00:00",
       "updatedAt": "2026-11-15T16:26:34.452+00:00",
       "metadata": {
-        "audit_mark": null,
+        "audit_mark": "verified",
         "audit_query": null,
-        "audit_marked_by": null,
-        "audit_marked_at": null,
-        "is_locked": false
+        "audit_marked_by": "Mami Sailo",
+        "audit_marked_at": "2026-11-16T11:32:35.467Z",
+        "is_locked": false,
+        "locked_at": null,
+        "locked_by": null,
+        "audit_date": null,
+        "audit_notes": null,
+        "audit_period": null,
+        "unlock_expires_at": null,
+        "auditor_verifications": {
+          "9862525576": {
+            "mark": "verified",
+            "query": "",
+            "markedAt": "2026-11-16T11:32:35.467Z",
+            "auditorKey": "9862525576",
+            "auditorName": "Mami Sailo",
+            "auditorPhone": "9862525576"
+          }
+        }
       },
       "is_locked": false,
       "isSynced": true,
@@ -4349,7 +4796,20 @@
       "memberId": "",
       "utr": "",
       "referenceNo": "",
-      "subCategory": ""
+      "subCategory": "",
+      "audit_mark": "verified",
+      "audit_marked_by": "Mami Sailo",
+      "audit_marked_at": "2026-11-16T11:32:35.467Z",
+      "auditor_verifications": {
+        "9862525576": {
+          "mark": "verified",
+          "query": "",
+          "markedAt": "2026-11-16T11:32:35.467Z",
+          "auditorKey": "9862525576",
+          "auditorName": "Mami Sailo",
+          "auditorPhone": "9862525576"
+        }
+      }
     },
     {
       "id": "RPAY-CASH-713977",
@@ -4375,11 +4835,35 @@
       "createdAt": "2026-10-18T13:02:00+00:00",
       "updatedAt": "2026-11-15T16:26:34.452+00:00",
       "metadata": {
-        "audit_mark": null,
+        "audit_mark": "verified",
         "audit_query": null,
-        "audit_marked_by": null,
-        "audit_marked_at": null,
-        "is_locked": false
+        "audit_marked_by": "Mami Sailo",
+        "audit_marked_at": "2026-11-16T11:32:33.784Z",
+        "is_locked": false,
+        "locked_at": null,
+        "locked_by": null,
+        "audit_date": null,
+        "audit_notes": null,
+        "audit_period": null,
+        "unlock_expires_at": null,
+        "auditor_verifications": {
+          "9862000001": {
+            "mark": "unchecked",
+            "query": "",
+            "markedAt": "2026-11-16T08:17:15.967Z",
+            "auditorKey": "9862000001",
+            "auditorName": "Super Admin (Master)",
+            "auditorPhone": "9862000001"
+          },
+          "9862525576": {
+            "mark": "verified",
+            "query": "",
+            "markedAt": "2026-11-16T11:32:33.784Z",
+            "auditorKey": "9862525576",
+            "auditorName": "Mami Sailo",
+            "auditorPhone": "9862525576"
+          }
+        }
       },
       "is_locked": false,
       "isSynced": true,
@@ -4387,7 +4871,28 @@
       "memberId": "",
       "utr": "",
       "referenceNo": "",
-      "subCategory": ""
+      "subCategory": "",
+      "audit_mark": "verified",
+      "audit_marked_by": "Mami Sailo",
+      "audit_marked_at": "2026-11-16T11:32:33.784Z",
+      "auditor_verifications": {
+        "9862000001": {
+          "mark": "unchecked",
+          "query": "",
+          "markedAt": "2026-11-16T08:17:15.967Z",
+          "auditorKey": "9862000001",
+          "auditorName": "Super Admin (Master)",
+          "auditorPhone": "9862000001"
+        },
+        "9862525576": {
+          "mark": "verified",
+          "query": "",
+          "markedAt": "2026-11-16T11:32:33.784Z",
+          "auditorKey": "9862525576",
+          "auditorName": "Mami Sailo",
+          "auditorPhone": "9862525576"
+        }
+      }
     },
     {
       "id": "RPAY-CASH-258996",
@@ -4413,11 +4918,27 @@
       "createdAt": "2026-10-18T13:01:00+00:00",
       "updatedAt": "2026-11-15T16:26:34.452+00:00",
       "metadata": {
-        "audit_mark": null,
+        "audit_mark": "verified",
         "audit_query": null,
-        "audit_marked_by": null,
-        "audit_marked_at": null,
-        "is_locked": false
+        "audit_marked_by": "Mami Sailo",
+        "audit_marked_at": "2026-11-16T11:32:32.766Z",
+        "is_locked": false,
+        "locked_at": null,
+        "locked_by": null,
+        "audit_date": null,
+        "audit_notes": null,
+        "audit_period": null,
+        "unlock_expires_at": null,
+        "auditor_verifications": {
+          "9862525576": {
+            "mark": "verified",
+            "query": "",
+            "markedAt": "2026-11-16T11:32:32.766Z",
+            "auditorKey": "9862525576",
+            "auditorName": "Mami Sailo",
+            "auditorPhone": "9862525576"
+          }
+        }
       },
       "is_locked": false,
       "isSynced": true,
@@ -4425,7 +4946,20 @@
       "memberId": "",
       "utr": "",
       "referenceNo": "",
-      "subCategory": ""
+      "subCategory": "",
+      "audit_mark": "verified",
+      "audit_marked_by": "Mami Sailo",
+      "audit_marked_at": "2026-11-16T11:32:32.766Z",
+      "auditor_verifications": {
+        "9862525576": {
+          "mark": "verified",
+          "query": "",
+          "markedAt": "2026-11-16T11:32:32.766Z",
+          "auditorKey": "9862525576",
+          "auditorName": "Mami Sailo",
+          "auditorPhone": "9862525576"
+        }
+      }
     },
     {
       "id": "RPAY-CASH-499507",
@@ -4452,18 +4986,63 @@
       "createdAt": "2026-10-18T00:00:00+00:00",
       "updatedAt": "2026-11-15T16:26:34.452+00:00",
       "metadata": {
-        "audit_mark": null,
+        "audit_mark": "verified",
         "audit_query": null,
-        "audit_marked_by": null,
-        "audit_marked_at": null,
-        "is_locked": false
+        "audit_marked_by": "Mami Sailo",
+        "audit_marked_at": "2026-11-16T11:32:29.258Z",
+        "is_locked": false,
+        "locked_at": null,
+        "locked_by": null,
+        "audit_date": null,
+        "audit_notes": null,
+        "audit_period": null,
+        "unlock_expires_at": null,
+        "auditor_verifications": {
+          "9862000001": {
+            "mark": "unchecked",
+            "query": "",
+            "markedAt": "2026-11-16T07:58:15.357Z",
+            "auditorKey": "9862000001",
+            "auditorName": "Super Admin (Master)",
+            "auditorPhone": "9862000001"
+          },
+          "9862525576": {
+            "mark": "verified",
+            "query": "",
+            "markedAt": "2026-11-16T11:32:29.258Z",
+            "auditorKey": "9862525576",
+            "auditorName": "Mami Sailo",
+            "auditorPhone": "9862525576"
+          }
+        }
       },
       "is_locked": false,
       "section": "Section A",
       "isSynced": true,
       "utr": "",
       "referenceNo": "",
-      "subCategory": ""
+      "subCategory": "",
+      "audit_mark": "verified",
+      "audit_marked_by": "Mami Sailo",
+      "audit_marked_at": "2026-11-16T11:32:29.258Z",
+      "auditor_verifications": {
+        "9862000001": {
+          "mark": "unchecked",
+          "query": "",
+          "markedAt": "2026-11-16T07:58:15.357Z",
+          "auditorKey": "9862000001",
+          "auditorName": "Super Admin (Master)",
+          "auditorPhone": "9862000001"
+        },
+        "9862525576": {
+          "mark": "verified",
+          "query": "",
+          "markedAt": "2026-11-16T11:32:29.258Z",
+          "auditorKey": "9862525576",
+          "auditorName": "Mami Sailo",
+          "auditorPhone": "9862525576"
+        }
+      }
     },
     {
       "id": "RPAY-CASH-881960",
@@ -4489,11 +5068,27 @@
       "createdAt": "2026-10-18T00:00:00+00:00",
       "updatedAt": "2026-11-15T16:26:34.452+00:00",
       "metadata": {
-        "audit_mark": null,
+        "audit_mark": "verified",
         "audit_query": null,
-        "audit_marked_by": null,
-        "audit_marked_at": null,
-        "is_locked": false
+        "audit_marked_by": "Mami Sailo",
+        "audit_marked_at": "2026-11-16T11:32:34.663Z",
+        "is_locked": false,
+        "locked_at": null,
+        "locked_by": null,
+        "audit_date": null,
+        "audit_notes": null,
+        "audit_period": null,
+        "unlock_expires_at": null,
+        "auditor_verifications": {
+          "9862525576": {
+            "mark": "verified",
+            "query": "",
+            "markedAt": "2026-11-16T11:32:34.663Z",
+            "auditorKey": "9862525576",
+            "auditorName": "Mami Sailo",
+            "auditorPhone": "9862525576"
+          }
+        }
       },
       "is_locked": false,
       "isSynced": true,
@@ -4501,7 +5096,20 @@
       "memberId": "",
       "utr": "",
       "referenceNo": "",
-      "subCategory": ""
+      "subCategory": "",
+      "audit_mark": "verified",
+      "audit_marked_by": "Mami Sailo",
+      "audit_marked_at": "2026-11-16T11:32:34.663Z",
+      "auditor_verifications": {
+        "9862525576": {
+          "mark": "verified",
+          "query": "",
+          "markedAt": "2026-11-16T11:32:34.663Z",
+          "auditorKey": "9862525576",
+          "auditorName": "Mami Sailo",
+          "auditorPhone": "9862525576"
+        }
+      }
     },
     {
       "id": "RPAY-CASH-892141",
@@ -4527,11 +5135,35 @@
       "createdAt": "2026-10-15T00:00:00+00:00",
       "updatedAt": "2026-11-15T16:26:34.452+00:00",
       "metadata": {
-        "audit_mark": null,
+        "audit_mark": "verified",
         "audit_query": null,
-        "audit_marked_by": null,
-        "audit_marked_at": null,
-        "is_locked": false
+        "audit_marked_by": "Mami Sailo",
+        "audit_marked_at": "2026-11-16T11:32:42.894Z",
+        "is_locked": false,
+        "locked_at": null,
+        "locked_by": null,
+        "audit_date": null,
+        "audit_notes": null,
+        "audit_period": null,
+        "unlock_expires_at": null,
+        "auditor_verifications": {
+          "9862000001": {
+            "mark": "unchecked",
+            "query": "",
+            "markedAt": "2026-11-16T07:58:22.711Z",
+            "auditorKey": "9862000001",
+            "auditorName": "Super Admin (Master)",
+            "auditorPhone": "9862000001"
+          },
+          "9862525576": {
+            "mark": "verified",
+            "query": "",
+            "markedAt": "2026-11-16T11:32:42.894Z",
+            "auditorKey": "9862525576",
+            "auditorName": "Mami Sailo",
+            "auditorPhone": "9862525576"
+          }
+        }
       },
       "is_locked": false,
       "isSynced": true,
@@ -4539,7 +5171,28 @@
       "memberId": "",
       "utr": "",
       "referenceNo": "",
-      "subCategory": ""
+      "subCategory": "",
+      "audit_mark": "verified",
+      "audit_marked_by": "Mami Sailo",
+      "audit_marked_at": "2026-11-16T11:32:42.894Z",
+      "auditor_verifications": {
+        "9862000001": {
+          "mark": "unchecked",
+          "query": "",
+          "markedAt": "2026-11-16T07:58:22.711Z",
+          "auditorKey": "9862000001",
+          "auditorName": "Super Admin (Master)",
+          "auditorPhone": "9862000001"
+        },
+        "9862525576": {
+          "mark": "verified",
+          "query": "",
+          "markedAt": "2026-11-16T11:32:42.894Z",
+          "auditorKey": "9862525576",
+          "auditorName": "Mami Sailo",
+          "auditorPhone": "9862525576"
+        }
+      }
     },
     {
       "id": "RPAY-CASH-722308",
@@ -4565,11 +5218,35 @@
       "createdAt": "2026-10-11T13:01:00+00:00",
       "updatedAt": "2026-11-15T16:26:34.452+00:00",
       "metadata": {
-        "audit_mark": null,
+        "audit_mark": "verified",
         "audit_query": null,
-        "audit_marked_by": null,
-        "audit_marked_at": null,
-        "is_locked": false
+        "audit_marked_by": "Mami Sailo",
+        "audit_marked_at": "2026-11-16T11:32:33.717Z",
+        "is_locked": false,
+        "locked_at": null,
+        "locked_by": null,
+        "audit_date": null,
+        "audit_notes": null,
+        "audit_period": null,
+        "unlock_expires_at": null,
+        "auditor_verifications": {
+          "9862000001": {
+            "mark": "unchecked",
+            "query": "",
+            "markedAt": "2026-11-16T08:17:16.812Z",
+            "auditorKey": "9862000001",
+            "auditorName": "Super Admin (Master)",
+            "auditorPhone": "9862000001"
+          },
+          "9862525576": {
+            "mark": "verified",
+            "query": "",
+            "markedAt": "2026-11-16T11:32:33.717Z",
+            "auditorKey": "9862525576",
+            "auditorName": "Mami Sailo",
+            "auditorPhone": "9862525576"
+          }
+        }
       },
       "is_locked": false,
       "isSynced": true,
@@ -4577,7 +5254,28 @@
       "memberId": "",
       "utr": "",
       "referenceNo": "",
-      "subCategory": ""
+      "subCategory": "",
+      "audit_mark": "verified",
+      "audit_marked_by": "Mami Sailo",
+      "audit_marked_at": "2026-11-16T11:32:33.717Z",
+      "auditor_verifications": {
+        "9862000001": {
+          "mark": "unchecked",
+          "query": "",
+          "markedAt": "2026-11-16T08:17:16.812Z",
+          "auditorKey": "9862000001",
+          "auditorName": "Super Admin (Master)",
+          "auditorPhone": "9862000001"
+        },
+        "9862525576": {
+          "mark": "verified",
+          "query": "",
+          "markedAt": "2026-11-16T11:32:33.717Z",
+          "auditorKey": "9862525576",
+          "auditorName": "Mami Sailo",
+          "auditorPhone": "9862525576"
+        }
+      }
     },
     {
       "id": "RPAY-CASH-410648",
@@ -4603,11 +5301,27 @@
       "createdAt": "2026-10-11T13:00:00+00:00",
       "updatedAt": "2026-11-15T16:26:34.452+00:00",
       "metadata": {
-        "audit_mark": null,
+        "audit_mark": "verified",
         "audit_query": null,
-        "audit_marked_by": null,
-        "audit_marked_at": null,
-        "is_locked": false
+        "audit_marked_by": "Mami Sailo",
+        "audit_marked_at": "2026-11-16T11:32:32.711Z",
+        "is_locked": false,
+        "locked_at": null,
+        "locked_by": null,
+        "audit_date": null,
+        "audit_notes": null,
+        "audit_period": null,
+        "unlock_expires_at": null,
+        "auditor_verifications": {
+          "9862525576": {
+            "mark": "verified",
+            "query": "",
+            "markedAt": "2026-11-16T11:32:32.711Z",
+            "auditorKey": "9862525576",
+            "auditorName": "Mami Sailo",
+            "auditorPhone": "9862525576"
+          }
+        }
       },
       "is_locked": false,
       "isSynced": true,
@@ -4615,7 +5329,20 @@
       "memberId": "",
       "utr": "",
       "referenceNo": "",
-      "subCategory": ""
+      "subCategory": "",
+      "audit_mark": "verified",
+      "audit_marked_by": "Mami Sailo",
+      "audit_marked_at": "2026-11-16T11:32:32.711Z",
+      "auditor_verifications": {
+        "9862525576": {
+          "mark": "verified",
+          "query": "",
+          "markedAt": "2026-11-16T11:32:32.711Z",
+          "auditorKey": "9862525576",
+          "auditorName": "Mami Sailo",
+          "auditorPhone": "9862525576"
+        }
+      }
     },
     {
       "id": "RPAY-CASH-232431",
@@ -4641,11 +5368,35 @@
       "createdAt": "2026-10-04T13:00:00+00:00",
       "updatedAt": "2026-11-15T16:26:34.452+00:00",
       "metadata": {
-        "audit_mark": null,
+        "audit_mark": "verified",
         "audit_query": null,
-        "audit_marked_by": null,
-        "audit_marked_at": null,
-        "is_locked": false
+        "audit_marked_by": "Mami Sailo",
+        "audit_marked_at": "2026-11-16T11:32:33.633Z",
+        "is_locked": false,
+        "locked_at": null,
+        "locked_by": null,
+        "audit_date": null,
+        "audit_notes": null,
+        "audit_period": null,
+        "unlock_expires_at": null,
+        "auditor_verifications": {
+          "9862000001": {
+            "mark": "unchecked",
+            "query": "",
+            "markedAt": "2026-11-16T08:17:17.582Z",
+            "auditorKey": "9862000001",
+            "auditorName": "Super Admin (Master)",
+            "auditorPhone": "9862000001"
+          },
+          "9862525576": {
+            "mark": "verified",
+            "query": "",
+            "markedAt": "2026-11-16T11:32:33.633Z",
+            "auditorKey": "9862525576",
+            "auditorName": "Mami Sailo",
+            "auditorPhone": "9862525576"
+          }
+        }
       },
       "is_locked": false,
       "isSynced": true,
@@ -4653,7 +5404,28 @@
       "memberId": "",
       "utr": "",
       "referenceNo": "",
-      "subCategory": ""
+      "subCategory": "",
+      "audit_mark": "verified",
+      "audit_marked_by": "Mami Sailo",
+      "audit_marked_at": "2026-11-16T11:32:33.633Z",
+      "auditor_verifications": {
+        "9862000001": {
+          "mark": "unchecked",
+          "query": "",
+          "markedAt": "2026-11-16T08:17:17.582Z",
+          "auditorKey": "9862000001",
+          "auditorName": "Super Admin (Master)",
+          "auditorPhone": "9862000001"
+        },
+        "9862525576": {
+          "mark": "verified",
+          "query": "",
+          "markedAt": "2026-11-16T11:32:33.633Z",
+          "auditorKey": "9862525576",
+          "auditorName": "Mami Sailo",
+          "auditorPhone": "9862525576"
+        }
+      }
     },
     {
       "id": "RPAY-CASH-463062",
@@ -4679,11 +5451,27 @@
       "createdAt": "2026-10-04T12:59:00+00:00",
       "updatedAt": "2026-11-15T16:26:34.452+00:00",
       "metadata": {
-        "audit_mark": null,
+        "audit_mark": "verified",
         "audit_query": null,
-        "audit_marked_by": null,
-        "audit_marked_at": null,
-        "is_locked": false
+        "audit_marked_by": "Mami Sailo",
+        "audit_marked_at": "2026-11-16T11:32:32.662Z",
+        "is_locked": false,
+        "locked_at": null,
+        "locked_by": null,
+        "audit_date": null,
+        "audit_notes": null,
+        "audit_period": null,
+        "unlock_expires_at": null,
+        "auditor_verifications": {
+          "9862525576": {
+            "mark": "verified",
+            "query": "",
+            "markedAt": "2026-11-16T11:32:32.662Z",
+            "auditorKey": "9862525576",
+            "auditorName": "Mami Sailo",
+            "auditorPhone": "9862525576"
+          }
+        }
       },
       "is_locked": false,
       "isSynced": true,
@@ -4691,7 +5479,20 @@
       "memberId": "",
       "utr": "",
       "referenceNo": "",
-      "subCategory": ""
+      "subCategory": "",
+      "audit_mark": "verified",
+      "audit_marked_by": "Mami Sailo",
+      "audit_marked_at": "2026-11-16T11:32:32.662Z",
+      "auditor_verifications": {
+        "9862525576": {
+          "mark": "verified",
+          "query": "",
+          "markedAt": "2026-11-16T11:32:32.662Z",
+          "auditorKey": "9862525576",
+          "auditorName": "Mami Sailo",
+          "auditorPhone": "9862525576"
+        }
+      }
     },
     {
       "id": "RPAY-CASH-540665",
@@ -4762,11 +5563,35 @@
       "createdAt": "2026-09-20T00:00:00+00:00",
       "updatedAt": "2026-11-15T16:26:34.452+00:00",
       "metadata": {
-        "audit_mark": null,
+        "audit_mark": "verified",
         "audit_query": null,
-        "audit_marked_by": null,
-        "audit_marked_at": null,
-        "is_locked": false
+        "audit_marked_by": "Mami Sailo",
+        "audit_marked_at": "2026-11-16T11:32:41.668Z",
+        "is_locked": false,
+        "locked_at": null,
+        "locked_by": null,
+        "audit_date": null,
+        "audit_notes": null,
+        "audit_period": null,
+        "unlock_expires_at": null,
+        "auditor_verifications": {
+          "9862000001": {
+            "mark": "unchecked",
+            "query": "",
+            "markedAt": "2026-11-16T07:58:21.691Z",
+            "auditorKey": "9862000001",
+            "auditorName": "Super Admin (Master)",
+            "auditorPhone": "9862000001"
+          },
+          "9862525576": {
+            "mark": "verified",
+            "query": "",
+            "markedAt": "2026-11-16T11:32:41.668Z",
+            "auditorKey": "9862525576",
+            "auditorName": "Mami Sailo",
+            "auditorPhone": "9862525576"
+          }
+        }
       },
       "is_locked": false,
       "isSynced": true,
@@ -4774,7 +5599,28 @@
       "memberId": "",
       "utr": "",
       "referenceNo": "",
-      "subCategory": ""
+      "subCategory": "",
+      "audit_mark": "verified",
+      "audit_marked_by": "Mami Sailo",
+      "audit_marked_at": "2026-11-16T11:32:41.668Z",
+      "auditor_verifications": {
+        "9862000001": {
+          "mark": "unchecked",
+          "query": "",
+          "markedAt": "2026-11-16T07:58:21.691Z",
+          "auditorKey": "9862000001",
+          "auditorName": "Super Admin (Master)",
+          "auditorPhone": "9862000001"
+        },
+        "9862525576": {
+          "mark": "verified",
+          "query": "",
+          "markedAt": "2026-11-16T11:32:41.668Z",
+          "auditorKey": "9862525576",
+          "auditorName": "Mami Sailo",
+          "auditorPhone": "9862525576"
+        }
+      }
     },
     {
       "id": "RPAY-CASH-111406",
@@ -4801,18 +5647,47 @@
       "createdAt": "2026-08-23T00:00:00+00:00",
       "updatedAt": "2026-11-15T16:26:34.452+00:00",
       "metadata": {
-        "audit_mark": null,
+        "audit_mark": "verified",
         "audit_query": null,
-        "audit_marked_by": null,
-        "audit_marked_at": null,
-        "is_locked": false
+        "audit_marked_by": "RCL",
+        "audit_marked_at": "2026-11-16T11:30:07.252Z",
+        "is_locked": false,
+        "locked_at": null,
+        "locked_by": null,
+        "audit_date": null,
+        "audit_notes": null,
+        "audit_period": null,
+        "unlock_expires_at": null,
+        "auditor_verifications": {
+          "7005153902": {
+            "mark": "verified",
+            "query": "",
+            "markedAt": "2026-11-16T11:30:07.252Z",
+            "auditorKey": "7005153902",
+            "auditorName": "RCL",
+            "auditorPhone": "7005153902"
+          }
+        }
       },
       "is_locked": false,
       "section": "Section A",
       "isSynced": true,
       "utr": "",
       "referenceNo": "",
-      "subCategory": ""
+      "subCategory": "",
+      "audit_mark": "verified",
+      "audit_marked_by": "RCL",
+      "audit_marked_at": "2026-11-16T11:30:07.252Z",
+      "auditor_verifications": {
+        "7005153902": {
+          "mark": "verified",
+          "query": "",
+          "markedAt": "2026-11-16T11:30:07.252Z",
+          "auditorKey": "7005153902",
+          "auditorName": "RCL",
+          "auditorPhone": "7005153902"
+        }
+      }
     },
     {
       "id": "RPAY-CASH-678260",
@@ -5103,18 +5978,63 @@
       "createdAt": "2026-08-16T00:00:00+00:00",
       "updatedAt": "2026-11-15T16:26:34.452+00:00",
       "metadata": {
-        "audit_mark": null,
+        "audit_mark": "verified",
         "audit_query": null,
-        "audit_marked_by": null,
-        "audit_marked_at": null,
-        "is_locked": false
+        "audit_marked_by": "Mami Sailo",
+        "audit_marked_at": "2026-11-16T11:32:29.211Z",
+        "is_locked": false,
+        "locked_at": null,
+        "locked_by": null,
+        "audit_date": null,
+        "audit_notes": null,
+        "audit_period": null,
+        "unlock_expires_at": null,
+        "auditor_verifications": {
+          "9862000001": {
+            "mark": "unchecked",
+            "query": "",
+            "markedAt": "2026-11-16T07:58:15.317Z",
+            "auditorKey": "9862000001",
+            "auditorName": "Super Admin (Master)",
+            "auditorPhone": "9862000001"
+          },
+          "9862525576": {
+            "mark": "verified",
+            "query": "",
+            "markedAt": "2026-11-16T11:32:29.211Z",
+            "auditorKey": "9862525576",
+            "auditorName": "Mami Sailo",
+            "auditorPhone": "9862525576"
+          }
+        }
       },
       "is_locked": false,
       "section": "Section A",
       "isSynced": true,
       "utr": "",
       "referenceNo": "",
-      "subCategory": ""
+      "subCategory": "",
+      "audit_mark": "verified",
+      "audit_marked_by": "Mami Sailo",
+      "audit_marked_at": "2026-11-16T11:32:29.211Z",
+      "auditor_verifications": {
+        "9862000001": {
+          "mark": "unchecked",
+          "query": "",
+          "markedAt": "2026-11-16T07:58:15.317Z",
+          "auditorKey": "9862000001",
+          "auditorName": "Super Admin (Master)",
+          "auditorPhone": "9862000001"
+        },
+        "9862525576": {
+          "mark": "verified",
+          "query": "",
+          "markedAt": "2026-11-16T11:32:29.211Z",
+          "auditorKey": "9862525576",
+          "auditorName": "Mami Sailo",
+          "auditorPhone": "9862525576"
+        }
+      }
     },
     {
       "id": "RPAY-CASH-765928",
@@ -5360,11 +6280,27 @@
       "createdAt": "2026-08-09T00:00:00+00:00",
       "updatedAt": "2026-11-15T16:26:34.452+00:00",
       "metadata": {
-        "audit_mark": null,
+        "audit_mark": "verified",
         "audit_query": null,
-        "audit_marked_by": null,
-        "audit_marked_at": null,
-        "is_locked": false
+        "audit_marked_by": "Mami Sailo",
+        "audit_marked_at": "2026-11-16T11:32:40.498Z",
+        "is_locked": false,
+        "locked_at": null,
+        "locked_by": null,
+        "audit_date": null,
+        "audit_notes": null,
+        "audit_period": null,
+        "unlock_expires_at": null,
+        "auditor_verifications": {
+          "9862525576": {
+            "mark": "verified",
+            "query": "",
+            "markedAt": "2026-11-16T11:32:40.498Z",
+            "auditorKey": "9862525576",
+            "auditorName": "Mami Sailo",
+            "auditorPhone": "9862525576"
+          }
+        }
       },
       "is_locked": false,
       "isSynced": true,
@@ -5372,7 +6308,20 @@
       "memberId": "",
       "utr": "",
       "referenceNo": "",
-      "subCategory": ""
+      "subCategory": "",
+      "audit_mark": "verified",
+      "audit_marked_by": "Mami Sailo",
+      "audit_marked_at": "2026-11-16T11:32:40.498Z",
+      "auditor_verifications": {
+        "9862525576": {
+          "mark": "verified",
+          "query": "",
+          "markedAt": "2026-11-16T11:32:40.498Z",
+          "auditorKey": "9862525576",
+          "auditorName": "Mami Sailo",
+          "auditorPhone": "9862525576"
+        }
+      }
     },
     {
       "id": "RPAY-CASH-839498",
@@ -5487,18 +6436,47 @@
       "createdAt": "2026-07-12T00:00:00+00:00",
       "updatedAt": "2026-11-15T16:26:34.452+00:00",
       "metadata": {
-        "audit_mark": null,
+        "audit_mark": "verified",
         "audit_query": null,
-        "audit_marked_by": null,
-        "audit_marked_at": null,
-        "is_locked": false
+        "audit_marked_by": "RCL",
+        "audit_marked_at": "2026-11-16T11:30:07.252Z",
+        "is_locked": false,
+        "locked_at": null,
+        "locked_by": null,
+        "audit_date": null,
+        "audit_notes": null,
+        "audit_period": null,
+        "unlock_expires_at": null,
+        "auditor_verifications": {
+          "7005153902": {
+            "mark": "verified",
+            "query": "",
+            "markedAt": "2026-11-16T11:30:07.252Z",
+            "auditorKey": "7005153902",
+            "auditorName": "RCL",
+            "auditorPhone": "7005153902"
+          }
+        }
       },
       "is_locked": false,
       "section": "Section A",
       "isSynced": true,
       "utr": "",
       "referenceNo": "",
-      "subCategory": ""
+      "subCategory": "",
+      "audit_mark": "verified",
+      "audit_marked_by": "RCL",
+      "audit_marked_at": "2026-11-16T11:30:07.252Z",
+      "auditor_verifications": {
+        "7005153902": {
+          "mark": "verified",
+          "query": "",
+          "markedAt": "2026-11-16T11:30:07.252Z",
+          "auditorKey": "7005153902",
+          "auditorName": "RCL",
+          "auditorPhone": "7005153902"
+        }
+      }
     },
     {
       "id": "RPAY-CASH-567214",
@@ -5525,18 +6503,47 @@
       "createdAt": "2026-07-12T00:00:00+00:00",
       "updatedAt": "2026-11-15T16:26:34.452+00:00",
       "metadata": {
-        "audit_mark": null,
+        "audit_mark": "verified",
         "audit_query": null,
-        "audit_marked_by": null,
-        "audit_marked_at": null,
-        "is_locked": false
+        "audit_marked_by": "RCL",
+        "audit_marked_at": "2026-11-16T11:30:07.252Z",
+        "is_locked": false,
+        "locked_at": null,
+        "locked_by": null,
+        "audit_date": null,
+        "audit_notes": null,
+        "audit_period": null,
+        "unlock_expires_at": null,
+        "auditor_verifications": {
+          "7005153902": {
+            "mark": "verified",
+            "query": "",
+            "markedAt": "2026-11-16T11:30:07.252Z",
+            "auditorKey": "7005153902",
+            "auditorName": "RCL",
+            "auditorPhone": "7005153902"
+          }
+        }
       },
       "is_locked": false,
       "section": "Section A",
       "isSynced": true,
       "utr": "",
       "referenceNo": "",
-      "subCategory": ""
+      "subCategory": "",
+      "audit_mark": "verified",
+      "audit_marked_by": "RCL",
+      "audit_marked_at": "2026-11-16T11:30:07.252Z",
+      "auditor_verifications": {
+        "7005153902": {
+          "mark": "verified",
+          "query": "",
+          "markedAt": "2026-11-16T11:30:07.252Z",
+          "auditorKey": "7005153902",
+          "auditorName": "RCL",
+          "auditorPhone": "7005153902"
+        }
+      }
     },
     {
       "id": "RPAY-CASH-674391",
@@ -5607,18 +6614,63 @@
       "createdAt": "2026-06-14T00:00:00+00:00",
       "updatedAt": "2026-11-15T16:26:34.452+00:00",
       "metadata": {
-        "audit_mark": null,
+        "audit_mark": "verified",
         "audit_query": null,
-        "audit_marked_by": null,
-        "audit_marked_at": null,
-        "is_locked": false
+        "audit_marked_by": "Mami Sailo",
+        "audit_marked_at": "2026-11-16T11:32:21.658Z",
+        "is_locked": false,
+        "locked_at": null,
+        "locked_by": null,
+        "audit_date": null,
+        "audit_notes": null,
+        "audit_period": null,
+        "unlock_expires_at": null,
+        "auditor_verifications": {
+          "9862000001": {
+            "mark": "unchecked",
+            "query": "",
+            "markedAt": "2026-11-16T08:17:01.660Z",
+            "auditorKey": "9862000001",
+            "auditorName": "Super Admin (Master)",
+            "auditorPhone": "9862000001"
+          },
+          "9862525576": {
+            "mark": "verified",
+            "query": "",
+            "markedAt": "2026-11-16T11:32:21.658Z",
+            "auditorKey": "9862525576",
+            "auditorName": "Mami Sailo",
+            "auditorPhone": "9862525576"
+          }
+        }
       },
       "is_locked": false,
       "section": "Section A",
       "isSynced": true,
       "utr": "",
       "referenceNo": "",
-      "subCategory": ""
+      "subCategory": "",
+      "audit_mark": "verified",
+      "audit_marked_by": "Mami Sailo",
+      "audit_marked_at": "2026-11-16T11:32:21.658Z",
+      "auditor_verifications": {
+        "9862000001": {
+          "mark": "unchecked",
+          "query": "",
+          "markedAt": "2026-11-16T08:17:01.660Z",
+          "auditorKey": "9862000001",
+          "auditorName": "Super Admin (Master)",
+          "auditorPhone": "9862000001"
+        },
+        "9862525576": {
+          "mark": "verified",
+          "query": "",
+          "markedAt": "2026-11-16T11:32:21.658Z",
+          "auditorKey": "9862525576",
+          "auditorName": "Mami Sailo",
+          "auditorPhone": "9862525576"
+        }
+      }
     },
     {
       "id": "RPAY-CASH-828936",
@@ -8145,30 +9197,57 @@
   "deletedStaffIds": [],
   "expenses": [
     {
-      "id": "EXP-1793981303118",
-      "campaignId": "cmp-kumtluang-1",
-      "voucherNo": "VCH-2026-006",
-      "payee": "Sound Incharge",
-      "purpose": "Sound System",
-      "amount": 25000,
-      "date": "2026-07-20",
-      "createdAt": "2026-11-06T16:08:23.118+00:00",
-      "updatedAt": "2026-11-13T09:35:38.483+00:00",
-      "head": "Sound & Light / Equipment",
-      "paymentMode": "Cash",
-      "recordedBy": "Super Admin (Master)",
-      "recordedByPhone": "9862000001",
+      "head": "Chowkider",
       "status": "approved",
+      "is_locked": false,
+      "locked_at": null,
+      "locked_by": null,
+      "audit_date": null,
+      "audit_mark": "verified",
+      "recordedAt": "2026-11-16T07:42:35.897Z",
+      "recordedBy": "Super Admin (Master)",
+      "audit_notes": null,
+      "paymentMode": "Cash",
+      "audit_period": null,
       "attachmentUrl": null,
       "campaignTitle": "BCM Ebenezer, Zobawk",
+      "audit_marked_at": "2026-11-16T11:30:52.745Z",
+      "audit_marked_by": "RCL",
+      "recordedByPhone": "9862000001",
+      "unlock_expires_at": null,
+      "auditor_verifications": {
+        "7005153902": {
+          "mark": "verified",
+          "query": "",
+          "markedAt": "2026-11-16T11:30:52.745Z",
+          "auditorKey": "7005153902",
+          "auditorName": "RCL",
+          "auditorPhone": "7005153902"
+        }
+      },
+      "expenseHead": "Chowkider",
+      "paidTo": "Lalramtiama",
+      "payee": "Lalramtiama",
+      "payeeName": "Lalramtiama",
+      "purpose": "Monthly Salary",
+      "description": "Monthly Salary",
+      "voucherNo": "VCH-2026-008",
+      "date": "2026-08-31",
+      "spentDate": "2026-08-31",
+      "id": "EXP-1794814955897",
+      "campaignId": "cmp-kumtluang-1",
+      "amount": 5500,
+      "createdAt": "2026-11-16T07:42:35.897+00:00",
+      "updatedAt": "2026-11-16T12:27:37.169Z",
       "metadata": {
-        "head": "Sound & Light / Equipment",
+        "head": "Chowkider",
         "status": "approved",
         "is_locked": false,
         "locked_at": null,
         "locked_by": null,
         "audit_date": null,
-        "audit_mark": null,
+        "audit_mark": "verified",
+        "recordedAt": "2026-11-16T07:42:35.897Z",
         "recordedBy": "Super Admin (Master)",
         "audit_notes": null,
         "audit_query": null,
@@ -8176,135 +9255,83 @@
         "audit_period": null,
         "attachmentUrl": null,
         "campaignTitle": "BCM Ebenezer, Zobawk",
-        "audit_marked_at": null,
-        "audit_marked_by": null,
+        "audit_marked_at": "2026-11-16T11:30:52.745Z",
+        "audit_marked_by": "RCL",
         "recordedByPhone": "9862000001",
         "unlock_expires_at": null,
         "auditor_verifications": {
           "7005153902": {
-            "mark": "unchecked",
+            "mark": "verified",
             "query": "",
-            "markedAt": "2026-11-13T09:35:38.334Z",
+            "markedAt": "2026-11-16T11:30:52.745Z",
             "auditorKey": "7005153902",
             "auditorName": "RCL",
             "auditorPhone": "7005153902"
           }
-        }
-      },
-      "is_locked": false,
-      "unlock_expires_at": null,
-      "auditor_verifications": {
-        "7005153902": {
-          "mark": "unchecked",
-          "query": "",
-          "markedAt": "2026-11-13T09:35:38.334Z",
-          "auditorKey": "7005153902",
-          "auditorName": "RCL",
-          "auditorPhone": "7005153902"
-        }
-      },
-      "paidTo": "Sound Incharge",
-      "spentDate": "2026-07-20"
+        },
+        "expenseHead": "Chowkider",
+        "paidTo": "Lalramtiama",
+        "payee": "Lalramtiama",
+        "payeeName": "Lalramtiama",
+        "purpose": "Monthly Salary",
+        "description": "Monthly Salary",
+        "voucherNo": "VCH-2026-008",
+        "date": "2026-08-31",
+        "spentDate": "2026-08-31"
+      }
     },
     {
-      "id": "EXP-1793981244588",
-      "campaignId": "cmp-kumtluang-1",
-      "voucherNo": "VCH-2026-005",
-      "payee": "Festival Committee",
-      "purpose": "Christmas Festival inbuatsaiha",
-      "amount": 25000,
-      "date": "2026-07-11",
-      "createdAt": "2026-11-06T16:07:24.588+00:00",
-      "updatedAt": "2026-11-10T09:03:47.912+00:00",
       "head": "Christmas & Kumthar",
-      "paymentMode": "Cash",
-      "recordedBy": "Super Admin (Master)",
-      "recordedByPhone": "9862000001",
       "status": "approved",
+      "is_locked": false,
+      "locked_at": null,
+      "locked_by": null,
+      "audit_date": null,
+      "audit_mark": "verified",
+      "recordedAt": "2026-11-06T16:07:24.588+00:00",
+      "recordedBy": "Super Admin (Master)",
+      "audit_notes": null,
+      "paymentMode": "Cash",
+      "audit_period": null,
       "attachmentUrl": null,
       "campaignTitle": "BCM Ebenezer, Zobawk",
+      "audit_marked_at": "2026-11-16T11:32:56.446Z",
+      "audit_marked_by": "Mami Sailo",
+      "recordedByPhone": "9862000001",
+      "unlock_expires_at": null,
+      "auditor_verifications": {
+        "9862525576": {
+          "mark": "verified",
+          "query": "",
+          "markedAt": "2026-11-16T11:32:56.446Z",
+          "auditorKey": "9862525576",
+          "auditorName": "Mami Sailo",
+          "auditorPhone": "9862525576"
+        }
+      },
+      "expenseHead": "Christmas & Kumthar",
+      "paidTo": "Festival Committee",
+      "payee": "Festival Committee",
+      "payeeName": "Festival Committee",
+      "purpose": "Christmas Festival inbuatsaiha",
+      "description": "Christmas Festival inbuatsaiha",
+      "voucherNo": "VCH-2026-005",
+      "date": "2026-07-11",
+      "spentDate": "2026-07-11",
+      "id": "EXP-1793981244588",
+      "campaignId": "cmp-kumtluang-1",
+      "amount": 25000,
+      "createdAt": "2026-11-06T16:07:24.588+00:00",
+      "updatedAt": "2026-11-16T12:27:37.169Z",
       "metadata": {
         "head": "Christmas & Kumthar",
         "status": "approved",
         "is_locked": false,
-        "recordedAt": "2026-11-06T16:07:24.588+00:00",
-        "recordedBy": "Super Admin (Master)",
-        "paymentMode": "Cash",
-        "attachmentUrl": null,
-        "campaignTitle": "BCM Ebenezer, Zobawk",
-        "recordedByPhone": "9862000001",
-        "audit_mark": null,
-        "audit_query": null,
-        "audit_marked_by": null,
-        "audit_marked_at": null
-      },
-      "is_locked": false,
-      "recordedAt": "2026-11-06T16:07:24.588+00:00",
-      "paidTo": "Festival Committee",
-      "spentDate": "2026-07-11"
-    },
-    {
-      "id": "EXP-1793981172859",
-      "campaignId": "cmp-kumtluang-1",
-      "voucherNo": "VCH-2026-004",
-      "payee": "HQ Accountant",
-      "purpose": "BCM HQ Target",
-      "amount": 55000,
-      "date": "2026-07-11",
-      "createdAt": "2026-11-06T16:06:12.859+00:00",
-      "updatedAt": "2026-11-10T09:03:49.183+00:00",
-      "head": "HQRS Target",
-      "paymentMode": "UPI",
-      "recordedBy": "Super Admin (Master)",
-      "recordedByPhone": "9862000001",
-      "status": "approved",
-      "attachmentUrl": null,
-      "campaignTitle": "BCM Ebenezer, Zobawk",
-      "metadata": {
-        "head": "HQRS Target",
-        "status": "approved",
-        "is_locked": false,
-        "recordedAt": "2026-11-06T16:06:12.859+00:00",
-        "recordedBy": "Super Admin (Master)",
-        "paymentMode": "UPI",
-        "attachmentUrl": null,
-        "campaignTitle": "BCM Ebenezer, Zobawk",
-        "recordedByPhone": "9862000001",
-        "audit_mark": null,
-        "audit_query": null,
-        "audit_marked_by": null,
-        "audit_marked_at": null
-      },
-      "is_locked": false,
-      "recordedAt": "2026-11-06T16:06:12.859+00:00",
-      "paidTo": "HQ Accountant",
-      "spentDate": "2026-07-11"
-    },
-    {
-      "id": "EXP-1793981093941",
-      "campaignId": "cmp-kumtluang-1",
-      "voucherNo": "VCH-2026-003",
-      "payee": "Treasurer EBE",
-      "purpose": "Kohhran thingpui ruai",
-      "amount": 5000,
-      "date": "2026-07-04",
-      "createdAt": "2026-11-06T16:04:53.941+00:00",
-      "updatedAt": "2026-11-13T09:03:01.149+00:00",
-      "head": "Refreshment / Thingpui",
-      "paymentMode": "Cash",
-      "recordedBy": "Super Admin (Master)",
-      "recordedByPhone": "9862000001",
-      "status": "approved",
-      "attachmentUrl": null,
-      "campaignTitle": "BCM Ebenezer, Zobawk",
-      "metadata": {
-        "head": "Refreshment / Thingpui",
-        "status": "approved",
-        "is_locked": false,
         "locked_at": null,
         "locked_by": null,
         "audit_date": null,
-        "audit_mark": null,
+        "audit_mark": "verified",
+        "recordedAt": "2026-11-06T16:07:24.588+00:00",
         "recordedBy": "Super Admin (Master)",
         "audit_notes": null,
         "audit_query": null,
@@ -8312,99 +9339,83 @@
         "audit_period": null,
         "attachmentUrl": null,
         "campaignTitle": "BCM Ebenezer, Zobawk",
-        "audit_marked_at": null,
-        "audit_marked_by": null,
+        "audit_marked_at": "2026-11-16T11:32:56.446Z",
+        "audit_marked_by": "Mami Sailo",
         "recordedByPhone": "9862000001",
         "unlock_expires_at": null,
         "auditor_verifications": {
-          "7005153902": {
-            "mark": "unchecked",
+          "9862525576": {
+            "mark": "verified",
             "query": "",
-            "markedAt": "2026-11-13T09:03:01.030Z",
-            "auditorKey": "7005153902",
-            "auditorName": "RCL",
-            "auditorPhone": "7005153902"
+            "markedAt": "2026-11-16T11:32:56.446Z",
+            "auditorKey": "9862525576",
+            "auditorName": "Mami Sailo",
+            "auditorPhone": "9862525576"
           }
-        }
-      },
-      "is_locked": false,
-      "unlock_expires_at": null,
-      "auditor_verifications": {
-        "7005153902": {
-          "mark": "unchecked",
-          "query": "",
-          "markedAt": "2026-11-13T09:03:01.030Z",
-          "auditorKey": "7005153902",
-          "auditorName": "RCL",
-          "auditorPhone": "7005153902"
-        }
-      },
-      "paidTo": "Treasurer EBE",
-      "spentDate": "2026-07-04"
+        },
+        "expenseHead": "Christmas & Kumthar",
+        "paidTo": "Festival Committee",
+        "payee": "Festival Committee",
+        "payeeName": "Festival Committee",
+        "purpose": "Christmas Festival inbuatsaiha",
+        "description": "Christmas Festival inbuatsaiha",
+        "voucherNo": "VCH-2026-005",
+        "date": "2026-07-11",
+        "spentDate": "2026-07-11"
+      }
     },
     {
-      "id": "EXP-1793981039968",
-      "campaignId": "cmp-kumtluang-1",
-      "voucherNo": "VCH-2026-002",
-      "payee": "Biakkunga",
-      "purpose": "Biakkunga Damdawiin Awm Kanna",
-      "amount": 2000,
-      "date": "2026-07-04",
-      "createdAt": "2026-11-06T16:03:59.969+00:00",
-      "updatedAt": "2026-11-10T09:03:44.377+00:00",
       "head": "Relief Fund",
-      "paymentMode": "Cash",
-      "recordedBy": "Super Admin (Master)",
-      "recordedByPhone": "9862000001",
       "status": "approved",
+      "is_locked": false,
+      "locked_at": null,
+      "locked_by": null,
+      "audit_date": null,
+      "audit_mark": "verified",
+      "recordedAt": "2026-11-06T16:03:59.969+00:00",
+      "recordedBy": "Super Admin (Master)",
+      "audit_notes": null,
+      "paymentMode": "Cash",
+      "audit_period": null,
       "attachmentUrl": null,
       "campaignTitle": "BCM Ebenezer, Zobawk",
+      "audit_marked_at": "2026-11-16T11:32:58.372Z",
+      "audit_marked_by": "Mami Sailo",
+      "recordedByPhone": "9862000001",
+      "unlock_expires_at": null,
+      "auditor_verifications": {
+        "9862525576": {
+          "mark": "verified",
+          "query": "",
+          "markedAt": "2026-11-16T11:32:58.372Z",
+          "auditorKey": "9862525576",
+          "auditorName": "Mami Sailo",
+          "auditorPhone": "9862525576"
+        }
+      },
+      "expenseHead": "Relief Fund",
+      "paidTo": "Biakkunga",
+      "payee": "Biakkunga",
+      "payeeName": "Biakkunga",
+      "purpose": "Biakkunga Damdawiin Awm Kanna",
+      "description": "Biakkunga Damdawiin Awm Kanna",
+      "voucherNo": "VCH-2026-002",
+      "date": "2026-07-04",
+      "spentDate": "2026-07-04",
+      "id": "EXP-1793981039968",
+      "campaignId": "cmp-kumtluang-1",
+      "amount": 2000,
+      "createdAt": "2026-11-06T16:03:59.969+00:00",
+      "updatedAt": "2026-11-16T12:27:37.169Z",
       "metadata": {
         "head": "Relief Fund",
         "status": "approved",
         "is_locked": false,
-        "recordedAt": "2026-11-06T16:03:59.969+00:00",
-        "recordedBy": "Super Admin (Master)",
-        "paymentMode": "Cash",
-        "attachmentUrl": null,
-        "campaignTitle": "BCM Ebenezer, Zobawk",
-        "recordedByPhone": "9862000001",
-        "audit_mark": null,
-        "audit_query": null,
-        "audit_marked_by": null,
-        "audit_marked_at": null
-      },
-      "is_locked": false,
-      "recordedAt": "2026-11-06T16:03:59.969+00:00",
-      "paidTo": "Biakkunga",
-      "spentDate": "2026-07-04"
-    },
-    {
-      "id": "EXP-1793980973597",
-      "campaignId": "cmp-kumtluang-1",
-      "voucherNo": "VCH-2026-001",
-      "payee": "KNP Convener",
-      "purpose": "KNP Inkhawmpui.Senso",
-      "amount": 15000,
-      "date": "2026-07-03",
-      "createdAt": "2026-11-06T16:02:53.597+00:00",
-      "updatedAt": "2026-11-11T11:49:18.078+00:00",
-      "head": "KNP",
-      "paymentMode": "Cash",
-      "recordedBy": "Super Admin (Master)",
-      "recordedByPhone": "9862000001",
-      "status": "approved",
-      "attachmentUrl": null,
-      "campaignTitle": "BCM Ebenezer, Zobawk",
-      "metadata": {
-        "head": "KNP",
-        "status": "approved",
-        "is_locked": false,
         "locked_at": null,
         "locked_by": null,
         "audit_date": null,
-        "audit_mark": null,
-        "recordedAt": "2026-11-06T16:02:53.597+00:00",
+        "audit_mark": "verified",
+        "recordedAt": "2026-11-06T16:03:59.969+00:00",
         "recordedBy": "Super Admin (Master)",
         "audit_notes": null,
         "audit_query": null,
@@ -8412,91 +9423,61 @@
         "audit_period": null,
         "attachmentUrl": null,
         "campaignTitle": "BCM Ebenezer, Zobawk",
-        "audit_marked_at": null,
-        "audit_marked_by": null,
+        "audit_marked_at": "2026-11-16T11:32:58.372Z",
+        "audit_marked_by": "Mami Sailo",
         "recordedByPhone": "9862000001",
         "unlock_expires_at": null,
         "auditor_verifications": {
-          "9862000001": {
-            "mark": "unchecked",
+          "9862525576": {
+            "mark": "verified",
             "query": "",
-            "markedAt": "2026-11-11T11:49:18.069Z",
-            "auditorKey": "9862000001",
-            "auditorName": "Super Admin (Master)",
-            "auditorPhone": "9862000001"
+            "markedAt": "2026-11-16T11:32:58.372Z",
+            "auditorKey": "9862525576",
+            "auditorName": "Mami Sailo",
+            "auditorPhone": "9862525576"
           }
-        }
-      },
-      "is_locked": false,
-      "recordedAt": "2026-11-06T16:02:53.597+00:00",
-      "unlock_expires_at": null,
-      "auditor_verifications": {
-        "9862000001": {
-          "mark": "unchecked",
-          "query": "",
-          "markedAt": "2026-11-11T11:49:18.069Z",
-          "auditorKey": "9862000001",
-          "auditorName": "Super Admin (Master)",
-          "auditorPhone": "9862000001"
-        }
-      },
-      "paidTo": "KNP Convener",
-      "spentDate": "2026-07-03"
+        },
+        "expenseHead": "Relief Fund",
+        "paidTo": "Biakkunga",
+        "payee": "Biakkunga",
+        "payeeName": "Biakkunga",
+        "purpose": "Biakkunga Damdawiin Awm Kanna",
+        "description": "Biakkunga Damdawiin Awm Kanna",
+        "voucherNo": "VCH-2026-002",
+        "date": "2026-07-04",
+        "spentDate": "2026-07-04"
+      }
     },
     {
-      "id": "EXP-1793360458857",
-      "campaignId": "cmp-1788107291420",
-      "voucherNo": "VCH-2026-003",
-      "payee": "Ruai fatu",
-      "purpose": "Bial BMP Meet Ruai Siamna",
-      "amount": 9000,
-      "date": "2026-03-20",
-      "createdAt": "2026-10-30T11:40:58.857+00:00",
-      "updatedAt": "2026-11-08T03:56:21.711+00:00",
-      "head": "Ruai / Refreshment",
-      "paymentMode": "Cash",
-      "recordedBy": "Super Admin (Master)",
-      "recordedByPhone": "9862000001",
+      "head": "Relief / Condolence",
       "status": "approved",
+      "is_locked": false,
+      "recordedAt": "2026-10-30T11:37:57.94+00:00",
+      "recordedBy": "Super Admin (Master)",
+      "paymentMode": "Cash",
       "attachmentUrl": null,
       "campaignTitle": "BMP Shillong",
-      "metadata": {
-        "head": "Ruai / Refreshment",
-        "status": "approved",
-        "is_locked": false,
-        "recordedAt": "2026-10-30T11:40:58.857+00:00",
-        "recordedBy": "Super Admin (Master)",
-        "paymentMode": "Cash",
-        "attachmentUrl": null,
-        "campaignTitle": "BMP Shillong",
-        "recordedByPhone": "9862000001",
-        "audit_mark": null,
-        "audit_query": null,
-        "audit_marked_by": null,
-        "audit_marked_at": null
-      },
-      "is_locked": false,
-      "recordedAt": "2026-10-30T11:40:58.857+00:00",
-      "paidTo": "Ruai fatu",
-      "spentDate": "2026-03-20"
-    },
-    {
+      "recordedByPhone": "9862000001",
+      "expenseHead": "Relief / Condolence",
+      "paidTo": "Utensil Store",
+      "payee": "Utensil Store",
+      "payeeName": "Utensil Store",
+      "purpose": "Upa Lura Zadeng Ralna - Dekchi Leina",
+      "description": "Upa Lura Zadeng Ralna - Dekchi Leina",
+      "voucherNo": "VCH-2026-002",
+      "date": "2026-03-04",
+      "spentDate": "2026-03-04",
       "id": "EXP-1793360277939",
       "campaignId": "cmp-1788107291420",
-      "voucherNo": "VCH-2026-002",
-      "payee": "Utensil Store",
-      "purpose": "Upa Lura Zadeng Ralna - Dekchi Leina",
       "amount": 650,
-      "date": "2026-03-04",
       "createdAt": "2026-10-30T11:37:57.94+00:00",
-      "updatedAt": "2026-11-08T03:56:24.603+00:00",
-      "head": "Relief / Condolence",
-      "paymentMode": "Cash",
-      "recordedBy": "Super Admin (Master)",
-      "recordedByPhone": "9862000001",
-      "status": "approved",
-      "attachmentUrl": null,
-      "campaignTitle": "BMP Shillong",
+      "updatedAt": "2026-11-16T12:27:37.169Z",
+      "locked_by": null,
+      "locked_at": null,
+      "audit_date": null,
+      "audit_period": null,
+      "audit_notes": null,
+      "auditor_verifications": {},
       "metadata": {
         "head": "Relief / Condolence",
         "status": "approved",
@@ -8507,176 +9488,47 @@
         "attachmentUrl": null,
         "campaignTitle": "BMP Shillong",
         "recordedByPhone": "9862000001",
-        "audit_mark": null,
-        "audit_query": null,
-        "audit_marked_by": null,
-        "audit_marked_at": null
-      },
-      "is_locked": false,
-      "recordedAt": "2026-10-30T11:37:57.94+00:00",
-      "paidTo": "Utensil Store",
-      "spentDate": "2026-03-04"
+        "expenseHead": "Relief / Condolence",
+        "paidTo": "Utensil Store",
+        "payee": "Utensil Store",
+        "payeeName": "Utensil Store",
+        "purpose": "Upa Lura Zadeng Ralna - Dekchi Leina",
+        "description": "Upa Lura Zadeng Ralna - Dekchi Leina",
+        "voucherNo": "VCH-2026-002",
+        "date": "2026-03-04",
+        "spentDate": "2026-03-04"
+      }
     },
     {
-      "id": "VCH-2026-004",
-      "campaignId": "cmp-1788107291420",
-      "voucherNo": "VCH-2026-004",
-      "payee": "Rev F Remlalliana",
-      "purpose": "Rev F Remlalliana Support",
-      "amount": 1000,
-      "date": "2026-04-22",
-      "createdAt": "2026-10-29T15:55:39.727+00:00",
-      "updatedAt": "2026-11-08T03:56:20.977+00:00",
-      "head": "Relief & Condolence",
-      "paymentMode": "Cash",
-      "recordedBy": "BMP Shillong Admin",
-      "status": "approved",
-      "attachmentUrl": null,
-      "campaignTitle": "BMP Shillong",
-      "metadata": {
-        "head": "Relief & Condolence",
-        "status": "approved",
-        "is_locked": false,
-        "recordedAt": "2026-10-29T15:55:39.727+00:00",
-        "recordedBy": "BMP Shillong Admin",
-        "paymentMode": "Cash",
-        "attachmentUrl": null,
-        "campaignTitle": "BMP Shillong",
-        "recordedByPhone": "",
-        "audit_mark": null,
-        "audit_query": null,
-        "audit_marked_by": null,
-        "audit_marked_at": null
-      },
-      "is_locked": false,
-      "recordedAt": "2026-10-29T15:55:39.727+00:00",
-      "paidTo": "Rev F Remlalliana",
-      "spentDate": "2026-04-22"
-    },
-    {
-      "id": "VCH-2026-005",
-      "campaignId": "cmp-1788107291420",
-      "voucherNo": "VCH-2026-005",
-      "payee": "Mizoram BMP",
-      "purpose": "MBMP Inkhawm thawhlawm thehluh",
-      "amount": 800,
-      "date": "2026-05-05",
-      "createdAt": "2026-10-29T15:54:39.727+00:00",
-      "updatedAt": "2026-11-08T03:56:17.44+00:00",
       "head": "Mizoram BMP",
-      "paymentMode": "Cash",
-      "recordedBy": "BMP Shillong Admin",
       "status": "approved",
+      "is_locked": false,
+      "recordedAt": "2026-10-29T15:51:39.727+00:00",
+      "recordedBy": "BMP Shillong Admin",
+      "paymentMode": "Cash",
       "attachmentUrl": null,
       "campaignTitle": "BMP Shillong",
-      "metadata": {
-        "head": "Mizoram BMP",
-        "status": "approved",
-        "is_locked": false,
-        "recordedAt": "2026-10-29T15:54:39.727+00:00",
-        "recordedBy": "BMP Shillong Admin",
-        "paymentMode": "Cash",
-        "attachmentUrl": null,
-        "campaignTitle": "BMP Shillong",
-        "recordedByPhone": "",
-        "audit_mark": null,
-        "audit_query": null,
-        "audit_marked_by": null,
-        "audit_marked_at": null
-      },
-      "is_locked": false,
-      "recordedAt": "2026-10-29T15:54:39.727+00:00",
+      "recordedByPhone": "9862000001",
+      "expenseHead": "Mizoram BMP",
       "paidTo": "Mizoram BMP",
-      "spentDate": "2026-05-05"
-    },
-    {
-      "id": "VCH-2026-006",
-      "campaignId": "cmp-1788107291420",
-      "voucherNo": "VCH-2026-006",
-      "payee": "Upa F Sangawia",
-      "purpose": "Upa F Sangawia Damlo kanna",
-      "amount": 500,
-      "date": "2026-08-28",
-      "createdAt": "2026-10-29T15:53:39.727+00:00",
-      "updatedAt": "2026-11-08T03:56:12.07+00:00",
-      "head": "Relief & Condolence",
-      "paymentMode": "Cash",
-      "recordedBy": "BMP Shillong Admin",
-      "status": "approved",
-      "attachmentUrl": null,
-      "campaignTitle": "BMP Shillong",
-      "metadata": {
-        "head": "Relief & Condolence",
-        "status": "approved",
-        "is_locked": false,
-        "recordedAt": "2026-10-29T15:53:39.727+00:00",
-        "recordedBy": "BMP Shillong Admin",
-        "paymentMode": "Cash",
-        "attachmentUrl": null,
-        "campaignTitle": "BMP Shillong",
-        "recordedByPhone": "",
-        "audit_mark": null,
-        "audit_query": null,
-        "audit_marked_by": null,
-        "audit_marked_at": null
-      },
-      "is_locked": false,
-      "recordedAt": "2026-10-29T15:53:39.727+00:00",
-      "paidTo": "Upa F Sangawia",
-      "spentDate": "2026-08-28"
-    },
-    {
-      "id": "VCH-2026-007",
-      "campaignId": "cmp-1788107291420",
-      "voucherNo": "VCH-2026-007",
-      "payee": "TKP Shillong Unit",
-      "purpose": "TKP Shillong Unit Golden Jubilee Lawmpuina",
-      "amount": 2000,
-      "date": "2026-07-22",
-      "createdAt": "2026-10-29T15:52:39.727+00:00",
-      "updatedAt": "2026-11-08T03:56:19.374+00:00",
-      "head": "Lawmpuina",
-      "paymentMode": "Cash",
-      "recordedBy": "BMP Shillong Admin",
-      "status": "approved",
-      "attachmentUrl": null,
-      "campaignTitle": "BMP Shillong",
-      "metadata": {
-        "head": "Lawmpuina",
-        "status": "approved",
-        "is_locked": false,
-        "recordedAt": "2026-10-29T15:52:39.727+00:00",
-        "recordedBy": "BMP Shillong Admin",
-        "paymentMode": "Cash",
-        "attachmentUrl": null,
-        "campaignTitle": "BMP Shillong",
-        "recordedByPhone": "",
-        "audit_mark": null,
-        "audit_query": null,
-        "audit_marked_by": null,
-        "audit_marked_at": null
-      },
-      "is_locked": false,
-      "recordedAt": "2026-10-29T15:52:39.727+00:00",
-      "paidTo": "TKP Shillong Unit",
-      "spentDate": "2026-07-22"
-    },
-    {
+      "payee": "Mizoram BMP",
+      "payeeName": "Mizoram BMP",
+      "purpose": "BMP Aw",
+      "description": "BMP Aw",
+      "voucherNo": "VCH-2026-008",
+      "date": "2026-07-29",
+      "spentDate": "2026-07-29",
       "id": "VCH-2026-008",
       "campaignId": "cmp-1788107291420",
-      "voucherNo": "VCH-2026-008",
-      "payee": "Mizoram BMP",
-      "purpose": "BMP Aw",
       "amount": 640,
-      "date": "2026-07-29",
       "createdAt": "2026-10-29T15:51:39.727+00:00",
-      "updatedAt": "2026-11-08T03:56:14.288+00:00",
-      "head": "Mizoram BMP",
-      "paymentMode": "Cash",
-      "recordedBy": "BMP Shillong Admin",
-      "status": "approved",
-      "attachmentUrl": null,
-      "campaignTitle": "BMP Shillong",
+      "updatedAt": "2026-11-16T12:27:37.169Z",
+      "locked_by": null,
+      "locked_at": null,
+      "audit_date": null,
+      "audit_period": null,
+      "audit_notes": null,
+      "auditor_verifications": {},
       "metadata": {
         "head": "Mizoram BMP",
         "status": "approved",
@@ -8687,104 +9539,98 @@
         "attachmentUrl": null,
         "campaignTitle": "BMP Shillong",
         "recordedByPhone": "",
-        "audit_mark": null,
-        "audit_query": null,
-        "audit_marked_by": null,
-        "audit_marked_at": null
-      },
-      "is_locked": false,
-      "recordedAt": "2026-10-29T15:51:39.727+00:00",
-      "paidTo": "Mizoram BMP",
-      "spentDate": "2026-07-29"
+        "expenseHead": "Mizoram BMP",
+        "paidTo": "Mizoram BMP",
+        "payee": "Mizoram BMP",
+        "payeeName": "Mizoram BMP",
+        "purpose": "BMP Aw",
+        "description": "BMP Aw",
+        "voucherNo": "VCH-2026-008",
+        "date": "2026-07-29",
+        "spentDate": "2026-07-29"
+      }
     },
     {
-      "id": "VCH-2026-009",
-      "campaignId": "cmp-1788107291420",
-      "voucherNo": "VCH-2026-009",
-      "payee": "Mizoram BMP",
-      "purpose": "BMP Thuzir Bu man",
-      "amount": 300,
-      "date": "2026-07-29",
-      "createdAt": "2026-10-29T15:50:39.727+00:00",
-      "updatedAt": "2026-11-08T03:56:15.349+00:00",
-      "head": "Mizoram BMP",
-      "paymentMode": "Cash",
-      "recordedBy": "BMP Shillong Admin",
+      "head": "Relief & Condolence",
       "status": "approved",
+      "is_locked": false,
+      "recordedAt": "2026-10-29T15:55:39.727+00:00",
+      "recordedBy": "BMP Shillong Admin",
+      "paymentMode": "Cash",
       "attachmentUrl": null,
       "campaignTitle": "BMP Shillong",
+      "recordedByPhone": "9862000001",
+      "expenseHead": "Relief & Condolence",
+      "paidTo": "Rev F Remlalliana",
+      "payee": "Rev F Remlalliana",
+      "payeeName": "Rev F Remlalliana",
+      "purpose": "Rev F Remlalliana Support",
+      "description": "Rev F Remlalliana Support",
+      "voucherNo": "VCH-2026-004",
+      "date": "2026-04-22",
+      "spentDate": "2026-04-22",
+      "id": "VCH-2026-004",
+      "campaignId": "cmp-1788107291420",
+      "amount": 1000,
+      "createdAt": "2026-10-29T15:55:39.727+00:00",
+      "updatedAt": "2026-11-16T12:27:37.169Z",
+      "locked_by": null,
+      "locked_at": null,
+      "audit_date": null,
+      "audit_period": null,
+      "audit_notes": null,
+      "auditor_verifications": {},
       "metadata": {
-        "head": "Mizoram BMP",
+        "head": "Relief & Condolence",
         "status": "approved",
         "is_locked": false,
-        "recordedAt": "2026-10-29T15:50:39.727+00:00",
+        "recordedAt": "2026-10-29T15:55:39.727+00:00",
         "recordedBy": "BMP Shillong Admin",
         "paymentMode": "Cash",
         "attachmentUrl": null,
         "campaignTitle": "BMP Shillong",
         "recordedByPhone": "",
-        "audit_mark": null,
-        "audit_query": null,
-        "audit_marked_by": null,
-        "audit_marked_at": null
-      },
-      "is_locked": false,
-      "recordedAt": "2026-10-29T15:50:39.727+00:00",
-      "paidTo": "Mizoram BMP",
-      "spentDate": "2026-07-29"
+        "expenseHead": "Relief & Condolence",
+        "paidTo": "Rev F Remlalliana",
+        "payee": "Rev F Remlalliana",
+        "payeeName": "Rev F Remlalliana",
+        "purpose": "Rev F Remlalliana Support",
+        "description": "Rev F Remlalliana Support",
+        "voucherNo": "VCH-2026-004",
+        "date": "2026-04-22",
+        "spentDate": "2026-04-22"
+      }
     },
     {
-      "id": "VCH-2026-010",
-      "campaignId": "cmp-1788107291420",
-      "voucherNo": "VCH-2026-010",
-      "payee": "Treasurer Bial BMP",
-      "purpose": "Bial BMP Target",
-      "amount": 13750,
-      "date": "2026-08-29",
-      "createdAt": "2026-10-29T15:49:39.727+00:00",
-      "updatedAt": "2026-11-08T03:56:10.425+00:00",
-      "head": "Bial BMP",
-      "paymentMode": "Cash",
-      "recordedBy": "BMP Shillong Admin",
+      "head": "Lawmpuina",
       "status": "approved",
+      "is_locked": false,
+      "recordedAt": "2026-10-29T15:48:39.726+00:00",
+      "recordedBy": "BMP Shillong Admin",
+      "paymentMode": "UPI",
       "attachmentUrl": null,
       "campaignTitle": "BMP Shillong",
-      "metadata": {
-        "head": "Bial BMP",
-        "status": "approved",
-        "is_locked": false,
-        "recordedAt": "2026-10-29T15:49:39.727+00:00",
-        "recordedBy": "BMP Shillong Admin",
-        "paymentMode": "Cash",
-        "attachmentUrl": null,
-        "campaignTitle": "BMP Shillong",
-        "recordedByPhone": "",
-        "audit_mark": null,
-        "audit_query": null,
-        "audit_marked_by": null,
-        "audit_marked_at": null
-      },
-      "is_locked": false,
-      "recordedAt": "2026-10-29T15:49:39.727+00:00",
-      "paidTo": "Treasurer Bial BMP",
-      "spentDate": "2026-08-29"
-    },
-    {
+      "recordedByPhone": "9862000001",
+      "expenseHead": "Lawmpuina",
+      "paidTo": "Lalrinawma Hmar",
+      "payee": "Lalrinawma Hmar",
+      "payeeName": "Lalrinawma Hmar",
+      "purpose": "Pass Lawmpuina Citation Pahnih",
+      "description": "Pass Lawmpuina Citation Pahnih",
+      "voucherNo": "VCH-2026-011",
+      "date": "2026-10-03",
+      "spentDate": "2026-10-03",
       "id": "VCH-2026-012",
       "campaignId": "cmp-1788107291420",
-      "voucherNo": "VCH-2026-011",
-      "payee": "Lalrinawma Hmar",
-      "purpose": "Pass Lawmpuina Citation Pahnih",
       "amount": 600,
-      "date": "2026-10-03",
       "createdAt": "2026-10-29T15:48:39.726+00:00",
-      "updatedAt": "2026-11-08T03:56:05.969+00:00",
-      "head": "Lawmpuina",
-      "paymentMode": "UPI",
-      "recordedBy": "BMP Shillong Admin",
-      "status": "approved",
-      "attachmentUrl": null,
-      "campaignTitle": "BMP Shillong",
+      "updatedAt": "2026-11-16T12:27:37.169Z",
+      "locked_by": null,
+      "locked_at": null,
+      "audit_date": null,
+      "audit_period": null,
+      "audit_notes": null,
+      "auditor_verifications": {},
       "metadata": {
         "head": "Lawmpuina",
         "status": "approved",
@@ -8795,33 +9641,149 @@
         "attachmentUrl": null,
         "campaignTitle": "BMP Shillong",
         "recordedByPhone": "",
-        "audit_mark": null,
-        "audit_query": null,
-        "audit_marked_by": null,
-        "audit_marked_at": null
-      },
-      "is_locked": false,
-      "recordedAt": "2026-10-29T15:48:39.726+00:00",
-      "paidTo": "Lalrinawma Hmar",
-      "spentDate": "2026-10-03"
+        "expenseHead": "Lawmpuina",
+        "paidTo": "Lalrinawma Hmar",
+        "payee": "Lalrinawma Hmar",
+        "payeeName": "Lalrinawma Hmar",
+        "purpose": "Pass Lawmpuina Citation Pahnih",
+        "description": "Pass Lawmpuina Citation Pahnih",
+        "voucherNo": "VCH-2026-011",
+        "date": "2026-10-03",
+        "spentDate": "2026-10-03"
+      }
     },
     {
-      "id": "EXP-1792089238677",
-      "campaignId": "cmp-1788107291420",
-      "voucherNo": "VCH-2026-001",
-      "payee": "Zopar",
-      "purpose": "Upa Lura Zadeng Ruang chunga Pangpar",
-      "amount": 600,
-      "date": "2026-03-03",
-      "createdAt": "2026-10-15T18:33:58.677+00:00",
-      "updatedAt": "2026-11-08T03:56:26.813+00:00",
-      "head": "Relief & Condolence",
-      "paymentMode": "Cash",
-      "recordedBy": "Super Admin (Master)",
-      "recordedByPhone": "9862000001",
+      "head": "Bial BMP",
       "status": "approved",
+      "is_locked": false,
+      "recordedAt": "2026-10-29T15:49:39.727+00:00",
+      "recordedBy": "BMP Shillong Admin",
+      "paymentMode": "Cash",
       "attachmentUrl": null,
       "campaignTitle": "BMP Shillong",
+      "recordedByPhone": "9862000001",
+      "expenseHead": "Bial BMP",
+      "paidTo": "Treasurer Bial BMP",
+      "payee": "Treasurer Bial BMP",
+      "payeeName": "Treasurer Bial BMP",
+      "purpose": "Bial BMP Target",
+      "description": "Bial BMP Target",
+      "voucherNo": "VCH-2026-010",
+      "date": "2026-08-29",
+      "spentDate": "2026-08-29",
+      "id": "VCH-2026-010",
+      "campaignId": "cmp-1788107291420",
+      "amount": 13750,
+      "createdAt": "2026-10-29T15:49:39.727+00:00",
+      "updatedAt": "2026-11-16T12:27:37.169Z",
+      "locked_by": null,
+      "locked_at": null,
+      "audit_date": null,
+      "audit_period": null,
+      "audit_notes": null,
+      "auditor_verifications": {},
+      "metadata": {
+        "head": "Bial BMP",
+        "status": "approved",
+        "is_locked": false,
+        "recordedAt": "2026-10-29T15:49:39.727+00:00",
+        "recordedBy": "BMP Shillong Admin",
+        "paymentMode": "Cash",
+        "attachmentUrl": null,
+        "campaignTitle": "BMP Shillong",
+        "recordedByPhone": "",
+        "expenseHead": "Bial BMP",
+        "paidTo": "Treasurer Bial BMP",
+        "payee": "Treasurer Bial BMP",
+        "payeeName": "Treasurer Bial BMP",
+        "purpose": "Bial BMP Target",
+        "description": "Bial BMP Target",
+        "voucherNo": "VCH-2026-010",
+        "date": "2026-08-29",
+        "spentDate": "2026-08-29"
+      }
+    },
+    {
+      "head": "Ruai / Refreshment",
+      "status": "approved",
+      "is_locked": false,
+      "recordedAt": "2026-10-30T11:40:58.857+00:00",
+      "recordedBy": "Super Admin (Master)",
+      "paymentMode": "Cash",
+      "attachmentUrl": null,
+      "campaignTitle": "BMP Shillong",
+      "recordedByPhone": "9862000001",
+      "expenseHead": "Ruai / Refreshment",
+      "paidTo": "Ruai fatu",
+      "payee": "Ruai fatu",
+      "payeeName": "Ruai fatu",
+      "purpose": "Bial BMP Meet Ruai Siamna",
+      "description": "Bial BMP Meet Ruai Siamna",
+      "voucherNo": "VCH-2026-003",
+      "date": "2026-03-20",
+      "spentDate": "2026-03-20",
+      "id": "EXP-1793360458857",
+      "campaignId": "cmp-1788107291420",
+      "amount": 9000,
+      "createdAt": "2026-10-30T11:40:58.857+00:00",
+      "updatedAt": "2026-11-16T12:27:37.169Z",
+      "locked_by": null,
+      "locked_at": null,
+      "audit_date": null,
+      "audit_period": null,
+      "audit_notes": null,
+      "auditor_verifications": {},
+      "metadata": {
+        "head": "Ruai / Refreshment",
+        "status": "approved",
+        "is_locked": false,
+        "recordedAt": "2026-10-30T11:40:58.857+00:00",
+        "recordedBy": "Super Admin (Master)",
+        "paymentMode": "Cash",
+        "attachmentUrl": null,
+        "campaignTitle": "BMP Shillong",
+        "recordedByPhone": "9862000001",
+        "expenseHead": "Ruai / Refreshment",
+        "paidTo": "Ruai fatu",
+        "payee": "Ruai fatu",
+        "payeeName": "Ruai fatu",
+        "purpose": "Bial BMP Meet Ruai Siamna",
+        "description": "Bial BMP Meet Ruai Siamna",
+        "voucherNo": "VCH-2026-003",
+        "date": "2026-03-20",
+        "spentDate": "2026-03-20"
+      }
+    },
+    {
+      "head": "Relief & Condolence",
+      "status": "approved",
+      "is_locked": false,
+      "recordedAt": "2026-10-15T18:33:58.677+00:00",
+      "recordedBy": "Super Admin (Master)",
+      "paymentMode": "Cash",
+      "attachmentUrl": null,
+      "campaignTitle": "BMP Shillong",
+      "recordedByPhone": "9862000001",
+      "expenseHead": "Relief & Condolence",
+      "paidTo": "Zopar",
+      "payee": "Zopar",
+      "payeeName": "Zopar",
+      "purpose": "Upa Lura Zadeng Ruang chunga Pangpar",
+      "description": "Upa Lura Zadeng Ruang chunga Pangpar",
+      "voucherNo": "VCH-2026-001",
+      "date": "2026-03-03",
+      "spentDate": "2026-03-03",
+      "id": "EXP-1792089238677",
+      "campaignId": "cmp-1788107291420",
+      "amount": 600,
+      "createdAt": "2026-10-15T18:33:58.677+00:00",
+      "updatedAt": "2026-11-16T12:27:37.169Z",
+      "locked_by": null,
+      "locked_at": null,
+      "audit_date": null,
+      "audit_period": null,
+      "audit_notes": null,
+      "auditor_verifications": {},
       "metadata": {
         "head": "Relief & Condolence",
         "status": "approved",
@@ -8832,15 +9794,688 @@
         "attachmentUrl": null,
         "campaignTitle": "BMP Shillong",
         "recordedByPhone": "9862000001",
-        "audit_mark": null,
-        "audit_query": null,
-        "audit_marked_by": null,
-        "audit_marked_at": null
-      },
+        "expenseHead": "Relief & Condolence",
+        "paidTo": "Zopar",
+        "payee": "Zopar",
+        "payeeName": "Zopar",
+        "purpose": "Upa Lura Zadeng Ruang chunga Pangpar",
+        "description": "Upa Lura Zadeng Ruang chunga Pangpar",
+        "voucherNo": "VCH-2026-001",
+        "date": "2026-03-03",
+        "spentDate": "2026-03-03"
+      }
+    },
+    {
+      "head": "Sound & Light / Equipment",
+      "status": "approved",
       "is_locked": false,
-      "recordedAt": "2026-10-15T18:33:58.677+00:00",
-      "paidTo": "Zopar",
-      "spentDate": "2026-03-03"
+      "locked_at": null,
+      "locked_by": null,
+      "audit_date": null,
+      "audit_mark": "verified",
+      "recordedAt": "2026-11-06T16:08:23.118+00:00",
+      "recordedBy": "Super Admin (Master)",
+      "audit_notes": null,
+      "paymentMode": "Cash",
+      "audit_period": null,
+      "attachmentUrl": null,
+      "campaignTitle": "BCM Ebenezer, Zobawk",
+      "audit_marked_at": "2026-11-16T11:32:52.216Z",
+      "audit_marked_by": "Mami Sailo",
+      "recordedByPhone": "9862000001",
+      "unlock_expires_at": null,
+      "auditor_verifications": {
+        "7005153902": {
+          "mark": "unchecked",
+          "query": "",
+          "markedAt": "2026-11-13T09:35:38.334Z",
+          "auditorKey": "7005153902",
+          "auditorName": "RCL",
+          "auditorPhone": "7005153902"
+        },
+        "9862525576": {
+          "mark": "verified",
+          "query": "",
+          "markedAt": "2026-11-16T11:32:52.216Z",
+          "auditorKey": "9862525576",
+          "auditorName": "Mami Sailo",
+          "auditorPhone": "9862525576"
+        }
+      },
+      "expenseHead": "Sound & Light / Equipment",
+      "paidTo": "Sound Incharge",
+      "payee": "Sound Incharge",
+      "payeeName": "Sound Incharge",
+      "purpose": "Sound System",
+      "description": "Sound System",
+      "voucherNo": "VCH-2026-006",
+      "date": "2026-07-20",
+      "spentDate": "2026-07-20",
+      "id": "EXP-1793981303118",
+      "campaignId": "cmp-kumtluang-1",
+      "amount": 25000,
+      "createdAt": "2026-11-06T16:08:23.118+00:00",
+      "updatedAt": "2026-11-16T12:27:37.169Z",
+      "metadata": {
+        "head": "Sound & Light / Equipment",
+        "status": "approved",
+        "is_locked": false,
+        "locked_at": null,
+        "locked_by": null,
+        "audit_date": null,
+        "audit_mark": "verified",
+        "recordedAt": "2026-11-06T16:08:23.118+00:00",
+        "recordedBy": "Super Admin (Master)",
+        "audit_notes": null,
+        "audit_query": null,
+        "paymentMode": "Cash",
+        "audit_period": null,
+        "attachmentUrl": null,
+        "campaignTitle": "BCM Ebenezer, Zobawk",
+        "audit_marked_at": "2026-11-16T11:32:52.216Z",
+        "audit_marked_by": "Mami Sailo",
+        "recordedByPhone": "9862000001",
+        "unlock_expires_at": null,
+        "auditor_verifications": {
+          "7005153902": {
+            "mark": "unchecked",
+            "query": "",
+            "markedAt": "2026-11-13T09:35:38.334Z",
+            "auditorKey": "7005153902",
+            "auditorName": "RCL",
+            "auditorPhone": "7005153902"
+          },
+          "9862525576": {
+            "mark": "verified",
+            "query": "",
+            "markedAt": "2026-11-16T11:32:52.216Z",
+            "auditorKey": "9862525576",
+            "auditorName": "Mami Sailo",
+            "auditorPhone": "9862525576"
+          }
+        },
+        "expenseHead": "Sound & Light / Equipment",
+        "paidTo": "Sound Incharge",
+        "payee": "Sound Incharge",
+        "payeeName": "Sound Incharge",
+        "purpose": "Sound System",
+        "description": "Sound System",
+        "voucherNo": "VCH-2026-006",
+        "date": "2026-07-20",
+        "spentDate": "2026-07-20"
+      }
+    },
+    {
+      "head": "Mizoram BMP",
+      "status": "approved",
+      "is_locked": false,
+      "recordedAt": "2026-10-29T15:50:39.727+00:00",
+      "recordedBy": "BMP Shillong Admin",
+      "paymentMode": "Cash",
+      "attachmentUrl": null,
+      "campaignTitle": "BMP Shillong",
+      "recordedByPhone": "9862000001",
+      "expenseHead": "Mizoram BMP",
+      "paidTo": "Mizoram BMP",
+      "payee": "Mizoram BMP",
+      "payeeName": "Mizoram BMP",
+      "purpose": "BMP Thuzir Bu man",
+      "description": "BMP Thuzir Bu man",
+      "voucherNo": "VCH-2026-009",
+      "date": "2026-07-29",
+      "spentDate": "2026-07-29",
+      "id": "VCH-2026-009",
+      "campaignId": "cmp-1788107291420",
+      "amount": 300,
+      "createdAt": "2026-10-29T15:50:39.727+00:00",
+      "updatedAt": "2026-11-16T12:27:37.169Z",
+      "locked_by": null,
+      "locked_at": null,
+      "audit_date": null,
+      "audit_period": null,
+      "audit_notes": null,
+      "auditor_verifications": {},
+      "metadata": {
+        "head": "Mizoram BMP",
+        "status": "approved",
+        "is_locked": false,
+        "recordedAt": "2026-10-29T15:50:39.727+00:00",
+        "recordedBy": "BMP Shillong Admin",
+        "paymentMode": "Cash",
+        "attachmentUrl": null,
+        "campaignTitle": "BMP Shillong",
+        "recordedByPhone": "",
+        "expenseHead": "Mizoram BMP",
+        "paidTo": "Mizoram BMP",
+        "payee": "Mizoram BMP",
+        "payeeName": "Mizoram BMP",
+        "purpose": "BMP Thuzir Bu man",
+        "description": "BMP Thuzir Bu man",
+        "voucherNo": "VCH-2026-009",
+        "date": "2026-07-29",
+        "spentDate": "2026-07-29"
+      }
+    },
+    {
+      "head": "Refreshment / Thingpui",
+      "status": "approved",
+      "is_locked": false,
+      "locked_at": null,
+      "locked_by": null,
+      "audit_date": null,
+      "audit_mark": "verified",
+      "recordedAt": "2026-11-06T16:04:53.941+00:00",
+      "recordedBy": "Super Admin (Master)",
+      "audit_notes": null,
+      "paymentMode": "Cash",
+      "audit_period": null,
+      "attachmentUrl": null,
+      "campaignTitle": "BCM Ebenezer, Zobawk",
+      "audit_marked_at": "2026-11-16T11:33:00.387Z",
+      "audit_marked_by": "Mami Sailo",
+      "recordedByPhone": "9862000001",
+      "unlock_expires_at": null,
+      "auditor_verifications": {
+        "7005153902": {
+          "mark": "unchecked",
+          "query": "",
+          "markedAt": "2026-11-13T09:03:01.030Z",
+          "auditorKey": "7005153902",
+          "auditorName": "RCL",
+          "auditorPhone": "7005153902"
+        },
+        "9862525576": {
+          "mark": "verified",
+          "query": "",
+          "markedAt": "2026-11-16T11:33:00.387Z",
+          "auditorKey": "9862525576",
+          "auditorName": "Mami Sailo",
+          "auditorPhone": "9862525576"
+        }
+      },
+      "expenseHead": "Refreshment / Thingpui",
+      "paidTo": "Treasurer EBE",
+      "payee": "Treasurer EBE",
+      "payeeName": "Treasurer EBE",
+      "purpose": "Kohhran thingpui ruai",
+      "description": "Kohhran thingpui ruai",
+      "voucherNo": "VCH-2026-003",
+      "date": "2026-07-04",
+      "spentDate": "2026-07-04",
+      "id": "EXP-1793981093941",
+      "campaignId": "cmp-kumtluang-1",
+      "amount": 5000,
+      "createdAt": "2026-11-06T16:04:53.941+00:00",
+      "updatedAt": "2026-11-16T12:27:37.169Z",
+      "metadata": {
+        "head": "Refreshment / Thingpui",
+        "status": "approved",
+        "is_locked": false,
+        "locked_at": null,
+        "locked_by": null,
+        "audit_date": null,
+        "audit_mark": "verified",
+        "recordedAt": "2026-11-06T16:04:53.941+00:00",
+        "recordedBy": "Super Admin (Master)",
+        "audit_notes": null,
+        "audit_query": null,
+        "paymentMode": "Cash",
+        "audit_period": null,
+        "attachmentUrl": null,
+        "campaignTitle": "BCM Ebenezer, Zobawk",
+        "audit_marked_at": "2026-11-16T11:33:00.387Z",
+        "audit_marked_by": "Mami Sailo",
+        "recordedByPhone": "9862000001",
+        "unlock_expires_at": null,
+        "auditor_verifications": {
+          "7005153902": {
+            "mark": "unchecked",
+            "query": "",
+            "markedAt": "2026-11-13T09:03:01.030Z",
+            "auditorKey": "7005153902",
+            "auditorName": "RCL",
+            "auditorPhone": "7005153902"
+          },
+          "9862525576": {
+            "mark": "verified",
+            "query": "",
+            "markedAt": "2026-11-16T11:33:00.387Z",
+            "auditorKey": "9862525576",
+            "auditorName": "Mami Sailo",
+            "auditorPhone": "9862525576"
+          }
+        },
+        "expenseHead": "Refreshment / Thingpui",
+        "paidTo": "Treasurer EBE",
+        "payee": "Treasurer EBE",
+        "payeeName": "Treasurer EBE",
+        "purpose": "Kohhran thingpui ruai",
+        "description": "Kohhran thingpui ruai",
+        "voucherNo": "VCH-2026-003",
+        "date": "2026-07-04",
+        "spentDate": "2026-07-04"
+      }
+    },
+    {
+      "head": "Mizoram BMP",
+      "status": "approved",
+      "is_locked": false,
+      "recordedAt": "2026-10-29T15:54:39.727+00:00",
+      "recordedBy": "BMP Shillong Admin",
+      "paymentMode": "Cash",
+      "attachmentUrl": null,
+      "campaignTitle": "BMP Shillong",
+      "recordedByPhone": "9862000001",
+      "expenseHead": "Mizoram BMP",
+      "paidTo": "Mizoram BMP",
+      "payee": "Mizoram BMP",
+      "payeeName": "Mizoram BMP",
+      "purpose": "MBMP Inkhawm thawhlawm thehluh",
+      "description": "MBMP Inkhawm thawhlawm thehluh",
+      "voucherNo": "VCH-2026-005",
+      "date": "2026-05-05",
+      "spentDate": "2026-05-05",
+      "id": "VCH-2026-005",
+      "campaignId": "cmp-1788107291420",
+      "amount": 800,
+      "createdAt": "2026-10-29T15:54:39.727+00:00",
+      "updatedAt": "2026-11-16T12:27:37.169Z",
+      "locked_by": null,
+      "locked_at": null,
+      "audit_date": null,
+      "audit_period": null,
+      "audit_notes": null,
+      "auditor_verifications": {},
+      "metadata": {
+        "head": "Mizoram BMP",
+        "status": "approved",
+        "is_locked": false,
+        "recordedAt": "2026-10-29T15:54:39.727+00:00",
+        "recordedBy": "BMP Shillong Admin",
+        "paymentMode": "Cash",
+        "attachmentUrl": null,
+        "campaignTitle": "BMP Shillong",
+        "recordedByPhone": "",
+        "expenseHead": "Mizoram BMP",
+        "paidTo": "Mizoram BMP",
+        "payee": "Mizoram BMP",
+        "payeeName": "Mizoram BMP",
+        "purpose": "MBMP Inkhawm thawhlawm thehluh",
+        "description": "MBMP Inkhawm thawhlawm thehluh",
+        "voucherNo": "VCH-2026-005",
+        "date": "2026-05-05",
+        "spentDate": "2026-05-05"
+      }
+    },
+    {
+      "head": "Relief & Condolence",
+      "status": "approved",
+      "is_locked": false,
+      "recordedAt": "2026-10-29T15:53:39.727+00:00",
+      "recordedBy": "BMP Shillong Admin",
+      "paymentMode": "Cash",
+      "attachmentUrl": null,
+      "campaignTitle": "BMP Shillong",
+      "recordedByPhone": "9862000001",
+      "expenseHead": "Relief & Condolence",
+      "paidTo": "Upa F Sangawia",
+      "payee": "Upa F Sangawia",
+      "payeeName": "Upa F Sangawia",
+      "purpose": "Upa F Sangawia Damlo kanna",
+      "description": "Upa F Sangawia Damlo kanna",
+      "voucherNo": "VCH-2026-006",
+      "date": "2026-08-28",
+      "spentDate": "2026-08-28",
+      "id": "VCH-2026-006",
+      "campaignId": "cmp-1788107291420",
+      "amount": 500,
+      "createdAt": "2026-10-29T15:53:39.727+00:00",
+      "updatedAt": "2026-11-16T12:27:37.169Z",
+      "locked_by": null,
+      "locked_at": null,
+      "audit_date": null,
+      "audit_period": null,
+      "audit_notes": null,
+      "auditor_verifications": {},
+      "metadata": {
+        "head": "Relief & Condolence",
+        "status": "approved",
+        "is_locked": false,
+        "recordedAt": "2026-10-29T15:53:39.727+00:00",
+        "recordedBy": "BMP Shillong Admin",
+        "paymentMode": "Cash",
+        "attachmentUrl": null,
+        "campaignTitle": "BMP Shillong",
+        "recordedByPhone": "",
+        "expenseHead": "Relief & Condolence",
+        "paidTo": "Upa F Sangawia",
+        "payee": "Upa F Sangawia",
+        "payeeName": "Upa F Sangawia",
+        "purpose": "Upa F Sangawia Damlo kanna",
+        "description": "Upa F Sangawia Damlo kanna",
+        "voucherNo": "VCH-2026-006",
+        "date": "2026-08-28",
+        "spentDate": "2026-08-28"
+      }
+    },
+    {
+      "head": "Lawmpuina",
+      "status": "approved",
+      "is_locked": false,
+      "recordedAt": "2026-10-29T15:52:39.727+00:00",
+      "recordedBy": "BMP Shillong Admin",
+      "paymentMode": "Cash",
+      "attachmentUrl": null,
+      "campaignTitle": "BMP Shillong",
+      "recordedByPhone": "9862000001",
+      "expenseHead": "Lawmpuina",
+      "paidTo": "TKP Shillong Unit",
+      "payee": "TKP Shillong Unit",
+      "payeeName": "TKP Shillong Unit",
+      "purpose": "TKP Shillong Unit Golden Jubilee Lawmpuina",
+      "description": "TKP Shillong Unit Golden Jubilee Lawmpuina",
+      "voucherNo": "VCH-2026-007",
+      "date": "2026-07-22",
+      "spentDate": "2026-07-22",
+      "id": "VCH-2026-007",
+      "campaignId": "cmp-1788107291420",
+      "amount": 2000,
+      "createdAt": "2026-10-29T15:52:39.727+00:00",
+      "updatedAt": "2026-11-16T12:27:37.169Z",
+      "locked_by": null,
+      "locked_at": null,
+      "audit_date": null,
+      "audit_period": null,
+      "audit_notes": null,
+      "auditor_verifications": {},
+      "metadata": {
+        "head": "Lawmpuina",
+        "status": "approved",
+        "is_locked": false,
+        "recordedAt": "2026-10-29T15:52:39.727+00:00",
+        "recordedBy": "BMP Shillong Admin",
+        "paymentMode": "Cash",
+        "attachmentUrl": null,
+        "campaignTitle": "BMP Shillong",
+        "recordedByPhone": "",
+        "expenseHead": "Lawmpuina",
+        "paidTo": "TKP Shillong Unit",
+        "payee": "TKP Shillong Unit",
+        "payeeName": "TKP Shillong Unit",
+        "purpose": "TKP Shillong Unit Golden Jubilee Lawmpuina",
+        "description": "TKP Shillong Unit Golden Jubilee Lawmpuina",
+        "voucherNo": "VCH-2026-007",
+        "date": "2026-07-22",
+        "spentDate": "2026-07-22"
+      }
+    },
+    {
+      "head": "HQRS Target",
+      "status": "approved",
+      "is_locked": false,
+      "locked_at": null,
+      "locked_by": null,
+      "audit_date": null,
+      "audit_mark": "verified",
+      "recordedAt": "2026-11-06T16:06:12.859+00:00",
+      "recordedBy": "Super Admin (Master)",
+      "audit_notes": null,
+      "paymentMode": "UPI",
+      "audit_period": null,
+      "attachmentUrl": null,
+      "campaignTitle": "BCM Ebenezer, Zobawk",
+      "audit_marked_at": "2026-11-16T11:32:53.231Z",
+      "audit_marked_by": "Mami Sailo",
+      "recordedByPhone": "9862000001",
+      "unlock_expires_at": null,
+      "auditor_verifications": {
+        "9862525576": {
+          "mark": "verified",
+          "query": "",
+          "markedAt": "2026-11-16T11:32:53.231Z",
+          "auditorKey": "9862525576",
+          "auditorName": "Mami Sailo",
+          "auditorPhone": "9862525576"
+        }
+      },
+      "expenseHead": "HQRS Target",
+      "paidTo": "HQ Accountant",
+      "payee": "HQ Accountant",
+      "payeeName": "HQ Accountant",
+      "purpose": "BCM HQ Target",
+      "description": "BCM HQ Target",
+      "voucherNo": "VCH-2026-004",
+      "date": "2026-07-11",
+      "spentDate": "2026-07-11",
+      "id": "EXP-1793981172859",
+      "campaignId": "cmp-kumtluang-1",
+      "amount": 55000,
+      "createdAt": "2026-11-06T16:06:12.859+00:00",
+      "updatedAt": "2026-11-16T12:27:37.169Z",
+      "metadata": {
+        "head": "HQRS Target",
+        "status": "approved",
+        "is_locked": false,
+        "locked_at": null,
+        "locked_by": null,
+        "audit_date": null,
+        "audit_mark": "verified",
+        "recordedAt": "2026-11-06T16:06:12.859+00:00",
+        "recordedBy": "Super Admin (Master)",
+        "audit_notes": null,
+        "audit_query": null,
+        "paymentMode": "UPI",
+        "audit_period": null,
+        "attachmentUrl": null,
+        "campaignTitle": "BCM Ebenezer, Zobawk",
+        "audit_marked_at": "2026-11-16T11:32:53.231Z",
+        "audit_marked_by": "Mami Sailo",
+        "recordedByPhone": "9862000001",
+        "unlock_expires_at": null,
+        "auditor_verifications": {
+          "9862525576": {
+            "mark": "verified",
+            "query": "",
+            "markedAt": "2026-11-16T11:32:53.231Z",
+            "auditorKey": "9862525576",
+            "auditorName": "Mami Sailo",
+            "auditorPhone": "9862525576"
+          }
+        },
+        "expenseHead": "HQRS Target",
+        "paidTo": "HQ Accountant",
+        "payee": "HQ Accountant",
+        "payeeName": "HQ Accountant",
+        "purpose": "BCM HQ Target",
+        "description": "BCM HQ Target",
+        "voucherNo": "VCH-2026-004",
+        "date": "2026-07-11",
+        "spentDate": "2026-07-11"
+      }
+    },
+    {
+      "head": "KNP",
+      "status": "approved",
+      "is_locked": false,
+      "locked_at": null,
+      "locked_by": null,
+      "audit_date": null,
+      "audit_mark": "verified",
+      "recordedAt": "2026-11-06T16:02:53.597+00:00",
+      "recordedBy": "Super Admin (Master)",
+      "audit_notes": null,
+      "paymentMode": "Cash",
+      "audit_period": null,
+      "attachmentUrl": null,
+      "campaignTitle": "BCM Ebenezer, Zobawk",
+      "audit_marked_at": "2026-11-16T11:33:04.576Z",
+      "audit_marked_by": "Mami Sailo",
+      "recordedByPhone": "9862000001",
+      "unlock_expires_at": null,
+      "auditor_verifications": {
+        "9862000001": {
+          "mark": "unchecked",
+          "query": "",
+          "markedAt": "2026-11-11T11:49:18.069Z",
+          "auditorKey": "9862000001",
+          "auditorName": "Super Admin (Master)",
+          "auditorPhone": "9862000001"
+        },
+        "9862525576": {
+          "mark": "verified",
+          "query": "",
+          "markedAt": "2026-11-16T11:33:04.576Z",
+          "auditorKey": "9862525576",
+          "auditorName": "Mami Sailo",
+          "auditorPhone": "9862525576"
+        }
+      },
+      "expenseHead": "KNP",
+      "paidTo": "KNP Convener",
+      "payee": "KNP Convener",
+      "payeeName": "KNP Convener",
+      "purpose": "KNP Inkhawmpui.Senso",
+      "description": "KNP Inkhawmpui.Senso",
+      "voucherNo": "VCH-2026-001",
+      "date": "2026-07-03",
+      "spentDate": "2026-07-03",
+      "id": "EXP-1793980973597",
+      "campaignId": "cmp-kumtluang-1",
+      "amount": 15000,
+      "createdAt": "2026-11-06T16:02:53.597+00:00",
+      "updatedAt": "2026-11-16T12:27:37.169Z",
+      "metadata": {
+        "head": "KNP",
+        "status": "approved",
+        "is_locked": false,
+        "locked_at": null,
+        "locked_by": null,
+        "audit_date": null,
+        "audit_mark": "verified",
+        "recordedAt": "2026-11-06T16:02:53.597+00:00",
+        "recordedBy": "Super Admin (Master)",
+        "audit_notes": null,
+        "audit_query": null,
+        "paymentMode": "Cash",
+        "audit_period": null,
+        "attachmentUrl": null,
+        "campaignTitle": "BCM Ebenezer, Zobawk",
+        "audit_marked_at": "2026-11-16T11:33:04.576Z",
+        "audit_marked_by": "Mami Sailo",
+        "recordedByPhone": "9862000001",
+        "unlock_expires_at": null,
+        "auditor_verifications": {
+          "9862000001": {
+            "mark": "unchecked",
+            "query": "",
+            "markedAt": "2026-11-11T11:49:18.069Z",
+            "auditorKey": "9862000001",
+            "auditorName": "Super Admin (Master)",
+            "auditorPhone": "9862000001"
+          },
+          "9862525576": {
+            "mark": "verified",
+            "query": "",
+            "markedAt": "2026-11-16T11:33:04.576Z",
+            "auditorKey": "9862525576",
+            "auditorName": "Mami Sailo",
+            "auditorPhone": "9862525576"
+          }
+        },
+        "expenseHead": "KNP",
+        "paidTo": "KNP Convener",
+        "payee": "KNP Convener",
+        "payeeName": "KNP Convener",
+        "purpose": "KNP Inkhawmpui.Senso",
+        "description": "KNP Inkhawmpui.Senso",
+        "voucherNo": "VCH-2026-001",
+        "date": "2026-07-03",
+        "spentDate": "2026-07-03"
+      }
+    },
+    {
+      "head": "Chowkider",
+      "status": "approved",
+      "is_locked": false,
+      "locked_at": null,
+      "locked_by": null,
+      "audit_date": null,
+      "audit_mark": "verified",
+      "recordedAt": "2026-11-16T07:41:27.957Z",
+      "recordedBy": "Super Admin (Master)",
+      "audit_notes": null,
+      "paymentMode": "Cash",
+      "audit_period": null,
+      "attachmentUrl": null,
+      "campaignTitle": "BCM Ebenezer, Zobawk",
+      "audit_marked_at": "2026-11-16T11:30:35.563Z",
+      "audit_marked_by": "RCL",
+      "recordedByPhone": "9862000001",
+      "unlock_expires_at": null,
+      "auditor_verifications": {
+        "7005153902": {
+          "mark": "verified",
+          "query": "",
+          "markedAt": "2026-11-16T11:30:35.563Z",
+          "auditorKey": "7005153902",
+          "auditorName": "RCL",
+          "auditorPhone": "7005153902"
+        }
+      },
+      "expenseHead": "Chowkider",
+      "paidTo": "Lalramtiama",
+      "payee": "Lalramtiama",
+      "payeeName": "Lalramtiama",
+      "purpose": "Monthly Salary",
+      "description": "Monthly Salary",
+      "voucherNo": "VCH-2026-007",
+      "date": "2026-07-31",
+      "spentDate": "2026-07-31",
+      "id": "EXP-1794814887957",
+      "campaignId": "cmp-kumtluang-1",
+      "amount": 5500,
+      "createdAt": "2026-11-16T07:41:27.957+00:00",
+      "updatedAt": "2026-11-16T12:27:37.169Z",
+      "metadata": {
+        "head": "Chowkider",
+        "status": "approved",
+        "is_locked": false,
+        "locked_at": null,
+        "locked_by": null,
+        "audit_date": null,
+        "audit_mark": "verified",
+        "recordedAt": "2026-11-16T07:41:27.957Z",
+        "recordedBy": "Super Admin (Master)",
+        "audit_notes": null,
+        "audit_query": null,
+        "paymentMode": "Cash",
+        "audit_period": null,
+        "attachmentUrl": null,
+        "campaignTitle": "BCM Ebenezer, Zobawk",
+        "audit_marked_at": "2026-11-16T11:30:35.563Z",
+        "audit_marked_by": "RCL",
+        "recordedByPhone": "9862000001",
+        "unlock_expires_at": null,
+        "auditor_verifications": {
+          "7005153902": {
+            "mark": "verified",
+            "query": "",
+            "markedAt": "2026-11-16T11:30:35.563Z",
+            "auditorKey": "7005153902",
+            "auditorName": "RCL",
+            "auditorPhone": "7005153902"
+          }
+        },
+        "expenseHead": "Chowkider",
+        "paidTo": "Lalramtiama",
+        "payee": "Lalramtiama",
+        "payeeName": "Lalramtiama",
+        "purpose": "Monthly Salary",
+        "description": "Monthly Salary",
+        "voucherNo": "VCH-2026-007",
+        "date": "2026-07-31",
+        "spentDate": "2026-07-31"
+      }
     }
   ],
   "deletedExpenseIds": [
@@ -8963,5 +10598,5 @@
   ],
   "modificationRequests": [],
   "hardPurgeTimestamp": 0,
-  "lastUpdated": "2026-11-16T06:16:52.230Z"
+  "lastUpdated": 1794832063424
 }
