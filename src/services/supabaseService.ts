@@ -1804,8 +1804,26 @@ export async function loadSupabaseInitialState(): Promise<{
         if (remIdx >= 0) {
           const locTime = loc.updatedAt ? new Date(loc.updatedAt).getTime() : 0;
           const remTime = mergedCamps[remIdx].updatedAt ? new Date(mergedCamps[remIdx].updatedAt).getTime() : 0;
+          const locHeads = Array.isArray(loc.expenseHeads) && loc.expenseHeads.length > 0 ? loc.expenseHeads : (loc as any).metadata?.expenseHeads;
+          const remHeads = Array.isArray(mergedCamps[remIdx].expenseHeads) && mergedCamps[remIdx].expenseHeads!.length > 0
+            ? mergedCamps[remIdx].expenseHeads
+            : (mergedCamps[remIdx] as any).metadata?.expenseHeads;
           if (locTime > remTime) {
-            mergedCamps[remIdx] = { ...mergedCamps[remIdx], ...loc };
+            mergedCamps[remIdx] = {
+              ...mergedCamps[remIdx],
+              ...loc,
+              ...(Array.isArray(locHeads) && locHeads.length > 0 ? { expenseHeads: locHeads } : (Array.isArray(remHeads) && remHeads.length > 0 ? { expenseHeads: remHeads } : {}))
+            };
+          } else if ((!Array.isArray(remHeads) || remHeads.length === 0) && Array.isArray(locHeads) && locHeads.length > 0) {
+            mergedCamps[remIdx] = {
+              ...mergedCamps[remIdx],
+              expenseHeads: locHeads,
+              metadata: {
+                ...(mergedCamps[remIdx].metadata || {}),
+                expenseHeads: locHeads
+              }
+            };
+            upsertSupabaseCampaign(mergedCamps[remIdx]).catch(() => {});
           }
         } else {
           mergedCamps.push(loc);
@@ -1906,9 +1924,25 @@ export function initSupabaseRealtimeSync(callbacks: SupabaseRealtimeCallbacks): 
           for (const loc of localCamps) {
             if (!loc || !loc.id) continue;
             const lKey = String(loc.id).toLowerCase().trim();
-            if (!merged.some(c => String(c.id).toLowerCase().trim() === lKey)) {
+            const remIdx = merged.findIndex(c => String(c.id).toLowerCase().trim() === lKey);
+            if (remIdx === -1) {
               merged.push(loc);
               upsertSupabaseCampaign(loc).catch(() => {});
+            } else {
+              const locHeads = Array.isArray(loc.expenseHeads) && loc.expenseHeads.length > 0 ? loc.expenseHeads : (loc as any).metadata?.expenseHeads;
+              const remHeads = Array.isArray(merged[remIdx].expenseHeads) && merged[remIdx].expenseHeads!.length > 0
+                ? merged[remIdx].expenseHeads
+                : (merged[remIdx] as any).metadata?.expenseHeads;
+              if ((!Array.isArray(remHeads) || remHeads.length === 0) && Array.isArray(locHeads) && locHeads.length > 0) {
+                merged[remIdx] = {
+                  ...merged[remIdx],
+                  expenseHeads: locHeads,
+                  metadata: {
+                    ...(merged[remIdx].metadata || {}),
+                    expenseHeads: locHeads
+                  }
+                };
+              }
             }
           }
           saveStoredCampaigns(merged, true);

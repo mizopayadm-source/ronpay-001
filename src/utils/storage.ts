@@ -744,9 +744,26 @@ export const saveStoredCampaigns = (campaigns: Campaign[], skipServerPush: boole
       }
     }
 
-    // Preserve campaign configuration and strip any deleted auditor grants from both c.auditorGrants and c.metadata.auditorGrants
+    // Preserve campaign configuration (including custom expenseHeads) and strip any deleted auditor grants from both c.auditorGrants and c.metadata.auditorGrants
     const delGrantSet = new Set(getStoredDeletedAuditorGrantIds());
+    const prevCampLookup = new Map<string, any>();
+    try {
+      const rawPrevCamps = typeof localStorage !== 'undefined' ? localStorage.getItem(CAMPAIGNS_KEY) : null;
+      if (rawPrevCamps) {
+        const parsedPrev = JSON.parse(rawPrevCamps);
+        if (Array.isArray(parsedPrev)) {
+          for (const pc of parsedPrev) {
+            if (pc && pc.id) {
+              prevCampLookup.set(String(pc.id).toLowerCase().trim(), pc);
+            }
+          }
+        }
+      }
+    } catch {}
+
     const sanitized = mergedList.map(c => {
+      const cleanId = String(c.id || '').toLowerCase().trim();
+      const prevCamp = prevCampLookup.get(cleanId);
       const code = c.orgCode ? String(c.orgCode).trim().toUpperCase() : derivePrefixFromText(c.orgName || c.title).trim().toUpperCase();
       const rawGrants = Array.isArray(c.auditorGrants)
         ? c.auditorGrants
@@ -754,15 +771,49 @@ export const saveStoredCampaigns = (campaigns: Campaign[], skipServerPush: boole
       const cleanGrants = Array.isArray(rawGrants)
         ? rawGrants.filter((g: any) => g && g.id && !delGrantSet.has(String(g.id).toLowerCase().trim()))
         : undefined;
+
+      // Preserve configured expenseHeads across all saves and syncs
+      let effectiveExpenseHeads: string[] | undefined = Array.isArray(c.expenseHeads) && c.expenseHeads.length > 0
+        ? c.expenseHeads
+        : (Array.isArray((c as any).metadata?.expenseHeads) && (c as any).metadata.expenseHeads.length > 0
+            ? (c as any).metadata.expenseHeads
+            : undefined);
+      if (!effectiveExpenseHeads && prevCamp) {
+        const prevHeads = Array.isArray(prevCamp.expenseHeads) && prevCamp.expenseHeads.length > 0
+          ? prevCamp.expenseHeads
+          : (Array.isArray(prevCamp.metadata?.expenseHeads) && prevCamp.metadata.expenseHeads.length > 0
+              ? prevCamp.metadata.expenseHeads
+              : undefined);
+        if (prevHeads) effectiveExpenseHeads = prevHeads;
+      }
+      if (!effectiveExpenseHeads && typeof localStorage !== 'undefined' && c.id) {
+        try {
+          const rawHeads = localStorage.getItem(`${EXPENSE_HEADS_PREFIX}${c.id}`);
+          if (rawHeads) {
+            const parsedHeads = JSON.parse(rawHeads);
+            if (Array.isArray(parsedHeads) && parsedHeads.length > 0) {
+              effectiveExpenseHeads = parsedHeads;
+            }
+          }
+        } catch {}
+      }
+      if (effectiveExpenseHeads && typeof localStorage !== 'undefined' && c.id) {
+        try {
+          localStorage.setItem(`${EXPENSE_HEADS_PREFIX}${c.id}`, JSON.stringify(effectiveExpenseHeads));
+        } catch {}
+      }
+
       return {
         ...c,
         orgCode: code,
         ...(cleanGrants !== undefined ? { auditorGrants: cleanGrants } : {}),
-        ...(c.metadata || cleanGrants !== undefined
+        ...(effectiveExpenseHeads !== undefined ? { expenseHeads: effectiveExpenseHeads } : {}),
+        ...(c.metadata || cleanGrants !== undefined || effectiveExpenseHeads !== undefined
           ? {
               metadata: {
                 ...(c.metadata || {}),
                 ...(cleanGrants !== undefined ? { auditorGrants: cleanGrants } : {}),
+                ...(effectiveExpenseHeads !== undefined ? { expenseHeads: effectiveExpenseHeads } : {}),
                 ...(delGrantSet.size > 0 ? { deletedAuditorGrantIds: Array.from(delGrantSet) } : {})
               }
             }
@@ -772,24 +823,17 @@ export const saveStoredCampaigns = (campaigns: Campaign[], skipServerPush: boole
 
     // Auto-detect and cascade Pawl Code migration if any campaign orgCode has changed
     try {
-      const rawPrev = typeof localStorage !== 'undefined' ? localStorage.getItem(CAMPAIGNS_KEY) : null;
-      if (rawPrev) {
-        const prevList = JSON.parse(rawPrev);
-        if (Array.isArray(prevList)) {
-          const prevMap = new Map<string, string>();
-          prevList.forEach((c: any) => {
-            if (c && c.id && c.orgCode) prevMap.set(String(c.id).toLowerCase().trim(), String(c.orgCode).trim().toUpperCase());
-          });
-          sanitized.forEach(c => {
-            if (c && c.id && c.orgCode) {
-              const oldC = prevMap.get(String(c.id).toLowerCase().trim());
-              const newC = String(c.orgCode).trim().toUpperCase();
-              if (oldC && oldC !== newC) {
-                migrateCampaignMembersPrefix(c.id, oldC, newC);
-              }
+      if (prevCampLookup.size > 0) {
+        sanitized.forEach(c => {
+          if (c && c.id && c.orgCode) {
+            const prev = prevCampLookup.get(String(c.id).toLowerCase().trim());
+            const oldC = prev?.orgCode ? String(prev.orgCode).trim().toUpperCase() : '';
+            const newC = String(c.orgCode).trim().toUpperCase();
+            if (oldC && oldC !== newC) {
+              migrateCampaignMembersPrefix(c.id, oldC, newC);
             }
-          });
-        }
+          }
+        });
       }
     } catch (migErr) {
       console.warn('saveStoredCampaigns auto-migration check:', migErr);
@@ -825,20 +869,52 @@ export const saveStoredCampaigns = (campaigns: Campaign[], skipServerPush: boole
 
 export const saveCampaign = (camp: Campaign): void => {
   if (!camp || !camp.id) return;
+  const current = getStoredCampaigns();
+  const idx = current.findIndex(c => c.id === camp.id);
+  const existing = idx >= 0 ? current[idx] : undefined;
+
   const delGrantSet = new Set(getStoredDeletedAuditorGrantIds());
   const rawCampGrants = Array.isArray(camp.auditorGrants)
     ? camp.auditorGrants
-    : (Array.isArray((camp as any).metadata?.auditorGrants) ? (camp as any).metadata.auditorGrants : undefined);
+    : (Array.isArray((camp as any).metadata?.auditorGrants)
+        ? (camp as any).metadata.auditorGrants
+        : (Array.isArray(existing?.auditorGrants) ? existing?.auditorGrants : (existing as any)?.metadata?.auditorGrants));
   const cleanCampGrants = Array.isArray(rawCampGrants)
     ? rawCampGrants.filter((g: any) => g && g.id && !delGrantSet.has(String(g.id).toLowerCase().trim()))
     : undefined;
+
+  let effectiveExpenseHeads: string[] | undefined = Array.isArray(camp.expenseHeads) && camp.expenseHeads.length > 0
+    ? camp.expenseHeads
+    : (Array.isArray((camp as any).metadata?.expenseHeads) && (camp as any).metadata.expenseHeads.length > 0
+        ? (camp as any).metadata.expenseHeads
+        : (Array.isArray(existing?.expenseHeads) && existing!.expenseHeads!.length > 0
+            ? existing!.expenseHeads
+            : (Array.isArray((existing as any)?.metadata?.expenseHeads) && (existing as any).metadata.expenseHeads.length > 0
+                ? (existing as any).metadata.expenseHeads
+                : undefined)));
+  if (!effectiveExpenseHeads && typeof localStorage !== 'undefined') {
+    try {
+      const rawLocalHeads = localStorage.getItem(`${EXPENSE_HEADS_PREFIX}${camp.id}`);
+      if (rawLocalHeads) {
+        const parsedHeads = JSON.parse(rawLocalHeads);
+        if (Array.isArray(parsedHeads) && parsedHeads.length > 0) {
+          effectiveExpenseHeads = parsedHeads;
+        }
+      }
+    } catch {}
+  }
+
   const effectiveValidity = camp.validityDate || camp.expiry_date || camp.valid_until || (camp as any).validity_date || (camp as any).metadata?.validityDate || (camp as any).metadata?.expiry_date || (camp as any).metadata?.valid_until;
   const stamped: Campaign = {
+    ...(existing || {}),
     ...camp,
     ...(cleanCampGrants !== undefined ? { auditorGrants: cleanCampGrants } : {}),
+    ...(effectiveExpenseHeads !== undefined ? { expenseHeads: effectiveExpenseHeads } : {}),
     metadata: {
+      ...((existing as any)?.metadata || {}),
       ...(camp.metadata || {}),
       ...(cleanCampGrants !== undefined ? { auditorGrants: cleanCampGrants } : {}),
+      ...(effectiveExpenseHeads !== undefined ? { expenseHeads: effectiveExpenseHeads } : {}),
       ...(delGrantSet.size > 0 ? { deletedAuditorGrantIds: Array.from(delGrantSet) } : {})
     },
     validityDate: effectiveValidity || camp.validityDate,
@@ -846,12 +922,9 @@ export const saveCampaign = (camp: Campaign): void => {
     valid_until: effectiveValidity || camp.valid_until,
     updatedAt: new Date().toISOString()
   };
-  const current = getStoredCampaigns();
-  const idx = current.findIndex(c => c.id === stamped.id);
 
   // Auto-cascade Pawl Code migration if orgCode has changed
-  if (idx >= 0) {
-    const existing = current[idx];
+  if (idx >= 0 && existing) {
     const oldCode = existing?.orgCode ? String(existing.orgCode).trim().toUpperCase() : '';
     const newCode = stamped?.orgCode ? String(stamped.orgCode).trim().toUpperCase() : '';
     if (oldCode && newCode && oldCode !== newCode) {
