@@ -1460,6 +1460,65 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
     };
   }, [allTransactions, allExpenses, campaign, cbPreset, cbFromDate, cbToDate, cbAuditFilter, searchQuery, effectiveOpeningBalance, isRestrictedAuditor, appointedFromDate, appointedToDate, appointedPeriodLabel, getRecordAuditCategory]);
 
+  // Canonical Audit Period & Coverage Date Range for On-Screen & Printable Audit Certificates
+  const certificateCoverageInfo = useMemo(() => {
+    const periodTitle = (isRestrictedAuditor && appointedPeriodLabel) ? appointedPeriodLabel : auditPeriod;
+    let fromIso = appointedFromDate || cashBookAuditData.effFrom || '';
+    let toIso = appointedToDate || cashBookAuditData.effTo || '';
+
+    // When no explicit date filter is active (All Time), derive earliest & latest dates from the ledger entries
+    if (!fromIso || !toIso) {
+      const isoDates: string[] = [];
+      const extractIso = (rawVal: any) => {
+        const raw = String(rawVal || '').trim();
+        if (!raw) return;
+        if (raw.length >= 10 && /^\d{4}-\d{2}-\d{2}/.test(raw)) {
+          isoDates.push(raw.slice(0, 10));
+        } else {
+          const d = new Date(raw);
+          if (!isNaN(d.getTime())) isoDates.push(d.toISOString().slice(0, 10));
+        }
+      };
+      cashBookAuditData.inRangeTxs.forEach((t: any) => extractIso(t.timestamp || t.date || t.createdAt));
+      cashBookAuditData.inRangeExps.forEach((e: any) => extractIso(e.spentDate || e.date || e.createdAt));
+      isoDates.sort();
+      if (!fromIso && isoDates.length > 0) fromIso = isoDates[0];
+      if (!toIso && isoDates.length > 0) toIso = isoDates[isoDates.length - 1];
+    }
+
+    const fromDisplay = fromIso ? formatDateDDMMYYYY(fromIso) : '';
+    const toDisplay = toIso ? formatDateDDMMYYYY(toIso) : '';
+
+    let coverageRangeDisplay = 'Hun Chhung Zawng (All Recorded Entries)';
+    if (fromDisplay && toDisplay) {
+      coverageRangeDisplay = `${fromDisplay} – ${toDisplay}`;
+    } else if (fromDisplay) {
+      coverageRangeDisplay = `${fromDisplay} aṭanga Tun Thleng (${formatDateDDMMYYYY(new Date().toISOString())})`;
+    } else if (toDisplay) {
+      coverageRangeDisplay = `A Bul aṭanga ${toDisplay} thleng`;
+    }
+
+    let durationDays: number | null = null;
+    if (fromIso && toIso && /^\d{4}-\d{2}-\d{2}$/.test(fromIso) && /^\d{4}-\d{2}-\d{2}$/.test(toIso)) {
+      const startMs = new Date(`${fromIso}T00:00:00Z`).getTime();
+      const endMs = new Date(`${toIso}T00:00:00Z`).getTime();
+      if (!isNaN(startMs) && !isNaN(endMs) && endMs >= startMs) {
+        durationDays = Math.round((endMs - startMs) / 86400000) + 1;
+      }
+    }
+
+    return {
+      periodTitle,
+      fromIso,
+      toIso,
+      fromDisplay,
+      toDisplay,
+      coverageRangeDisplay,
+      durationDays,
+      isExplicitDateRange: Boolean(appointedFromDate || appointedToDate || cashBookAuditData.effFrom || cashBookAuditData.effTo)
+    };
+  }, [isRestrictedAuditor, appointedPeriodLabel, auditPeriod, appointedFromDate, appointedToDate, cashBookAuditData]);
+
   // Dual / Co-Auditor Consensus, Progress & Discrepancy Engine
   const dualAuditSummary = useMemo(() => {
     const freshCamp = campaign
@@ -2071,7 +2130,9 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
   // Generate & Print Official Audit Certificate (Single-Page Joint Layout for Dual Auditors)
   const handlePrintCertificate = () => {
     const isDualCert = isDualAuditMode && dualAuditSummary.auditorsList.length >= 2;
-    const effPeriodText = (isRestrictedAuditor && appointedPeriodLabel) ? appointedPeriodLabel : auditPeriod;
+    const effPeriodText = certificateCoverageInfo.periodTitle;
+    const effCoverageText = certificateCoverageInfo.coverageRangeDisplay;
+    const effDurationLabel = certificateCoverageInfo.durationDays !== null ? ` (Ni ${certificateCoverageInfo.durationDays})` : '';
 
     const certSignaturesHtml = isDualCert
       ? dualAuditSummary.auditorsList.map((aud, idx) => {
@@ -2127,6 +2188,7 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
           .badge { display: inline-block; background: ${dualAuditSummary.isJointFinalized ? '#047857' : '#b45309'}; color: #fff; padding: 3px 12px; border-radius: 999px; font-size: 10px; font-weight: 900; letter-spacing: 0.8px; text-transform: uppercase; margin-bottom: 6px; }
           .title { font-size: 20px; font-weight: 900; color: #0f172a; margin: 0 0 3px 0; }
           .subtitle { font-size: 11.5px; color: #475569; margin: 0; font-weight: 600; }
+          .coverage-pill { display: inline-block; margin-top: 7px; padding: 4px 12px; border-radius: 8px; background: #eef2ff; border: 1px solid #c7d2fe; font-size: 11px; font-weight: 700; color: #1e1b4b; }
           .grid { display: flex; justify-content: space-between; gap: 10px; margin-bottom: 14px; }
           .stat-box { flex: 1; border: 1px solid #cbd5e1; border-radius: 10px; padding: 9px 10px; background: #f8fafc; text-align: center; }
           .stat-label { font-size: 9.5px; color: #64748b; font-weight: 800; text-transform: uppercase; }
@@ -2154,6 +2216,7 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
             <div class="badge">${dualAuditSummary.isJointFinalized ? '✓✓ JOINT FINANCIAL AUDIT CERTIFICATE (FINAL VERIFIED)' : 'OFFICIAL JOINT AUDIT CERTIFICATE'}</div>
             <h1 class="title">${campaign.title}</h1>
             <p class="subtitle">Period: <strong>${effPeriodText}</strong> • Category: ${campaign.category.toUpperCase()} • ID: ${campaign.id}</p>
+            <div class="coverage-pill">📅 Audit Huam Hun Chhung: <strong>${effCoverageText}</strong>${effDurationLabel}</div>
           </div>
 
           <div class="grid">
@@ -2180,7 +2243,7 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
           <div class="cert-statement">
             <div class="cert-title">⚖️ Joint Auditor Verification &amp; Compliance Statement</div>
             <div class="cert-body">
-              He lehkha hmang hian <strong>${campaign.title}</strong> accounts chu Creator ruatsa hun bi <strong>(${effPeriodText})</strong> chhung atan Auditor pahnihten uluk taka kan endik hnuah a inmil thlap a, a dik tawk a ni tih kan nemnghet e. (${isExpenditureOnlyAudit ? 'Expenditure / Sum Chhuak Audit Mode — Income chu Treasurer thun sa pawm a ni.' : 'Sum Lut leh Sum Chhuak Pahnih Audit Mode.'})
+              He lehkha hmang hian <strong>${campaign.title}</strong> accounts chu hun bi <strong>${effPeriodText}</strong> — Audit huam hun chhung <strong>(${effCoverageText})</strong> atan Auditor pahnihten uluk taka kan endik hnuah a inmil thlap a, a dik tawk a ni tih kan nemnghet e. (${isExpenditureOnlyAudit ? 'Expenditure / Sum Chhuak Audit Mode — Income chu Treasurer thun sa pawm a ni.' : 'Sum Lut leh Sum Chhuak Pahnih Audit Mode.'})
               <br/>
               <strong>Observations / Notes:</strong> <em>${auditNotes || 'Records and balances verified in order.'}</em>
             </div>
@@ -2193,8 +2256,8 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
 
           <div class="footer-row">
             <div style="font-size:10px;color:#475569;">
-              <div><strong>Issued Date:</strong> ${formatDateDDMMYYYY(new Date().toISOString())}</div>
-              <div><strong>Audit Consensus:</strong> ${dualAuditSummary.consensusVerifiedCount} records matched • Tamper-Proof Financial Lock</div>
+              <div><strong>Audit Huam Hun Chhung:</strong> ${effCoverageText}${effDurationLabel}</div>
+              <div><strong>Issued Date:</strong> ${formatDateDDMMYYYY(new Date().toISOString())} • <strong>Audit Consensus:</strong> ${dualAuditSummary.consensusVerifiedCount} records matched • Tamper-Proof Lock</div>
             </div>
             <div class="seal-box">
               <div>RONPAY</div>
@@ -2213,56 +2276,63 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
         <meta charset="utf-8">
         <title>Audit Certificate - ${campaign.title}</title>
         <style>
-          @page { size: A4; margin: 20mm; }
-          body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #1e293b; margin: 0; padding: 20px; line-height: 1.5; }
-          .header-box { border-bottom: 2px solid #0f172a; padding-bottom: 16px; margin-bottom: 24px; text-align: center; }
+          @page { size: A4; margin: 18mm; }
+          body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #1e293b; margin: 0; padding: 18px; line-height: 1.5; }
+          .header-box { border-bottom: 2px solid #0f172a; padding-bottom: 14px; margin-bottom: 20px; text-align: center; }
           .badge { display: inline-block; background: #f1f5f9; border: 1px solid #cbd5e1; padding: 4px 12px; border-radius: 999px; font-size: 11px; font-weight: bold; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 8px; }
-          .title { font-size: 24px; font-weight: 800; color: #0f172a; margin: 0 0 6px 0; }
-          .subtitle { font-size: 14px; color: #475569; margin: 0; }
-          .grid { display: flex; justify-content: space-between; gap: 16px; margin-bottom: 24px; }
-          .stat-box { flex: 1; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px; background: #f8fafc; }
-          .stat-label { font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase; }
-          .stat-val { font-size: 18px; font-weight: 800; color: #0f172a; margin-top: 4px; }
+          .title { font-size: 23px; font-weight: 800; color: #0f172a; margin: 0 0 6px 0; }
+          .subtitle { font-size: 13px; color: #475569; margin: 0; }
+          .coverage-pill { display: inline-block; margin-top: 8px; padding: 5px 14px; border-radius: 8px; background: #eef2ff; border: 1px solid #c7d2fe; font-size: 12px; font-weight: 700; color: #1e1b4b; }
+          .grid { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 20px; }
+          .stat-box { flex: 1; border: 1px solid #e2e8f0; border-radius: 12px; padding: 12px; background: #f8fafc; text-align: center; }
+          .stat-label { font-size: 10px; color: #64748b; font-weight: 700; text-transform: uppercase; }
+          .stat-val { font-size: 16px; font-weight: 800; color: #0f172a; margin-top: 4px; }
           .stat-val.green { color: #059669; }
           .stat-val.red { color: #dc2626; }
           .stat-val.blue { color: #2563eb; }
-          .cert-statement { border: 1.5px dashed #cbd5e1; border-radius: 12px; padding: 20px; background: #ffffff; margin-bottom: 28px; }
-          .cert-title { font-size: 14px; font-weight: 800; text-transform: uppercase; color: #0f172a; margin-bottom: 10px; }
-          .cert-body { font-size: 13px; color: #334155; line-height: 1.7; }
-          .signature-section { margin-top: 40px; display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; }
-          .sig-box { width: 200px; border-top: 1px solid #0f172a; padding-top: 8px; text-align: center; font-size: 12px; }
-          .seal-box { border: 2px solid #059669; border-radius: 50%; width: 95px; height: 95px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; color: #059669; font-size: 9px; font-weight: 900; letter-spacing: 0.5px; transform: rotate(-8deg); }
+          .cert-statement { border: 1.5px dashed #cbd5e1; border-radius: 12px; padding: 18px; background: #ffffff; margin-bottom: 24px; }
+          .cert-title { font-size: 13.5px; font-weight: 800; text-transform: uppercase; color: #0f172a; margin-bottom: 10px; }
+          .cert-body { font-size: 12.5px; color: #334155; line-height: 1.65; }
+          .signature-section { margin-top: 32px; display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; }
+          .sig-box { width: 210px; border-top: 1px solid #0f172a; padding-top: 8px; text-align: center; font-size: 12px; }
+          .seal-box { border: 2px solid #059669; border-radius: 50%; width: 90px; height: 90px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; color: #059669; font-size: 9px; font-weight: 900; letter-spacing: 0.5px; transform: rotate(-8deg); }
         </style>
       </head>
       <body>
         <div class="header-box">
           <div class="badge">Official Financial Audit Certificate</div>
           <h1 class="title">${campaign.title}</h1>
-          <p class="subtitle">Bawm Category: ${campaign.category.toUpperCase()} • Campaign ID: ${campaign.id}</p>
+          <p class="subtitle">Audit Period: <strong>${effPeriodText}</strong> • Category: ${campaign.category.toUpperCase()} • ID: ${campaign.id}</p>
+          <div class="coverage-pill">📅 Audit Huam Hun Chhung: <strong>${effCoverageText}</strong>${effDurationLabel}</div>
         </div>
 
         <div class="grid">
           <div class="stat-box">
-            <div class="stat-label">Total Inflow (Dawn Zat)</div>
-            <div class="stat-val green">₹${stats.totalInflow.toLocaleString('en-IN')}</div>
-            <div style="font-size: 11px; color: #64748b; margin-top: 2px;">Records: ${stats.txCount}</div>
+            <div class="stat-label">Opening (B/F)</div>
+            <div class="stat-val">₹${cashBookAuditData.openingBalance.toLocaleString('en-IN')}</div>
+            <div style="font-size: 10px; color: #64748b; margin-top: 2px;">${certificateCoverageInfo.fromDisplay ? `${certificateCoverageInfo.fromDisplay} hma` : 'A Bul'}</div>
           </div>
           <div class="stat-box">
-            <div class="stat-label">Total Outflow (Senso)</div>
-            <div class="stat-val red">₹${stats.totalOutflow.toLocaleString('en-IN')}</div>
-            <div style="font-size: 11px; color: #64748b; margin-top: 2px;">Vouchers: ${stats.expCount}</div>
+            <div class="stat-label">Inflow (Lut)</div>
+            <div class="stat-val green">+₹${cashBookAuditData.periodReceiptsTotal.toLocaleString('en-IN')}</div>
+            <div style="font-size: 10px; color: #64748b; margin-top: 2px;">Records: ${cashBookAuditData.inRangeTxs.length}</div>
           </div>
           <div class="stat-box">
-            <div class="stat-label">Net Closing Balance</div>
-            <div class="stat-val blue">₹${stats.netBalance.toLocaleString('en-IN')}</div>
-            <div style="font-size: 11px; color: #64748b; margin-top: 2px;">Accounts Balanced</div>
+            <div class="stat-label">Outflow (Senso)</div>
+            <div class="stat-val red">-₹${cashBookAuditData.periodPaymentsTotal.toLocaleString('en-IN')}</div>
+            <div style="font-size: 10px; color: #64748b; margin-top: 2px;">Vouchers: ${cashBookAuditData.inRangeExps.length}</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">Closing Balance (C/D)</div>
+            <div class="stat-val blue">₹${cashBookAuditData.closingBalance.toLocaleString('en-IN')}</div>
+            <div style="font-size: 10px; color: #64748b; margin-top: 2px;">Accounts Balanced</div>
           </div>
         </div>
 
         <div class="cert-statement">
           <div class="cert-title">⚖️ Auditor's Verification & Compliance Report</div>
           <div class="cert-body">
-            He lehkha hmang hian <strong>${campaign.title}</strong> accounts hi <strong>${effPeriodText}</strong> chhung a tan enfiah a, audit fel a ni tih ka nemnghet e. 
+            He lehkha hmang hian <strong>${campaign.title}</strong> accounts hi <strong>${effPeriodText}</strong> — Audit huam hun chhung <strong>(${effCoverageText}${effDurationLabel})</strong> atan enfiah a, audit fel a ni tih ka nemnghet e. 
             Receipt, voucher leh financial transaction zawng zawngte hi uluk taka endik a ni a, accounts record te hi a dik tawk a ni tih hriatpui a ni.
             <br><br>
             <strong>Auditor Observations / Notes:</strong><br>
@@ -2279,7 +2349,7 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
               <div style="font-size: 12px;">★ ★ ★</div>
               <div>AUDITED</div>
             </div>
-            <div style="font-size: 10px; color: #64748b; margin-top: 6px;">Certified via RonPay Audit Engine</div>
+            <div style="font-size: 10px; color: #64748b; margin-top: 6px;">Issued Date: ${formatDateDDMMYYYY(new Date().toISOString())} • Certified via RonPay Audit Engine</div>
           </div>
 
           ${certSignaturesHtml}
@@ -6464,8 +6534,20 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                     {campaign.title}
                   </h3>
                   <p className="text-xs text-slate-500 mt-1 font-semibold">
-                    Period: {(isRestrictedAuditor && appointedPeriodLabel) ? appointedPeriodLabel : auditPeriod} • Category: {campaign.category.toUpperCase()}
+                    Period: {certificateCoverageInfo.periodTitle} • Category: {campaign.category.toUpperCase()}
                   </p>
+                  <div className="mt-2.5 inline-flex flex-wrap items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-indigo-50 border border-indigo-200 text-[11px] font-bold text-indigo-950">
+                    <Calendar className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                    <span>Audit Huam Hun Chhung:</span>
+                    <span className="font-black text-indigo-900">
+                      {certificateCoverageInfo.coverageRangeDisplay}
+                    </span>
+                    {certificateCoverageInfo.durationDays !== null && (
+                      <span className="text-[10px] font-extrabold text-indigo-700 bg-white px-2 py-0.5 rounded-md border border-indigo-200">
+                        (Ni {certificateCoverageInfo.durationDays})
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-center">
@@ -6505,11 +6587,11 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                   </div>
                   {dualAuditSummary.hasDiscrepancies ? (
                     <p className="leading-relaxed">
-                      <strong>{campaign.title}</strong> accounts ({(isRestrictedAuditor && appointedPeriodLabel) ? appointedPeriodLabel : auditPeriod}) endiknaah hian Auditor pahnih hmuhchhuah inmil lo / Query <strong>({dualAuditSummary.discrepancyItems.length} items)</strong> a la awm avangin Final Audit Certificate hi <strong>On-Hold (Hren Lailawk)</strong> a ni. Inang lo zawng zawng enfiah a nih hnuah chauh <strong>✓ Verified &amp; Signed</strong> a inthlak ang.
+                      <strong>{campaign.title}</strong> accounts (<strong>{certificateCoverageInfo.periodTitle}</strong> — Audit huam hun chhung: <strong>{certificateCoverageInfo.coverageRangeDisplay}</strong>) endiknaah hian Auditor pahnih hmuhchhuah inmil lo / Query <strong>({dualAuditSummary.discrepancyItems.length} items)</strong> a la awm avangin Final Audit Certificate hi <strong>On-Hold (Hren Lailawk)</strong> a ni. Inang lo zawng zawng enfiah a nih hnuah chauh <strong>✓ Verified &amp; Signed</strong> a inthlak ang.
                     </p>
                   ) : (
                     <p className="leading-relaxed">
-                      He lehkha hmang hian <strong>{campaign.title}</strong> accounts hi <strong>{(isRestrictedAuditor && appointedPeriodLabel) ? appointedPeriodLabel : auditPeriod}</strong> a tan enfiah leh audit fel a ni tih nemngheh a ni. Records zawng zawng hi uluk taka endik a ni a, total of <strong>{stats.totalLocked} records</strong> hi tamper-proof audit lock hmangin freeze a ni.
+                      He lehkha hmang hian <strong>{campaign.title}</strong> accounts hi <strong>{certificateCoverageInfo.periodTitle}</strong> — Audit huam hun chhung <strong>({certificateCoverageInfo.coverageRangeDisplay}{certificateCoverageInfo.durationDays !== null ? `, Ni ${certificateCoverageInfo.durationDays}` : ''})</strong> atan enfiah leh audit fel a ni tih nemngheh a ni. Records zawng zawng hi uluk taka endik a ni a, total of <strong>{stats.totalLocked} records</strong> hi tamper-proof audit lock hmangin freeze a ni.
                     </p>
                   )}
                   {auditNotes && (
