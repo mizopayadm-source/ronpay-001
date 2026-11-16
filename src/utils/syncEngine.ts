@@ -729,7 +729,7 @@ export async function syncAllWithServer(forceAuthoritative: boolean = false): Pr
           }
         }
 
-        // 11. Update auditor grants & modification requests (authoritative server + fresh local merge)
+        // 11. Update auditor grants & modification requests (authoritative server + Supabase campaign grants merge)
         const hasServerGrantsArray = Array.isArray(serverData.auditorGrants) || Array.isArray(serverData.grants);
         const rawServerGrants = Array.isArray(serverData.auditorGrants)
           ? serverData.auditorGrants
@@ -737,11 +737,36 @@ export async function syncAllWithServer(forceAuthoritative: boolean = false): Pr
           ? serverData.grants
           : [];
         const delGrantSet = new Set(getStoredDeletedAuditorGrantIds());
-        const serverGrants = rawServerGrants.filter(
-          (g: any) => g && g.id && !delGrantSet.has(String(g.id).toLowerCase().trim())
-        );
+        const extractedCampGrants: any[] = [];
+        if (Array.isArray(serverData.campaigns)) {
+          for (const c of serverData.campaigns) {
+            const cDel = c?.deletedAuditorGrantIds || c?.metadata?.deletedAuditorGrantIds;
+            if (Array.isArray(cDel)) {
+              cDel.forEach((id: any) => {
+                if (id) delGrantSet.add(String(id).toLowerCase().trim());
+              });
+            }
+            const cg = c?.auditorGrants || (c as any)?.metadata?.auditorGrants;
+            if (Array.isArray(cg)) extractedCampGrants.push(...cg);
+          }
+        }
+        const mergedCloudGrantsMap = new Map<string, any>();
+        for (const g of [...rawServerGrants, ...extractedCampGrants]) {
+          if (g && g.id && !delGrantSet.has(String(g.id).toLowerCase().trim())) {
+            const k = String(g.id).trim();
+            const prev = mergedCloudGrantsMap.get(k);
+            if (!prev) {
+              mergedCloudGrantsMap.set(k, g);
+            } else {
+              const tPrev = new Date(prev.updatedAt || prev.updated_at || 0).getTime();
+              const tCurr = new Date(g.updatedAt || g.updated_at || 0).getTime();
+              mergedCloudGrantsMap.set(k, tCurr >= tPrev ? { ...prev, ...g } : { ...g, ...prev });
+            }
+          }
+        }
+        const serverGrants = Array.from(mergedCloudGrantsMap.values());
         const localGrants = getStoredAuditorGrants();
-        if (hasServerGrantsArray) {
+        if (hasServerGrantsArray || extractedCampGrants.length > 0) {
           saveStoredAuditorGrants(serverGrants, true, true);
         }
         if (localGrants.length > 0) {

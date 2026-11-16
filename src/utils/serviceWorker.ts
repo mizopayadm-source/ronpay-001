@@ -1,13 +1,42 @@
-// Service Worker registration & Web Push notification helpers
+// Service Worker registration, cache cleanup & Web Push notification helpers
 
 let swRegistration: ServiceWorkerRegistration | null = null;
 
 export async function registerServiceWorker(): Promise<ServiceWorkerRegistration | null> {
   try {
+    if (typeof window !== 'undefined' && 'caches' in window) {
+      // Purge any legacy static-HTML/JS caches that could serve outdated frontend code
+      caches.keys().then((names) => {
+        names.forEach((name) => {
+          if (name.startsWith('ronpay-cache-v1') || name.startsWith('ronpay-cache-v2') || name.startsWith('ronpay-cache-v3')) {
+            caches.delete(name).catch(() => {});
+          }
+        });
+      }).catch(() => {});
+    }
+
     if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
-      const registration = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+      const hadController = Boolean(navigator.serviceWorker.controller);
+      const registration = await navigator.serviceWorker.register('/sw.js', {
+        scope: '/',
+        updateViaCache: 'none'
+      });
       swRegistration = registration;
-      console.log('[RonPay] ServiceWorker registered with scope:', registration.scope);
+
+      // Immediately check for updated Service Worker so stale v3 workers upgrade seamlessly
+      registration.update().catch(() => {});
+
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (!hadController) return;
+        try {
+          const reloadKey = 'ronpay_sw_reloaded_v4';
+          if (!sessionStorage.getItem(reloadKey)) {
+            sessionStorage.setItem(reloadKey, '1');
+            window.location.reload();
+          }
+        } catch {}
+      });
+
       return registration;
     }
   } catch (error) {

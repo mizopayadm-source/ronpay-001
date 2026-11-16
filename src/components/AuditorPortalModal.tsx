@@ -33,6 +33,7 @@ import {
   getStoredTransactions, 
   getStoredExpenses, 
   getStoredAuditorGrants,
+  getStoredDeletedAuditorGrantIds,
   saveAuditorGrant,
   permanentlyDeleteAuditorGrant,
   normalizeAuditorKey,
@@ -240,9 +241,24 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
   const appointedAuditors = useMemo(() => {
     if (!campaign?.id) return [];
     const campId = String(campaign.id).toLowerCase().trim();
-    const allGrants = getStoredAuditorGrants(campId).filter(g => g && g.status === 'active');
+    const delSet = new Set(getStoredDeletedAuditorGrantIds());
+    const storedCamp = getStoredCampaigns().find(c => String(c.id).toLowerCase().trim() === campId);
+    const embeddedGrants: AuditorAccessGrant[] = [
+      ...(Array.isArray(campaign?.auditorGrants) ? campaign.auditorGrants : []),
+      ...(Array.isArray((campaign as any)?.metadata?.auditorGrants) ? (campaign as any).metadata.auditorGrants : []),
+      ...(Array.isArray(storedCamp?.auditorGrants) ? storedCamp!.auditorGrants : []),
+      ...(Array.isArray((storedCamp as any)?.metadata?.auditorGrants) ? (storedCamp as any).metadata.auditorGrants : [])
+    ];
+    const allRawGrants = [...getStoredAuditorGrants(campId), ...embeddedGrants];
     const map = new Map<string, { grantId: string; auditorKey: string; auditorName: string; auditorPhone: string; auditPeriod?: string; auditFromDate?: string; auditToDate?: string }>();
-    allGrants.forEach(g => {
+    const nowMs = Date.now();
+    allRawGrants.forEach(g => {
+      if (!g || !g.id || g.status !== 'active') return;
+      if (delSet.has(String(g.id).toLowerCase().trim())) return;
+      const gCamp = String(g.campaignId || g.campaign_id || '').toLowerCase().trim();
+      if (gCamp && gCamp !== campId) return;
+      const expStr = g.expiresAt || g.expires_at || '';
+      if (expStr && new Date(expStr).getTime() <= nowMs) return;
       const ph = g.auditorPhone || g.auditor_phone || '';
       const nm = g.auditorName || g.auditor_name || 'Auditor';
       const key = normalizeAuditorKey(ph, nm);
@@ -259,7 +275,7 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
       }
     });
     return Array.from(map.values());
-  }, [campaign?.id, tick]);
+  }, [campaign, tick]);
 
   // Look up Creator-appointed audit dates from the user's grant OR from any active appointed auditor grant on this campaign
   const campaignAppointedGrant = useMemo(() => {
@@ -6235,10 +6251,51 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
 
                 {isDualAuditMode && dualAuditSummary.auditorsList.length >= 2 ? (
                   <div className="space-y-3">
-                    <div className="p-3.5 rounded-2xl bg-indigo-50 border border-indigo-200 text-xs text-indigo-950 space-y-1.5">
+                    <div className="p-3.5 rounded-2xl bg-indigo-50 border border-indigo-200 text-xs text-indigo-950 space-y-2.5">
                       <div className="font-black flex items-center gap-1.5">
                         <Users className="w-4 h-4 text-indigo-600" />
-                        <span>Co-Auditor Joint Verification Workflow (Mi 2):</span>
+                        <span>Co-Auditor Joint Verification &amp; Sign-Off ({dualAuditSummary.auditorsList.length} Auditors):</span>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {dualAuditSummary.auditorsList.map((aud, idx) => {
+                          const isMe = aud.auditorKey === currentAuditorKey;
+                          const isAudSigned = dualAuditSummary.isJointFinalized || aud.hasSignedOff;
+                          return (
+                            <div
+                              key={aud.auditorKey}
+                              className={`rounded-xl border p-2.5 bg-white/90 ${
+                                isAudSigned
+                                  ? 'border-emerald-300'
+                                  : aud.rawSignedOff
+                                  ? 'border-indigo-300'
+                                  : 'border-slate-200'
+                              }`}
+                            >
+                              <div className="text-[10px] font-black uppercase text-slate-500">
+                                Auditor {idx + 1}{isMe ? ' (Nangmah)' : ''}
+                              </div>
+                              <div className="font-black text-xs text-slate-900">{aud.auditorName}</div>
+                              <div className="text-[10px] font-mono text-slate-500">{aud.auditorPhone || 'N/A'}</div>
+                              <div className={`text-[10.5px] font-black mt-1 ${
+                                isAudSigned
+                                  ? 'text-emerald-700'
+                                  : aud.flaggedCount > 0 || dualAuditSummary.hasDiscrepancies
+                                  ? 'text-rose-700'
+                                  : aud.rawSignedOff
+                                  ? 'text-indigo-700'
+                                  : 'text-amber-700'
+                              }`}>
+                                {isAudSigned
+                                  ? '✓ Verified & Signed'
+                                  : aud.rawSignedOff && !dualAuditSummary.hasDiscrepancies
+                                  ? '✓ Submitted (1/2 Nghah Mek)'
+                                  : dualAuditSummary.hasDiscrepancies
+                                  ? `⚠️ En Nawn Ngai (${dualAuditSummary.discrepancyItems.length})`
+                                  : '⏳ Auditing / La Submit Lo'}
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
                       <p className="text-[11px] leading-relaxed text-indigo-900">
                         • <strong>Audit hmasa zawk:</strong> A endik zawhah Certificate a Final mai lovin <em>Co-Auditor Cross-Check</em> turin a submit ang.<br />

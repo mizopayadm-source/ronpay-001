@@ -1,22 +1,12 @@
-// RonPay Service Worker for Offline Mode, Dynamic Caching & Web Push Notifications
-const CACHE_NAME = 'ronpay-cache-v3';
-const STATIC_ASSETS = [
-  '/',
-  '/index.html',
-  '/manifest.json',
-  '/ronpay-logo.png',
-  '/favicon.png',
-  '/favicon.svg',
-  '/pwa-192x192.png',
-  '/pwa-512x512.png'
-];
+// RonPay Service Worker for Web Push Notifications & Live Cache-Busting
+const CACHE_NAME = 'ronpay-cache-v4-live';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(STATIC_ASSETS).catch((err) => {
-        console.warn('[Service Worker] Non-critical cache error on install:', err);
-      });
+    caches.keys().then((cacheNames) => {
+      return Promise.all(
+        cacheNames.map((name) => caches.delete(name))
+      );
     }).then(() => self.skipWaiting())
   );
 });
@@ -35,49 +25,27 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Network-first with cache fallback for static assets, bypassing API calls & SSE
+// Always fetch fresh code, HTML, APIs, and data directly from network so browsers never load stale cached code
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET' || !event.request.url.startsWith('http')) {
     return;
   }
 
-  // Strictly bypass all API calls, database JSON, and SSE streams to guarantee real-time sync
-  if (
-    event.request.url.includes('/api/') || 
-    event.request.url.includes('ronpay_db.json')
-  ) {
+  // Bypass HTML/navigation, JS/CSS modules, API calls, and database JSON completely
+  const url = event.request.url;
+  const isNavOrCode =
+    event.request.mode === 'navigate' ||
+    url.includes('/api/') ||
+    url.includes('ronpay_db.json') ||
+    url.endsWith('.html') ||
+    url.endsWith('.js') ||
+    url.endsWith('.ts') ||
+    url.endsWith('.tsx') ||
+    url.endsWith('.css');
+
+  if (isNavOrCode) {
     return;
   }
-
-  event.respondWith(
-    fetch(event.request)
-      .then((networkResponse) => {
-        if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
-          const responseToCache = networkResponse.clone();
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(event.request, responseToCache);
-          });
-        }
-        return networkResponse;
-      })
-      .catch(async () => {
-        const cachedResponse = await caches.match(event.request);
-        if (cachedResponse) {
-          return cachedResponse;
-        }
-
-        if (event.request.mode === 'navigate') {
-          const fallback = await caches.match('/');
-          if (fallback) return fallback;
-        }
-
-        return new Response('Offline - RonPay Cached Mode Active', {
-          status: 503,
-          statusText: 'Service Unavailable (Offline)',
-          headers: new Headers({ 'Content-Type': 'text/plain' }),
-        });
-      })
-  );
 });
 
 // ==========================================
@@ -138,8 +106,10 @@ self.addEventListener('notificationclick', (event) => {
   );
 });
 
-// Listen for message events (e.g. instant local test notifications or cache updates)
 self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
   if (event.data && event.data.type === 'SHOW_NOTIFICATION') {
     const { title, options } = event.data;
     self.registration.showNotification(title, {

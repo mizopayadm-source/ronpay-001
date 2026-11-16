@@ -6465,17 +6465,11 @@ export const syncAuditorGrantsAcrossCloud = async (): Promise<AuditorAccessGrant
             if (!g || !g.id) continue;
             const cleanGid = String(g.id).toLowerCase().trim();
             if (delSet.has(cleanGid)) continue;
-            // If server responded authoritatively and didn't include this grant, only include it if created very recently
             const existing = combinedCloudMap.get(String(g.id).trim());
             if (!existing) {
-              if (!Array.isArray(serverGrants)) {
-                combinedCloudMap.set(String(g.id).trim(), g);
-              } else {
-                const createdMs = new Date(g.createdAt || g.created_at || 0).getTime();
-                if (createdMs > 0 && Date.now() - createdMs < 60000) {
-                  combinedCloudMap.set(String(g.id).trim(), g);
-                }
-              }
+              // Always retain non-deleted grants synced inside Supabase campaigns
+              // (deleted grants are already excluded above via deletedAuditorGrantIds)
+              combinedCloudMap.set(String(g.id).trim(), g);
             } else {
               const tA = new Date(existing.updatedAt || existing.updated_at || 0).getTime();
               const tB = new Date(g.updatedAt || g.updated_at || 0).getTime();
@@ -6487,8 +6481,9 @@ export const syncAuditorGrantsAcrossCloud = async (): Promise<AuditorAccessGrant
     }
 
     // If either backend or Supabase responded, authoritatively update local storage
+    // Only replace authoritatively if we also inspected Supabase campaigns (or backend had grants)
     if (Array.isArray(serverGrants) || (Array.isArray(supaCamps) && supaCamps.length > 0)) {
-      saveStoredAuditorGrants(Array.from(combinedCloudMap.values()), true, Array.isArray(serverGrants));
+      saveStoredAuditorGrants(Array.from(combinedCloudMap.values()), true, combinedCloudMap.size > 0 || (Array.isArray(supaCamps) && supaCamps.length > 0));
     }
   } catch (e) {
     console.warn('syncAuditorGrantsAcrossCloud warning:', e);

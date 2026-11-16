@@ -9191,6 +9191,17 @@ async function startServer() {
   const indexPath = path.join(distPath, 'index.html');
   const isProduction = process.env.NODE_ENV === 'production' && fs.existsSync(indexPath);
 
+  // Prevent stale HTML / Service Worker caching across browsers and updates
+  app.use((req: Request, res: Response, next: any) => {
+    const p = req.path || '';
+    if (p === '/' || p === '/index.html' || p === '/sw.js' || p.endsWith('.html')) {
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+    }
+    next();
+  });
+
   // Vite middleware for development only
   if (!isProduction) {
     try {
@@ -9202,11 +9213,26 @@ async function startServer() {
       app.use(vite.middlewares);
     } catch (viteErr) {
       console.warn('Vite dev middleware failed to load, falling back to static server:', viteErr);
-      app.use(express.static(distPath));
+      app.use(express.static(distPath, {
+        setHeaders: (res, filePath) => {
+          if (filePath.endsWith('.html') || filePath.endsWith('sw.js')) {
+            res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
+          }
+        }
+      }));
     }
   } else {
-    app.use(express.static(distPath));
+    app.use(express.static(distPath, {
+      setHeaders: (res, filePath) => {
+        if (filePath.endsWith('.html') || filePath.endsWith('sw.js')) {
+          res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
+        }
+      }
+    }));
     app.get('*', (req: Request, res: Response) => {
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
       const indexPath = path.join(distPath, 'index.html');
       if (fs.existsSync(indexPath)) {
         res.sendFile(indexPath);
