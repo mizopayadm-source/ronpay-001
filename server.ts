@@ -5481,6 +5481,7 @@ async function syncFromSupabase(db: DatabaseSchema, force: boolean = false): Pro
               lastAuditPeriod: meta.lastAuditPeriod || r.lastAuditPeriod || undefined,
               lastAuditNotes: meta.lastAuditNotes || r.lastAuditNotes || undefined,
               auditReconciliation: meta.auditReconciliation || r.auditReconciliation || undefined,
+              expenseHeads: (Array.isArray(meta.expenseHeads) && meta.expenseHeads.length > 0) ? meta.expenseHeads : (Array.isArray(r.expenseHeads) && r.expenseHeads.length > 0 ? r.expenseHeads : undefined),
               isHidden: Boolean(meta.isHidden ?? r.is_hidden ?? r.isHidden ?? false),
               hiddenAt: meta.hiddenAt ?? r.hidden_at ?? rowHiddenAt(r),
               hiddenBy: meta.hiddenBy ?? r.hidden_by ?? r.hiddenBy,

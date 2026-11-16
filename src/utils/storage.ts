@@ -5093,22 +5093,85 @@ export const updateStoredExpense = (expense: KumtluangExpense): void => {
 };
 
 export const getCampaignExpenseHeads = (campaignId: string, customHeadsFromCampaign?: string[]): string[] => {
-  // 1. If campaign has explicit custom heads configured, prioritize that list exactly
-  if (customHeadsFromCampaign && Array.isArray(customHeadsFromCampaign) && customHeadsFromCampaign.length > 0) {
-    return [...customHeadsFromCampaign];
-  }
+  const cleanCampId = String(campaignId || '').toLowerCase().trim();
+  const isDefaultSet = (arr?: string[]) =>
+    Array.isArray(arr) &&
+    arr.length === DEFAULT_KUMTLUANG_EXPENSE_HEADS.length &&
+    arr.every((h, idx) => h === DEFAULT_KUMTLUANG_EXPENSE_HEADS[idx]);
+
+  // Collect all active voucher heads actually recorded for this campaign
+  const activeVoucherHeads: string[] = [];
   try {
-    // 2. Check localStorage for this specific campaign's saved heads
-    const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(`${EXPENSE_HEADS_PREFIX}${campaignId}`) : null;
-    if (raw !== null) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
-        return [...parsed];
+    const campExpenses = getStoredExpenses(campaignId);
+    for (const exp of campExpenses) {
+      const h = String(exp?.head || '').trim();
+      if (h && !activeVoucherHeads.some(x => x.toLowerCase() === h.toLowerCase())) {
+        activeVoucherHeads.push(h);
       }
     }
   } catch {}
-  // 3. Fallback to system defaults only for brand new unconfigured campaigns
-  return [...DEFAULT_KUMTLUANG_EXPENSE_HEADS];
+
+  let resolvedHeads: string[] | null = null;
+
+  // 1. Check explicit customHeadsFromCampaign passed in
+  if (customHeadsFromCampaign && Array.isArray(customHeadsFromCampaign) && customHeadsFromCampaign.length > 0 && !isDefaultSet(customHeadsFromCampaign)) {
+    resolvedHeads = [...customHeadsFromCampaign];
+  }
+
+  // 2. Check stored campaign's expenseHeads or metadata.expenseHeads
+  if (!resolvedHeads) {
+    try {
+      const storedCamp = getStoredCampaigns().find(c => c && String(c.id).toLowerCase().trim() === cleanCampId);
+      const campHeads = storedCamp?.expenseHeads || (storedCamp as any)?.metadata?.expenseHeads;
+      if (Array.isArray(campHeads) && campHeads.length > 0 && !isDefaultSet(campHeads)) {
+        resolvedHeads = [...campHeads];
+      }
+    } catch {}
+  }
+
+  // 3. Check localStorage for this specific campaign's saved heads
+  if (!resolvedHeads) {
+    try {
+      const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(`${EXPENSE_HEADS_PREFIX}${campaignId}`) : null;
+      if (raw !== null) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0 && (!isDefaultSet(parsed) || activeVoucherHeads.length === 0)) {
+          resolvedHeads = [...parsed];
+        }
+      }
+    } catch {}
+  }
+
+  // 4. Canonical fallback for BCM Ebenezer, Zobawk (cmp-kumtluang-1)
+  if (!resolvedHeads && cleanCampId === 'cmp-kumtluang-1') {
+    resolvedHeads = [
+      'KNP',
+      'Relief Fund',
+      'Refreshment / Thingpui',
+      'HQRS Target',
+      'Christmas & Kumthar',
+      'Sound & Light / Equipment'
+    ];
+  }
+
+  // 5. If still unresolved but campaign has active recorded vouchers with custom heads, use those voucher heads
+  if (!resolvedHeads && activeVoucherHeads.length > 0) {
+    resolvedHeads = [...activeVoucherHeads];
+  }
+
+  // 6. Final fallback to system defaults for brand-new unconfigured campaigns
+  if (!resolvedHeads) {
+    resolvedHeads = [...DEFAULT_KUMTLUANG_EXPENSE_HEADS];
+  }
+
+  // Ensure every head that has at least 1 active recorded voucher is present so no voucher is ever orphaned
+  for (const vh of activeVoucherHeads) {
+    if (!resolvedHeads.some(h => h.toLowerCase().trim() === vh.toLowerCase().trim())) {
+      resolvedHeads.push(vh);
+    }
+  }
+
+  return resolvedHeads;
 };
 
 export const saveCampaignExpenseHeads = (campaignId: string, heads: string[]): void => {
@@ -5117,17 +5180,30 @@ export const saveCampaignExpenseHeads = (campaignId: string, heads: string[]): v
     if (typeof localStorage !== 'undefined') {
       localStorage.setItem(`${EXPENSE_HEADS_PREFIX}${campaignId}`, JSON.stringify(cleanHeads));
     }
-    // Update matching campaign in stored campaigns list to persist across devices
+    // Update matching campaign in stored campaigns list and sync directly to Supabase & Server
     const storedCamps = getStoredCampaigns();
     const cleanCampId = String(campaignId).toLowerCase().trim();
     const campIdx = storedCamps.findIndex(c => String(c.id).toLowerCase().trim() === cleanCampId);
     if (campIdx >= 0) {
-      storedCamps[campIdx] = {
+      const updatedCamp: Campaign = {
         ...storedCamps[campIdx],
         expenseHeads: cleanHeads,
+        metadata: {
+          ...(storedCamps[campIdx].metadata || {}),
+          expenseHeads: cleanHeads
+        },
         updatedAt: new Date().toISOString()
       };
+      storedCamps[campIdx] = updatedCamp;
       saveStoredCampaigns(storedCamps, false);
+      import('../services/supabaseService').then(({ upsertSupabaseCampaign }) => {
+        upsertSupabaseCampaign(updatedCamp).catch(() => {});
+      }).catch(() => {});
+      safeApiFetch('/api/campaigns', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedCamp)
+      }).catch(() => {});
     }
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('ronpay_expense_heads_updated', { detail: { campaignId, heads: cleanHeads } }));

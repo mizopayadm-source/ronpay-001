@@ -309,6 +309,9 @@ export async function syncAllWithServer(forceAuthoritative: boolean = false): Pr
               if (Array.isArray(local.subCategories) && local.subCategories.length > 0 && (!Array.isArray(updated.subCategories) || updated.subCategories.length === 0 || localTime >= serverTime)) {
                 updated.subCategories = local.subCategories;
               }
+              if (Array.isArray(local.expenseHeads) && local.expenseHeads.length > 0 && (!Array.isArray(updated.expenseHeads) || updated.expenseHeads.length === 0 || localTime >= serverTime)) {
+                updated.expenseHeads = local.expenseHeads;
+              }
               if (typeof local.openingBalance === 'number' && local.openingBalance > 0 && (!updated.openingBalance || localTime >= serverTime)) {
                 updated.openingBalance = local.openingBalance;
               } else if (typeof sc.openingBalance === 'number' && sc.openingBalance > 0 && !updated.openingBalance) {

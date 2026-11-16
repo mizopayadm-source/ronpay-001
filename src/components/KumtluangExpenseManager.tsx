@@ -278,13 +278,28 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
     setTimeout(() => setActionToast(null), 3500);
   };
 
-  // Keep expense heads in sync when campaign changes
+  // Keep expense heads in sync when campaign or expenseList changes
   useEffect(() => {
     const heads = getCampaignExpenseHeads(campaign.id, campaign.expenseHeads);
     setExpenseHeads(heads);
     if (!heads.includes(selectedHead)) {
       setSelectedHead(heads[0] || 'Thil Dang / Miscellaneous');
     }
+  }, [campaign.id, (campaign.expenseHeads || []).join(','), expenseList.length]);
+
+  useEffect(() => {
+    const refreshHeads = () => {
+      const heads = getCampaignExpenseHeads(campaign.id, campaign.expenseHeads);
+      setExpenseHeads(heads);
+    };
+    window.addEventListener('ronpay_campaigns_updated', refreshHeads);
+    window.addEventListener('ronpay-campaigns-updated', refreshHeads);
+    window.addEventListener('ronpay_expense_heads_updated', refreshHeads);
+    return () => {
+      window.removeEventListener('ronpay_campaigns_updated', refreshHeads);
+      window.removeEventListener('ronpay-campaigns-updated', refreshHeads);
+      window.removeEventListener('ronpay_expense_heads_updated', refreshHeads);
+    };
   }, [campaign.id, (campaign.expenseHeads || []).join(',')]);
 
   // Cloud sync state

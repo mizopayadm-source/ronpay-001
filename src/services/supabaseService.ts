@@ -893,6 +893,7 @@ export async function fetchSupabaseCampaigns(): Promise<Campaign[]> {
       lastAuditPeriod: meta.lastAuditPeriod ?? row.lastAuditPeriod,
       lastAuditNotes: meta.lastAuditNotes ?? row.lastAuditNotes,
       auditReconciliation: meta.auditReconciliation ?? row.auditReconciliation,
+      expenseHeads: (Array.isArray(meta.expenseHeads) && meta.expenseHeads.length > 0) ? meta.expenseHeads : (Array.isArray(row.expenseHeads) && row.expenseHeads.length > 0 ? row.expenseHeads : undefined),
       isHidden: Boolean(meta.isHidden ?? row.is_hidden ?? row.isHidden ?? false),
       hiddenAt: meta.hiddenAt ?? row.hidden_at ?? row.hiddenAt,
       hiddenBy: meta.hiddenBy ?? row.hidden_by ?? row.hiddenBy,
