@@ -199,21 +199,30 @@ export async function syncAllWithServer(forceAuthoritative: boolean = false): Pr
         }
       }
 
-      // Always merge live authoritative transactions, campaigns, and expenses directly from Supabase
-      // so static hosts (ronpay.app) and preview servers never lag behind
+      // Merge live authoritative transactions, campaigns, and expenses from Supabase with Egress protection
+      // (always runs when forceAuthoritative=true or on static hosts, otherwise cools down 90s when Express state succeeded)
+      const nowSyncMs = Date.now();
+      const syncCooldownMs = serverData ? 90 * 1000 : 15 * 1000;
+      const shouldFetchSupabaseNow = forceAuthoritative || (nowSyncMs - lastPullSupabaseFetchMs >= syncCooldownMs);
       try {
-        const [{ fetchSupabaseTransactions, fetchSupabaseCampaigns }, { fetchTableData }] = await Promise.all([
-          import('../services/supabaseService'),
-          import('../services/SupabaseSync')
-        ]);
-        const [supaTxsRes, supaCampsRes, supaExpsRes] = await Promise.allSettled([
-          fetchSupabaseTransactions(),
-          fetchSupabaseCampaigns(),
-          fetchTableData<KumtluangExpense>('expenses', { forceAll: true, bypassCache: true })
-        ]);
-        const supaTxs = supaTxsRes.status === 'fulfilled' ? supaTxsRes.value : [];
-        const supaCamps = supaCampsRes.status === 'fulfilled' ? supaCampsRes.value : [];
-        const supaExps = supaExpsRes.status === 'fulfilled' ? supaExpsRes.value : [];
+        let supaTxs: any[] = [];
+        let supaCamps: any[] = [];
+        let supaExps: any[] = [];
+        if (shouldFetchSupabaseNow) {
+          lastPullSupabaseFetchMs = nowSyncMs;
+          const [{ fetchSupabaseTransactions, fetchSupabaseCampaigns }, { fetchTableData }] = await Promise.all([
+            import('../services/supabaseService'),
+            import('../services/SupabaseSync')
+          ]);
+          const [supaTxsRes, supaCampsRes, supaExpsRes] = await Promise.allSettled([
+            fetchSupabaseTransactions(),
+            fetchSupabaseCampaigns(),
+            fetchTableData<KumtluangExpense>('expenses', { forceAll: true, bypassCache: Boolean(forceAuthoritative) })
+          ]);
+          supaTxs = supaTxsRes.status === 'fulfilled' ? supaTxsRes.value : [];
+          supaCamps = supaCampsRes.status === 'fulfilled' ? supaCampsRes.value : [];
+          supaExps = supaExpsRes.status === 'fulfilled' ? supaExpsRes.value : [];
+        }
 
         if (!serverData && ((supaTxs && supaTxs.length > 0) || (supaCamps && supaCamps.length > 0) || (supaExps && supaExps.length > 0))) {
           serverData = {
@@ -1096,11 +1105,14 @@ export function startAutoSyncEngine(onSyncUpdate?: (data: SyncDataState) => void
   };
 }
 
+let lastPullSupabaseFetchMs = 0;
+
 /**
  * Fast authoritative pull of latest central state without re-posting back stale data.
- * Used for real-time SSE updates and tab focus events to avoid infinite broadcast loops.
+ * Uses Express in-memory state first and strictly rate-limits fallback Supabase REST pulls
+ * so real-time SSE/focus updates do not consume Supabase Egress quota.
  */
-export async function pullLatestServerState(): Promise<SyncDataState | null> {
+export async function pullLatestServerState(options?: { forceSupabase?: boolean }): Promise<SyncDataState | null> {
   if (typeof window === 'undefined') return null;
   if (typeof navigator !== 'undefined' && !navigator.onLine) {
     return getLocalFallbackState();
@@ -1128,21 +1140,34 @@ export async function pullLatestServerState(): Promise<SyncDataState | null> {
       if (timeoutId) clearTimeout(timeoutId);
     }
 
-    // Fetch live authoritative Supabase delta/rows in parallel so SSE updates & static hosts always converge
+    // Egress Protection: When Express /api/data/state responded OK, skip redundant full-table Supabase
+    // downloads unless forced or > 90s elapsed. Even on static hosts without Express, cool down 15s unless forced.
+    const nowPullMs = Date.now();
+    const minCooldownMs = serverData ? 90 * 1000 : 15 * 1000;
+    const shouldQuerySupabase = Boolean(options?.forceSupabase) || (nowPullMs - lastPullSupabaseFetchMs >= minCooldownMs);
+
     try {
-      const [{ fetchSupabaseTransactions, fetchSupabaseCampaigns }, { fetchTableData, invalidateSupabaseTableCache }] = await Promise.all([
-        import('../services/supabaseService'),
-        import('../services/SupabaseSync')
-      ]);
-      invalidateSupabaseTableCache();
-      const [supaTxsRes, supaCampsRes, supaExpsRes] = await Promise.allSettled([
-        fetchSupabaseTransactions(),
-        fetchSupabaseCampaigns(),
-        fetchTableData<KumtluangExpense>('expenses', { forceAll: true, bypassCache: true })
-      ]);
-      const supaTxs = supaTxsRes.status === 'fulfilled' ? supaTxsRes.value : [];
-      const supaCamps = supaCampsRes.status === 'fulfilled' ? supaCampsRes.value : [];
-      const supaExps = supaExpsRes.status === 'fulfilled' ? supaExpsRes.value : [];
+      let supaTxs: any[] = [];
+      let supaCamps: any[] = [];
+      let supaExps: any[] = [];
+      if (shouldQuerySupabase) {
+        lastPullSupabaseFetchMs = nowPullMs;
+        const [{ fetchSupabaseTransactions, fetchSupabaseCampaigns }, { fetchTableData, invalidateSupabaseTableCache }] = await Promise.all([
+          import('../services/supabaseService'),
+          import('../services/SupabaseSync')
+        ]);
+        if (options?.forceSupabase) {
+          invalidateSupabaseTableCache();
+        }
+        const [supaTxsRes, supaCampsRes, supaExpsRes] = await Promise.allSettled([
+          fetchSupabaseTransactions(),
+          fetchSupabaseCampaigns(),
+          fetchTableData<KumtluangExpense>('expenses', { forceAll: true, bypassCache: Boolean(options?.forceSupabase) })
+        ]);
+        supaTxs = supaTxsRes.status === 'fulfilled' ? supaTxsRes.value : [];
+        supaCamps = supaCampsRes.status === 'fulfilled' ? supaCampsRes.value : [];
+        supaExps = supaExpsRes.status === 'fulfilled' ? supaExpsRes.value : [];
+      }
 
       if (!serverData && ((supaTxs && supaTxs.length > 0) || (supaCamps && supaCamps.length > 0) || (supaExps && supaExps.length > 0))) {
         serverData = { ...getLocalFallbackState(), expenses: getStoredExpenses() };
@@ -1420,11 +1445,29 @@ export async function pullLatestServerState(): Promise<SyncDataState | null> {
  * High-speed Server-Sent Events (SSE) listener for instant sub-second multi-device / multi-user data synchronization.
  * Guarantees phones, browsers, and different user sessions stay in lockstep without delay.
  */
-export function subscribeServerEvents(onChanged: () => void): () => void {
+export function subscribeServerEvents(onChanged: () => void, onAuditDeltaApplied?: () => void): () => void {
   let isCleanedUp = false;
   let eventSource: EventSource | null = null;
 
-  // 1. Primary: Server-Sent Events (SSE) from local server backend (100% reliable inside iframe)
+  const tryApplyAuditDeltaPayload = (parsed: any): boolean => {
+    if (!parsed) return false;
+    const hasDelta =
+      (Array.isArray(parsed.updatedTransactions) && parsed.updatedTransactions.length > 0) ||
+      (Array.isArray(parsed.updatedExpenses) && parsed.updatedExpenses.length > 0) ||
+      (Array.isArray(parsed.updatedCampaigns) && parsed.updatedCampaigns.length > 0);
+    if (!hasDelta) return false;
+    import('../services/coAuditRealtime').then(({ applyCoAuditDeltaLocally }) => {
+      applyCoAuditDeltaLocally({
+        transactions: parsed.updatedTransactions,
+        expenses: parsed.updatedExpenses,
+        campaigns: parsed.updatedCampaigns
+      });
+      if (!isCleanedUp && onAuditDeltaApplied) onAuditDeltaApplied();
+    }).catch(() => {});
+    return true;
+  };
+
+  // 1. Primary: Server-Sent Events (SSE) from local server backend
   if (typeof window !== 'undefined' && typeof EventSource !== 'undefined') {
     try {
       eventSource = new EventSource(resolveApiUrl('/api/sync/events'));
@@ -1434,6 +1477,9 @@ export function subscribeServerEvents(onChanged: () => void): () => void {
             const parsed = JSON.parse(ev.data);
             if (parsed?.type === 'auditor_grants_updated') {
               syncAuditorGrantsAcrossCloud().catch(() => {});
+            }
+            if (parsed?.type === 'audit_action_synced' && tryApplyAuditDeltaPayload(parsed)) {
+              return;
             }
           }
         } catch {}
@@ -1445,7 +1491,15 @@ export function subscribeServerEvents(onChanged: () => void): () => void {
       eventSource.addEventListener('state_updated', () => {
         if (!isCleanedUp) onChanged();
       });
-      eventSource.addEventListener('audit_action_synced', () => {
+      eventSource.addEventListener('audit_action_synced', (ev: MessageEvent) => {
+        try {
+          if (ev?.data) {
+            const parsed = JSON.parse(ev.data);
+            if (tryApplyAuditDeltaPayload(parsed)) {
+              return;
+            }
+          }
+        } catch {}
         if (!isCleanedUp) onChanged();
       });
       eventSource.addEventListener('auditor_grants_updated', () => {
@@ -1458,29 +1512,15 @@ export function subscribeServerEvents(onChanged: () => void): () => void {
     } catch {}
   }
 
-  // 2. Secondary: Supabase Realtime Channel (auto-detach on CHANNEL_ERROR so SSE handles sync cleanly)
-  let channel: any = null;
-  try {
-    channel = supabase.channel('public:transactions')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions' }, () => {
-        if (!isCleanedUp) onChanged();
-      })
-      .subscribe((status) => {
-        if ((status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') && channel) {
-          const broken = channel;
-          channel = null;
-          try { supabase.removeChannel(broken); } catch {}
-        }
-      });
-  } catch {}
+  // 2. Zero-egress Supabase Co-Auditor Broadcast channel
+  import('../services/coAuditRealtime').then(({ ensureCoAuditRealtimeChannel }) => {
+    ensureCoAuditRealtimeChannel();
+  }).catch(() => {});
 
   return () => {
     isCleanedUp = true;
     if (eventSource) {
       try { eventSource.close(); } catch {}
-    }
-    if (channel) {
-      try { supabase.removeChannel(channel); } catch {}
     }
   };
 }

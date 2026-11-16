@@ -5297,6 +5297,9 @@ async function syncFromSupabase(db: DatabaseSchema, force: boolean = false): Pro
     let txChanged = !hasTransactions || force || lastKnownSupaTxCount < 0;
     let expChanged = !hasExpenses || force || lastKnownSupaExpCount < 0;
     let campChanged = !hasCampaigns || force || lastKnownSupaCampCount < 0;
+    let remoteTxCount = -1;
+    let remoteExpCount = -1;
+    let remoteCampCount = -1;
     if (!txChanged || !expChanged || !campChanged) {
       try {
         const [probeRes, expProbeRes, campProbeRes] = await Promise.all([
@@ -5343,17 +5346,17 @@ async function syncFromSupabase(db: DatabaseSchema, force: boolean = false): Pro
         if (probeRes && probeRes.ok) {
           const contentRange = probeRes.headers.get('content-range') || '';
           const totalMatch = contentRange.match(/\/(\d+)$/);
-          const remoteCount = totalMatch ? parseInt(totalMatch[1], 10) : -1;
+          remoteTxCount = totalMatch ? parseInt(totalMatch[1], 10) : -1;
           const probeRows: any[] = await probeRes.json();
           const remoteLatestUpd = Array.isArray(probeRows) && probeRows.length > 0 ? String(probeRows[0].updated_at || '') : '';
-          if (remoteCount !== lastKnownSupaTxCount || remoteLatestUpd !== lastKnownSupaLatestUpdatedAt) {
+          if (remoteTxCount !== lastKnownSupaTxCount || remoteLatestUpd !== lastKnownSupaLatestUpdatedAt) {
             txChanged = true;
           }
         }
         if (expProbeRes && expProbeRes.ok) {
           const contentRange = expProbeRes.headers.get('content-range') || '';
           const totalMatch = contentRange.match(/\/(\d+)$/);
-          const remoteExpCount = totalMatch ? parseInt(totalMatch[1], 10) : -1;
+          remoteExpCount = totalMatch ? parseInt(totalMatch[1], 10) : -1;
           const expProbeRows: any[] = await expProbeRes.json();
           const remoteExpLatestUpd = Array.isArray(expProbeRows) && expProbeRows.length > 0 ? String(expProbeRows[0].updated_at || '') : '';
           if (remoteExpCount !== lastKnownSupaExpCount || remoteExpLatestUpd !== lastKnownSupaExpLatestUpdatedAt) {
@@ -5363,7 +5366,7 @@ async function syncFromSupabase(db: DatabaseSchema, force: boolean = false): Pro
         if (campProbeRes && campProbeRes.ok) {
           const contentRange = campProbeRes.headers.get('content-range') || '';
           const totalMatch = contentRange.match(/\/(\d+)$/);
-          const remoteCampCount = totalMatch ? parseInt(totalMatch[1], 10) : -1;
+          remoteCampCount = totalMatch ? parseInt(totalMatch[1], 10) : -1;
           const campProbeRows: any[] = await campProbeRes.json();
           const remoteCampLatestUpd = Array.isArray(campProbeRows) && campProbeRows.length > 0 ? String(campProbeRows[0].updated_at || '') : '';
           if (remoteCampCount !== lastKnownSupaCampCount || remoteCampLatestUpd !== lastKnownSupaCampLatestUpdatedAt) {
@@ -5379,7 +5382,14 @@ async function syncFromSupabase(db: DatabaseSchema, force: boolean = false): Pro
     }
 
     if (txChanged || force) {
-      const res = await fetch(`${sbUrl}/rest/v1/transactions?select=*`, {
+      const canDeltaTx = !force && hasTransactions && lastKnownSupaLatestUpdatedAt && remoteTxCount >= lastKnownSupaTxCount && lastKnownSupaTxCount >= 0;
+      const sinceTxIso = canDeltaTx
+        ? new Date(Math.max(0, new Date(lastKnownSupaLatestUpdatedAt).getTime() - 5000)).toISOString()
+        : '';
+      const txQueryUrl = canDeltaTx
+        ? `${sbUrl}/rest/v1/transactions?select=*&updated_at=gte.${encodeURIComponent(sinceTxIso)}`
+        : `${sbUrl}/rest/v1/transactions?select=*`;
+      const res = await fetch(txQueryUrl, {
         headers: {
           'apikey': sbKey,
           'Authorization': `Bearer ${sbKey}`
@@ -5471,8 +5481,8 @@ async function syncFromSupabase(db: DatabaseSchema, force: boolean = false): Pro
       });
 
       db.transactions = mergedTxs;
-      lastKnownSupaTxCount = validRows.length;
-      let maxUpd = '';
+      lastKnownSupaTxCount = remoteTxCount >= 0 ? remoteTxCount : validRows.length;
+      let maxUpd = lastKnownSupaLatestUpdatedAt || '';
       for (const r of validRows) {
         const u = String(r.updated_at || '');
         if (u > maxUpd) maxUpd = u;
@@ -5481,10 +5491,17 @@ async function syncFromSupabase(db: DatabaseSchema, force: boolean = false): Pro
       }
     }
 
-    // 2. Fetch expenses immediately whenever expChanged or forced (only ~4KB, no base64 images)
+    // 2. Fetch expenses incrementally whenever expChanged or forced
     if (expChanged || force || lastServerFullTablesSync === 0 || (now - lastServerFullTablesSync >= 10 * 60 * 1000)) {
       try {
-        const expRes = await fetch(`${sbUrl}/rest/v1/expenses?select=*&order=created_at.desc`, {
+        const canDeltaExp = !force && !((now - lastServerFullTablesSync >= 10 * 60 * 1000)) && hasExpenses && lastKnownSupaExpLatestUpdatedAt && remoteExpCount >= lastKnownSupaExpCount && lastKnownSupaExpCount >= 0;
+        const sinceExpIso = canDeltaExp
+          ? new Date(Math.max(0, new Date(lastKnownSupaExpLatestUpdatedAt).getTime() - 5000)).toISOString()
+          : '';
+        const expUrl = canDeltaExp
+          ? `${sbUrl}/rest/v1/expenses?select=*&updated_at=gte.${encodeURIComponent(sinceExpIso)}&order=created_at.desc`
+          : `${sbUrl}/rest/v1/expenses?select=*&order=created_at.desc`;
+        const expRes = await fetch(expUrl, {
           headers: {
             'apikey': sbKey,
             'Authorization': `Bearer ${sbKey}`
@@ -5550,8 +5567,8 @@ async function syncFromSupabase(db: DatabaseSchema, force: boolean = false): Pro
                 };
               });
             db.expenses = mergeCollections(db.expenses || [], normalizedExps, 'id', delExpSet);
-            lastKnownSupaExpCount = expRows.length;
-            let maxExpUpd = '';
+            lastKnownSupaExpCount = remoteExpCount >= 0 ? remoteExpCount : expRows.length;
+            let maxExpUpd = lastKnownSupaExpLatestUpdatedAt || '';
             for (const r of expRows) {
               const u = String(r.updated_at || '');
               if (u > maxExpUpd) maxExpUpd = u;
@@ -5562,12 +5579,19 @@ async function syncFromSupabase(db: DatabaseSchema, force: boolean = false): Pro
       } catch {}
     }
 
-    // 3. Fetch campaigns & members from Supabase whenever campChanged, forced, or > 10 minutes since last full sync
+    // 3. Fetch campaigns & members from Supabase incrementally whenever campChanged, forced, or > 10 minutes since last full sync
     const shouldSyncHeavyTables = force || lastServerFullTablesSync === 0 || (now - lastServerFullTablesSync >= 10 * 60 * 1000);
     if (shouldSyncHeavyTables || campChanged) {
       if (shouldSyncHeavyTables) lastServerFullTablesSync = now;
     try {
-      const campRes = await fetch(`${sbUrl}/rest/v1/campaigns?select=*&order=created_at.desc`, {
+      const canDeltaCamp = !shouldSyncHeavyTables && hasCampaigns && lastKnownSupaCampLatestUpdatedAt && remoteCampCount >= lastKnownSupaCampCount && lastKnownSupaCampCount >= 0;
+      const sinceCampIso = canDeltaCamp
+        ? new Date(Math.max(0, new Date(lastKnownSupaCampLatestUpdatedAt).getTime() - 5000)).toISOString()
+        : '';
+      const campUrl = canDeltaCamp
+        ? `${sbUrl}/rest/v1/campaigns?select=*&updated_at=gte.${encodeURIComponent(sinceCampIso)}&order=created_at.desc`
+        : `${sbUrl}/rest/v1/campaigns?select=*&order=created_at.desc`;
+      const campRes = await fetch(campUrl, {
         headers: {
           'apikey': sbKey,
           'Authorization': `Bearer ${sbKey}`
@@ -5680,8 +5704,8 @@ async function syncFromSupabase(db: DatabaseSchema, force: boolean = false): Pro
           if (extractedGrants.length > 0) {
             db.auditorGrants = mergeCollections(db.auditorGrants || [], extractedGrants, 'id', delGrantsSet);
           }
-          lastKnownSupaCampCount = campRows.length;
-          let maxCampUpd = '';
+          lastKnownSupaCampCount = remoteCampCount >= 0 ? remoteCampCount : campRows.length;
+          let maxCampUpd = lastKnownSupaCampLatestUpdatedAt || '';
           for (const r of campRows) {
             const u = String(r.updated_at || '');
             if (u > maxCampUpd) maxCampUpd = u;
@@ -6253,15 +6277,31 @@ app.post('/api/audit/sync-action', async (req: Request, res: Response) => {
     if (supaPromises.length > 0) {
       await Promise.allSettled(supaPromises);
       lastServerSupabaseSync = Date.now();
+      if (updatedTxToPush.length > 0 && (!lastKnownSupaLatestUpdatedAt || nowIso > lastKnownSupaLatestUpdatedAt)) {
+        lastKnownSupaLatestUpdatedAt = nowIso;
+      }
+      if (updatedExpToPush.length > 0 && (!lastKnownSupaExpLatestUpdatedAt || nowIso > lastKnownSupaExpLatestUpdatedAt)) {
+        lastKnownSupaExpLatestUpdatedAt = nowIso;
+      }
+      if (updatedCampToPush.length > 0 && (!lastKnownSupaCampLatestUpdatedAt || nowIso > lastKnownSupaCampLatestUpdatedAt)) {
+        lastKnownSupaCampLatestUpdatedAt = nowIso;
+      }
     }
 
-    broadcastServerEvent('state_updated', { timestamp: db.lastUpdated });
-    broadcastServerEvent('audit_action_synced', { timestamp: db.lastUpdated, count: itemsToProcess.length });
+    // Broadcast compact delta payload directly over SSE so Co-Auditors converge instantaneously at 0 KB Supabase DB egress
+    broadcastServerEvent('audit_action_synced', {
+      timestamp: db.lastUpdated,
+      count: itemsToProcess.length,
+      updatedTransactions: updatedTxToPush,
+      updatedExpenses: updatedExpToPush,
+      updatedCampaigns: updatedCampToPush
+    });
 
     res.json({
       success: true,
       updatedTransactions: updatedTxToPush,
       updatedExpenses: updatedExpToPush,
+      updatedCampaigns: updatedCampToPush,
       timestamp: db.lastUpdated
     });
   } catch (err: any) {

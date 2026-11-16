@@ -67,8 +67,15 @@ import {
   upsertCampaign,
   deleteTransaction,
   runStartupCleanupSequence,
-  invalidateSupabaseTableCache
+  invalidateSupabaseTableCache,
+  normalizeTransaction,
+  normalizeCampaign,
+  normalizeExpense
 } from './services/SupabaseSync';
+import {
+  ensureCoAuditRealtimeChannel,
+  applyCoAuditDeltaLocally
+} from './services/coAuditRealtime';
 
 import { 
   fetchSupabaseFundPool, 
@@ -476,46 +483,70 @@ export default function App() {
 
     loadSupabaseData();
 
-    // Event-driven real-time updates with egress-safe debouncing
+    ensureCoAuditRealtimeChannel();
+
+    // Event-driven real-time updates: patch single-row postgres_changes payloads directly (0 KB REST egress!)
+    // and only fall back to throttled table fetch when no row payload is provided
     let txDebounceTimer: any = null;
     let campDebounceTimer: any = null;
     let expDebounceTimer: any = null;
     let memDebounceTimer: any = null;
 
-    const unsubTx = subscribeToTable('transactions', () => {
+    const unsubTx = subscribeToTable('transactions', (payload) => {
+      if (payload?.new && payload.new.id) {
+        const normTx = normalizeTransaction(payload.new);
+        if (applyCoAuditDeltaLocally({ transactions: [normTx] })) {
+          reloadLocalData();
+        }
+        return;
+      }
       if (txDebounceTimer) clearTimeout(txDebounceTimer);
       txDebounceTimer = setTimeout(() => {
-        fetchTableData('transactions', { forceAll: true, bypassCache: true }).then(txs => {
+        fetchTableData('transactions', { forceAll: true }).then(txs => {
           if (isMounted && Array.isArray(txs) && txs.length > 0) {
             const reconciled = reconcileWithAuthoritativeTransactions(getStoredTransactions(), txs as Transaction[]);
             setTransactions(reconciled);
             saveStoredTransactions(reconciled, true);
           }
         }).catch(() => {});
-      }, 1000);
+      }, 2500);
     });
 
-    const unsubCamp = subscribeToTable('campaigns', () => {
+    const unsubCamp = subscribeToTable('campaigns', (payload) => {
+      if (payload?.new && payload.new.id) {
+        const normCamp = normalizeCampaign(payload.new);
+        if (applyCoAuditDeltaLocally({ campaigns: [normCamp] })) {
+          reloadLocalData();
+        }
+        return;
+      }
       if (campDebounceTimer) clearTimeout(campDebounceTimer);
       campDebounceTimer = setTimeout(() => {
-        fetchTableData('campaigns', { forceAll: true, bypassCache: true }).then(camps => {
+        fetchTableData('campaigns', { forceAll: true }).then(camps => {
           if (isMounted && Array.isArray(camps) && camps.length > 0) {
             saveStoredCampaigns(camps as Campaign[], true);
             setCampaigns(getStoredCampaigns());
           }
         }).catch(() => {});
-      }, 1200);
+      }, 2500);
     });
 
-    const unsubExp = subscribeToTable('expenses', () => {
+    const unsubExp = subscribeToTable('expenses', (payload) => {
+      if (payload?.new && payload.new.id) {
+        const normExp = normalizeExpense(payload.new);
+        if (applyCoAuditDeltaLocally({ expenses: [normExp] })) {
+          reloadLocalData();
+        }
+        return;
+      }
       if (expDebounceTimer) clearTimeout(expDebounceTimer);
       expDebounceTimer = setTimeout(() => {
-        fetchTableData<any>('expenses', { forceAll: true, bypassCache: true }).then(exps => {
+        fetchTableData<any>('expenses', { forceAll: true }).then(exps => {
           if (isMounted && Array.isArray(exps) && exps.length > 0) {
             saveStoredExpenses(exps, true);
           }
         }).catch(() => {});
-      }, 1000);
+      }, 2500);
     });
 
     const unsubMem = subscribeToTable('members', () => {
@@ -714,17 +745,23 @@ export default function App() {
     });
 
     // Real-time Server-Sent Events (SSE) for instant sub-second cross-device, phone, & multi-user sync
-    const unsubSSE = subscribeServerEvents(() => {
-      reloadLocalData();
-      pullLatestServerState().then((res) => {
-        if (res?.transactions && res.transactions.length > 0) {
-          setTransactions(prev => mergeTransactions(prev, res.transactions));
-        }
+    const unsubSSE = subscribeServerEvents(
+      () => {
         reloadLocalData();
-      }).catch(() => {
+        pullLatestServerState().then((res) => {
+          if (res?.transactions && res.transactions.length > 0) {
+            setTransactions(prev => mergeTransactions(prev, res.transactions));
+          }
+          reloadLocalData();
+        }).catch(() => {
+          reloadLocalData();
+        });
+      },
+      () => {
+        // Fast path: SSE delta already applied cleanly in-memory with zero REST queries
         reloadLocalData();
-      });
-    });
+      }
+    );
 
     // Load local storage immediately on startup
     reloadLocalData();

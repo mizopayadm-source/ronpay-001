@@ -963,6 +963,9 @@ export const saveCampaign = (camp: Campaign): void => {
     updated = [stamped, ...current];
   }
   saveStoredCampaigns(updated);
+  import('../services/coAuditRealtime').then(({ broadcastCoAuditDelta }) => {
+    broadcastCoAuditDelta({ campaigns: [stamped] });
+  }).catch(() => {});
   import('../services/supabaseService').then(({ upsertSupabaseCampaign }) => {
     upsertSupabaseCampaign(stamped).catch((err) => {
       console.warn('[Supabase] Live campaign direct insert note:', err);
@@ -6906,6 +6909,12 @@ export const markBatchRecordsAuditVerification = (
           });
         }
         saveStoredTransactions(updated, true);
+        import('../services/coAuditRealtime').then(({ broadcastCoAuditDelta }) => {
+          broadcastCoAuditDelta({
+            transactions: modifiedTxs,
+            ...(updatedCampForSync ? { campaigns: [updatedCampForSync] } : {})
+          });
+        }).catch(() => {});
         import('../services/SupabaseSync').then(({ upsertTransaction, invalidateSupabaseTableCache }) => {
           invalidateSupabaseTableCache('transactions');
           modifiedTxs.forEach(tx => upsertTransaction(tx).catch(() => {}));
@@ -7005,6 +7014,12 @@ export const markBatchRecordsAuditVerification = (
           });
         }
         saveStoredExpenses(updated, true);
+        import('../services/coAuditRealtime').then(({ broadcastCoAuditDelta }) => {
+          broadcastCoAuditDelta({
+            expenses: modifiedExps,
+            ...(updatedCampForSync ? { campaigns: [updatedCampForSync] } : {})
+          });
+        }).catch(() => {});
         import('../services/SupabaseSync').then(({ upsertExpense, invalidateSupabaseTableCache }) => {
           invalidateSupabaseTableCache('expenses');
           modifiedExps.forEach(exp => upsertExpense(exp).catch(() => {}));
@@ -7128,10 +7143,6 @@ export const lockCampaignAuditPeriod = (
       }
     };
     saveCampaign(partialCamp);
-    import('../services/SupabaseSync').then(({ upsertCampaign, invalidateSupabaseTableCache }) => {
-      invalidateSupabaseTableCache('campaigns');
-      upsertCampaign(partialCamp).catch(() => {});
-    }).catch(() => {});
     safeApiFetch('/api/audit/sync-action', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -7177,13 +7188,13 @@ export const lockCampaignAuditPeriod = (
   const finalMergedSignOffs = Array.from(signMap.values());
   const finalSignedAuditorNames = finalMergedSignOffs.map(s => s.auditorName);
   const finalLockedByLabel = finalSignedAuditorNames.length > 1 ? finalSignedAuditorNames.join(' & ') : auditorName;
+  const lockedTxsToSync: Transaction[] = [];
+  const lockedExpsToSync: KumtluangExpense[] = [];
 
   // 1. Lock matching transactions
   try {
     const txs = getStoredTransactions();
     let txChanged = false;
-    const lockedTxsToSync: Transaction[] = [];
-    const syncActionItems: any[] = [];
     const updatedTxs = txs.map(t => {
       if (String(t.campaignId).toLowerCase().trim() === cleanCampId) {
         if (!t.is_locked) txCount++;
@@ -7226,14 +7237,6 @@ export const lockCampaignAuditPeriod = (
           }
         };
         lockedTxsToSync.push(lockedItem);
-        syncActionItems.push({
-          recordId: t.id,
-          recordType: 'transaction',
-          auditorKey: aKey,
-          auditorName,
-          auditorPhone,
-          mark: t.audit_mark || 'verified'
-        });
         return lockedItem;
       }
       return t;
@@ -7252,7 +7255,6 @@ export const lockCampaignAuditPeriod = (
   try {
     const exps = getStoredExpenses();
     let expChanged = false;
-    const lockedExpsToSync: KumtluangExpense[] = [];
     const updatedExps = exps.map(e => {
       if (String(e.campaignId).toLowerCase().trim() === cleanCampId) {
         if (!e.is_locked) expCount++;
@@ -7345,10 +7347,14 @@ export const lockCampaignAuditPeriod = (
         }
       };
       saveCampaign(updatedCamp);
-      import('../services/SupabaseSync').then(({ upsertCampaign, invalidateSupabaseTableCache }) => {
-        invalidateSupabaseTableCache('campaigns');
-        upsertCampaign(updatedCamp).catch(() => {});
-      }).catch(() => {});
+      if (lockedTxsToSync.length > 0 || lockedExpsToSync.length > 0) {
+        import('../services/coAuditRealtime').then(({ broadcastCoAuditDelta }) => {
+          broadcastCoAuditDelta({
+            transactions: lockedTxsToSync,
+            expenses: lockedExpsToSync
+          });
+        }).catch(() => {});
+      }
       safeApiFetch('/api/audit/sync-action', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -7366,7 +7372,7 @@ export const lockCampaignAuditPeriod = (
     finalLockedByLabel
   );
 
-  return { 
+  return {
     lockedCount: txCount + expCount,
     lockedTransactionsCount: txCount,
     lockedExpensesCount: expCount,
@@ -7396,10 +7402,6 @@ export const sendCoAuditWorkflowAlert = (
     }
   };
   saveCampaign(updatedCamp);
-  import('../services/SupabaseSync').then(({ upsertCampaign, invalidateSupabaseTableCache }) => {
-    invalidateSupabaseTableCache('campaigns');
-    upsertCampaign(updatedCamp).catch(() => {});
-  }).catch(() => {});
   safeApiFetch('/api/audit/sync-action', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -7436,6 +7438,9 @@ export const unlockSingleRecord = (
       saveStoredTransactions(updated, false);
       if (unlockedTx) {
         const txToSync = unlockedTx;
+        import('../services/coAuditRealtime').then(({ broadcastCoAuditDelta }) => {
+          broadcastCoAuditDelta({ transactions: [txToSync] });
+        }).catch(() => {});
         import('../services/SupabaseSync').then(({ upsertTransaction }) => {
           upsertTransaction(txToSync).catch(() => {});
         }).catch(() => {});
@@ -7458,6 +7463,9 @@ export const unlockSingleRecord = (
       saveStoredExpenses(updated, false);
       if (unlockedExp) {
         const expToSync = unlockedExp;
+        import('../services/coAuditRealtime').then(({ broadcastCoAuditDelta }) => {
+          broadcastCoAuditDelta({ expenses: [expToSync] });
+        }).catch(() => {});
         import('../services/SupabaseSync').then(({ upsertExpense }) => {
           upsertExpense(expToSync).catch(() => {});
         }).catch(() => {});

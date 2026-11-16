@@ -59,6 +59,7 @@ import {
 import { syncAllWithServer, pullLatestServerState, RONPAY_SYNC_EVENT } from '../utils/syncEngine';
 import { fetchOpeningBalanceFromSupabase, invalidateSupabaseTableCache } from '../services/SupabaseSync';
 import { fetchExpensesFromFirestore } from '../services/firestoreSync';
+import { ensureCoAuditRealtimeChannel } from '../services/coAuditRealtime';
 import { formatDateDDMMYYYY } from '../utils/date';
 import { printHtmlSafely, getTransactionHead, getTransactionMonthYear, getHeadSortPriority } from '../utils/export';
 
@@ -114,13 +115,16 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
 
   const handleSyncPortalData = async (notifyOrEvent: boolean | React.MouseEvent = false) => {
     const notifyParent = typeof notifyOrEvent === 'boolean' ? notifyOrEvent : true;
+    const isExplicitRefresh = notifyParent;
     setIsSyncingPortal(true);
     try {
-      invalidateSupabaseTableCache();
+      if (isExplicitRefresh) {
+        invalidateSupabaseTableCache();
+      }
       await Promise.allSettled([
         syncAuditorGrantsAcrossCloud(),
-        pullLatestServerState(),
-        syncAllWithServer(true),
+        pullLatestServerState({ forceSupabase: isExplicitRefresh }),
+        syncAllWithServer(isExplicitRefresh),
         campaign?.id
           ? fetchOpeningBalanceFromSupabase(campaign.id).then(val => {
               if (typeof val === 'number' && !isNaN(val)) {
@@ -128,7 +132,7 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
               }
             })
           : Promise.resolve(),
-        fetchExpensesFromFirestore(true)
+        fetchExpensesFromFirestore(isExplicitRefresh)
       ]);
       setTick(t => t + 1);
       if (notifyParent && onRecordsUpdated) onRecordsUpdated();
@@ -142,6 +146,7 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
   // Sync latest auditor grants, transactions, expenses, and opening balance from Server & Supabase when portal opens
   useEffect(() => {
     if (!isOpen) return;
+    ensureCoAuditRealtimeChannel();
     setLiveOpeningBalance(null);
     handleSyncPortalData(false);
 
