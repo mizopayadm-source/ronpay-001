@@ -1580,7 +1580,21 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
     const expDiscrepancyItems = discrepancyItems.filter(i => i.recordType === 'expense');
     const txDiscrepancyItems = discrepancyItems.filter(i => i.recordType === 'transaction');
 
-    const auditorsList = Array.from(auditorStatsMap.values());
+    const totalRequiredTxs = isExpenditureOnlyAudit ? 0 : cashBookAuditData.inRangeTxs.length;
+    const totalRequiredExps = cashBookAuditData.inRangeExps.length;
+    const totalRequiredRecords = totalRequiredTxs + totalRequiredExps;
+
+    const auditorsList = Array.from(auditorStatsMap.values()).map(st => {
+      const hasVerifiedAllRequired =
+        totalRequiredRecords > 0 &&
+        st.flaggedCount === 0 &&
+        st.expVerifiedCount >= totalRequiredExps &&
+        (isExpenditureOnlyAudit || st.txVerifiedCount >= totalRequiredTxs);
+      return {
+        ...st,
+        hasSignedOff: Boolean(st.hasSignedOff || hasVerifiedAllRequired)
+      };
+    });
     const signedCount = auditorsList.filter(a => a.hasSignedOff).length;
 
     return {
@@ -1595,9 +1609,9 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
       expDiscrepancyItems,
       txDiscrepancyItems,
       hasDiscrepancies: discrepancyItems.length > 0,
-      isJointFinalized: isDualAuditMode ? signedCount >= 2 && discrepancyItems.length === 0 : Boolean(freshCamp?.lastAuditedAt)
+      isJointFinalized: isDualAuditMode ? signedCount >= 2 && discrepancyItems.length === 0 : Boolean(freshCamp?.lastAuditedAt || (totalRequiredRecords > 0 && cashBookAuditData.unauditedCount === 0 && cashBookAuditData.flaggedCount === 0))
     };
-  }, [cashBookAuditData.inRangeTxs, cashBookAuditData.inRangeExps, appointedAuditors, campaign, isDualAuditMode, tick]);
+  }, [cashBookAuditData.inRangeTxs, cashBookAuditData.inRangeExps, cashBookAuditData.unauditedCount, cashBookAuditData.flaggedCount, appointedAuditors, campaign, isDualAuditMode, isExpenditureOnlyAudit, tick]);
 
   // Verify all unaudited Receipts & Payments within the currently selected Cash Book date range
   const handleVerifySelectedRange = () => {
@@ -1736,13 +1750,15 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
       ? dualAuditSummary.auditorsList.map((aud, idx) => `
           <div class="sig-box">
             <strong>${aud.auditorName}</strong><br/>
-            <span style="color:#64748b;font-size:10px;">Sum Endiktu (Auditor ${idx + 1}) • Ph: ${aud.auditorPhone || 'N/A'}</span>
+            <span style="color:#64748b;font-size:10px;">Sum Endiktu (Auditor ${idx + 1}) • Ph: ${aud.auditorPhone || 'N/A'}</span><br/>
+            <span style="color:${aud.hasSignedOff ? '#047857' : '#b45309'};font-size:9.5px;font-weight:800;">${aud.hasSignedOff ? '✓ Signed & Verified' : '⏳ Pending Sign-off'}</span>
           </div>
         `).join('')
       : `
           <div class="sig-box">
             <strong>${auditorName}</strong><br/>
-            <span style="color:#64748b;font-size:10px;">Sum Endiktu (Auditor) • Ph: ${auditorPhone || 'N/A'}</span>
+            <span style="color:#64748b;font-size:10px;">Sum Endiktu (Auditor) • Ph: ${auditorPhone || 'N/A'}</span><br/>
+            <span style="color:#047857;font-size:9.5px;font-weight:800;">✓ Signed & Verified</span>
           </div>
         `;
 
@@ -1891,7 +1907,7 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
             <div style="font-weight: 700; color: #0f172a;">${aud.auditorName}</div>
             <div style="color: #64748b;">Sum Endiktu (Auditor ${idx + 1})</div>
             <div style="color: #64748b; font-size: 11px;">Phone: ${aud.auditorPhone || 'N/A'}</div>
-            <div style="color: #94a3b8; font-size: 10px; margin-top: 4px;">${aud.hasSignedOff ? '✓ Signed & Verified' : `Date: ${formatDateDDMMYYYY(new Date().toISOString())}`}</div>
+            <div style="color: ${aud.hasSignedOff ? '#047857' : '#b45309'}; font-size: 10px; font-weight: 700; margin-top: 4px;">${aud.hasSignedOff ? '✓ Signed & Verified' : '⏳ Pending Sign-off'}</div>
           </div>
         `).join('')
       : `
@@ -1899,7 +1915,7 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
             <div style="font-weight: 700; color: #0f172a;">${auditorName}</div>
             <div style="color: #64748b;">Sum Endiktu (Auditor)</div>
             <div style="color: #64748b; font-size: 11px;">Phone: ${auditorPhone || 'N/A'}</div>
-            <div style="color: #94a3b8; font-size: 10px; margin-top: 4px;">Date: ${formatDateDDMMYYYY(new Date().toISOString())}</div>
+            <div style="color: #047857; font-size: 10px; font-weight: 700; margin-top: 4px;">✓ Signed & Verified</div>
           </div>
         `;
 
@@ -5957,18 +5973,70 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                   <div className="flex items-end gap-4 flex-wrap">
                     {dualAuditSummary.auditorsList.length >= 2 ? (
                       dualAuditSummary.auditorsList.map((aud, idx) => (
-                        <div key={aud.auditorKey} className="text-right border-t border-slate-900 pt-1.5 min-w-[140px]">
+                        <div key={aud.auditorKey} className="text-right border-t border-slate-900 pt-1.5 min-w-[150px] space-y-0.5">
                           <div className="font-bold text-xs text-slate-900">{aud.auditorName}</div>
                           <div className="text-[10px] text-slate-500">Sum Endiktu (Auditor {idx + 1})</div>
-                          <div className="text-[9.5px] font-bold text-emerald-700">
+                          <div className={`text-[9.5px] font-bold ${aud.hasSignedOff ? 'text-emerald-700' : 'text-amber-700'}`}>
                             {aud.hasSignedOff ? '✓ Signed & Verified' : '⏳ Pending Sign-off'}
                           </div>
+                          {!aud.hasSignedOff && canAudit && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (!campaign) return;
+                                if (!isExpenditureOnlyAudit) {
+                                  markBatchRecordsAuditVerification(
+                                    cashBookAuditData.inRangeTxs.map(t => t.id),
+                                    'transaction',
+                                    'verified',
+                                    aud.auditorName,
+                                    '',
+                                    true,
+                                    aud.auditorPhone
+                                  );
+                                }
+                                markBatchRecordsAuditVerification(
+                                  cashBookAuditData.inRangeExps.map(e => e.id),
+                                  'expense',
+                                  'verified',
+                                  aud.auditorName,
+                                  '',
+                                  true,
+                                  aud.auditorPhone
+                                );
+                                lockCampaignAuditPeriod(
+                                  campaign.id,
+                                  { name: aud.auditorName, phone: aud.auditorPhone },
+                                  auditPeriod.trim(),
+                                  auditNotes.trim()
+                                );
+                                setTick(t => t + 1);
+                                setLockToast(`✅ ${aud.auditorName} (Auditor ${idx + 1}) hmingin '✓ Signed & Verified' nemngheh fel a ni e!`);
+                                if (onRecordsUpdated) onRecordsUpdated();
+                                setTimeout(() => setLockToast(null), 3500);
+                              }}
+                              className="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white text-[9px] font-black shadow-2xs cursor-pointer transition"
+                            >
+                              <span>✍️ Sign &amp; Verify Rawh</span>
+                            </button>
+                          )}
                         </div>
                       ))
                     ) : (
-                      <div className="text-right border-t border-slate-900 pt-1.5 min-w-[160px]">
-                        <div className="font-bold text-xs text-slate-900">{auditorName}</div>
+                      <div className="text-right border-t border-slate-900 pt-1.5 min-w-[160px] space-y-0.5">
+                        <div className="font-bold text-xs text-slate-900">
+                          {dualAuditSummary.auditorsList[0]?.auditorName || auditorName}
+                        </div>
                         <div className="text-[10px] text-slate-500">Sum Endiktu (Auditor)</div>
+                        <div className={`text-[9.5px] font-bold ${
+                          (dualAuditSummary.auditorsList[0]?.hasSignedOff ?? dualAuditSummary.isJointFinalized)
+                            ? 'text-emerald-700'
+                            : 'text-amber-700'
+                        }`}>
+                          {(dualAuditSummary.auditorsList[0]?.hasSignedOff ?? dualAuditSummary.isJointFinalized)
+                            ? '✓ Signed & Verified'
+                            : '⏳ Pending Sign-off'}
+                        </div>
                       </div>
                     )}
                   </div>
