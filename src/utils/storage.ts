@@ -6800,13 +6800,10 @@ export const lockCampaignAuditPeriod = (
   const totalAuditors = options?.totalActiveAuditors ?? Math.max(1, uniqueGrantKeys.size);
   const isDualMode = options?.isDualAuditMode ?? (totalAuditors >= 2 || Boolean(targetCamp?.requireDualAuditorConsensus));
 
-  // Record this auditor's sign-off in campaign.auditSignOffs (preserving both top-level and metadata sign-offs)
-  const prevTopSignOffs = Array.isArray(targetCamp?.auditSignOffs) ? targetCamp!.auditSignOffs! : [];
-  const prevMetaSignOffs = Array.isArray((targetCamp as any)?.metadata?.auditSignOffs)
-    ? (targetCamp as any).metadata.auditSignOffs
-    : [];
+  // Record this auditor's sign-off in campaign.auditSignOffs
+  const prevSignOffs = Array.isArray(targetCamp?.auditSignOffs) ? [...targetCamp!.auditSignOffs!] : [];
   const signMap = new Map<string, any>();
-  for (const s of [...prevMetaSignOffs, ...prevTopSignOffs]) {
+  for (const s of prevSignOffs) {
     if (s && s.auditorKey) signMap.set(String(s.auditorKey), s);
   }
   signMap.set(aKey, {
@@ -6817,61 +6814,6 @@ export const lockCampaignAuditPeriod = (
     signedAt: nowIso,
     notes: notes || ''
   });
-
-  // Also check if any other active appointed Co-Auditor has already verified 100% of required records in this campaign
-  if (isDualMode && allGrants.length > 0) {
-    const campExps = getStoredExpenses(cleanCampId);
-    const campTxs = getStoredTransactions().filter(
-      t => t && isTransactionForCampaign(t, targetCamp || { id: cleanCampId } as any) && isConfirmedTransaction(t)
-    );
-    const isExpOnly =
-      targetCamp?.auditScope === 'expenditure_only' ||
-      (targetCamp as any)?.metadata?.auditScope === 'expenditure_only' ||
-      allGrants.some(g => (g.auditScope || g.audit_scope) === 'expenditure_only');
-
-    allGrants.forEach(g => {
-      const gPhone = g.auditorPhone || g.auditor_phone || '';
-      const gName = g.auditorName || g.auditor_name || 'Auditor';
-      const gKey = normalizeAuditorKey(gPhone, gName);
-      if (signMap.has(gKey)) return;
-
-      const allExpsVerified =
-        campExps.length === 0 ||
-        campExps.every(e => {
-          const vm = { ...(e.metadata?.auditor_verifications || {}), ...(e.auditor_verifications || {}) };
-          return vm[gKey]?.mark === 'verified';
-        });
-      const allTxsVerified =
-        isExpOnly ||
-        campTxs.length === 0 ||
-        campTxs.every(t => {
-          const vm = { ...(t.metadata?.auditor_verifications || {}), ...(t.auditor_verifications || {}) };
-          return vm[gKey]?.mark === 'verified';
-        });
-
-      const hasAnyVerified =
-        campExps.some(e => {
-          const vm = { ...(e.metadata?.auditor_verifications || {}), ...(e.auditor_verifications || {}) };
-          return vm[gKey]?.mark === 'verified';
-        }) ||
-        campTxs.some(t => {
-          const vm = { ...(t.metadata?.auditor_verifications || {}), ...(t.auditor_verifications || {}) };
-          return vm[gKey]?.mark === 'verified';
-        });
-
-      if (hasAnyVerified && allExpsVerified && allTxsVerified) {
-        signMap.set(gKey, {
-          auditorKey: gKey,
-          auditorPhone: gPhone || 'N/A',
-          auditorName: gName,
-          auditPeriod: periodLabel,
-          signedAt: nowIso,
-          notes: notes || 'All records verified.'
-        });
-      }
-    });
-  }
-
   const mergedSignOffs = Array.from(signMap.values());
   const signedAuditorNames = mergedSignOffs.map(s => s.auditorName);
 
