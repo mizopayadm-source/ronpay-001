@@ -170,6 +170,7 @@ export interface Campaign {
   requireDualAuditorConsensus?: boolean;
   auditScope?: 'both' | 'expenditure_only';
   coAuditAlert?: CoAuditAlert | null;
+  lockedAuditPeriods?: LockedAuditPeriod[];
   auditReconciliation?: {
     bankBalance?: number;
     cashInHand?: number;
@@ -182,6 +183,18 @@ export interface Campaign {
   definedAbcList?: string[];
   workspaceMode?: 'hybrid' | 'org_only';
   metadata?: Record<string, any>;
+}
+
+export interface LockedAuditPeriod {
+  id: string;
+  periodLabel: string;
+  fromDate?: string; // YYYY-MM-DD (inclusive)
+  toDate?: string;   // YYYY-MM-DD (inclusive)
+  lockedAt: string;
+  lockedBy: string;
+  lockedByPhone?: string;
+  txCount?: number;
+  expCount?: number;
 }
 
 export interface CoAuditAlert {

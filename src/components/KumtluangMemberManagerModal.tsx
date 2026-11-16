@@ -44,7 +44,7 @@ import {
 import { KumtluangExpenseManager } from './KumtluangExpenseManager';
 import { AuthorizedPersonsModal } from './AuthorizedPersonsModal';
 import { MemberRecord, MemberDependent, Campaign, Transaction, CreatorProfile } from '../types';
-import { getMembers, saveMembers, addOrUpdateMember, deleteMember, getDeletedMemberIds, saveTransaction, recordUserPaidTxId, isCampaignCreator, isConfirmedTransaction, isTransactionForCampaign, saveCampaign, getStoredExpenses, getCampaignExpenseHeads, getStoredCampaigns, isCampaignManagerOrOfficer, derivePrefixFromText } from '../utils/storage';
+import { getMembers, saveMembers, addOrUpdateMember, deleteMember, getDeletedMemberIds, saveTransaction, recordUserPaidTxId, isCampaignCreator, isConfirmedTransaction, isTransactionForCampaign, saveCampaign, getStoredExpenses, getCampaignExpenseHeads, getStoredCampaigns, isCampaignManagerOrOfficer, derivePrefixFromText, checkDateAgainstLockedAuditPeriod, isRecordAuditLockedForWrite } from '../utils/storage';
 import {
   getStoredGroupMemberships,
   approveMembershipRequest,
@@ -837,6 +837,20 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
       const isManual = (t.paymentMethod || '').toLowerCase() === 'cash' || String(t.id).startsWith('TX-MANUAL') || String(t.id).startsWith('RPAY-CASH');
       return isSameMember && isSameCampaign && isSameCategory && isSamePeriod && isManual;
     });
+
+    if (existingTx && isRecordAuditLockedForWrite(existingTx)) {
+      setEntrySuccess(`🔒 He member (${selectedMonth} ${selectedYear}) payment record hi Audit & Lock tawh a ni a, thlak danglam phal a ni lo.`);
+      setTimeout(() => setEntrySuccess(null), 5000);
+      return;
+    }
+
+    const effCampId = targetCampaign?.id || 'cmp-1788107291420';
+    const periodBlock = checkDateAgainstLockedAuditPeriod(effCampId, effectiveIso.slice(0, 10));
+    if (periodBlock.isBlocked) {
+      setEntrySuccess(periodBlock.reason);
+      setTimeout(() => setEntrySuccess(null), 5000);
+      return;
+    }
 
     const txToSave: Transaction = existingTx ? {
       ...existingTx,
@@ -1990,8 +2004,12 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
           {activeTab === 'quick_entry' && (
             <div className="space-y-6">
               {entrySuccess && (
-                <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-center gap-2 text-xs font-bold text-emerald-800 animate-fadeIn">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <div className={`p-3.5 border rounded-2xl flex items-center gap-2 text-xs font-bold animate-fadeIn ${
+                  entrySuccess.startsWith('🔒') || entrySuccess.startsWith('⚠️')
+                    ? 'bg-rose-50 border-rose-200 text-rose-800'
+                    : 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                }`}>
+                  <CheckCircle2 className={`w-4 h-4 shrink-0 ${entrySuccess.startsWith('🔒') || entrySuccess.startsWith('⚠️') ? 'text-rose-600' : 'text-emerald-600'}`} />
                   <span>{entrySuccess}</span>
                 </div>
               )}

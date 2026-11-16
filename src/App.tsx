@@ -58,7 +58,10 @@ import {
   syncAuditorGrantsAcrossCloud,
   saveStoredAuditorGrants,
   isApprovedQRCreator,
-  saveStoredExpenses
+  saveStoredExpenses,
+  isRecordAuditLockedForWrite,
+  checkDateAgainstLockedAuditPeriod,
+  extractLocalIsoDateStr
 } from './utils/storage';
 import {
   fetchTableData,
@@ -1584,25 +1587,65 @@ export default function App() {
   };
 
   const handleUpdateTransaction = (transaction: Transaction) => {
+    const existing = getStoredTransactions().find(t => String(t.id).toLowerCase().trim() === String(transaction.id).toLowerCase().trim());
+    if (existing && isRecordAuditLockedForWrite(existing) && !transaction.unlock_expires_at) {
+      return;
+    }
+    const newIso = extractLocalIsoDateStr(transaction.date || transaction.timestamp || transaction.createdAt);
+    const oldIso = existing ? extractLocalIsoDateStr(existing.date || existing.timestamp || existing.createdAt) : '';
+    if (!existing || (newIso && newIso !== oldIso)) {
+      const pBlock = checkDateAgainstLockedAuditPeriod(transaction.campaignId, transaction.date || transaction.timestamp || transaction.createdAt, {
+        isOnlineLiveGateway: transaction.paymentMethod === 'phonepe'
+      });
+      if (pBlock.isBlocked && !transaction.unlock_expires_at) {
+        return;
+      }
+    }
     saveTransaction(transaction);
     upsertTransaction(transaction).catch(err => console.warn('Supabase update tx error:', err));
     setTransactions(getStoredTransactions());
   };
 
   const handleDeleteTransaction = (transactionId: string) => {
+    const existing = getStoredTransactions().find(t => String(t.id).toLowerCase().trim() === String(transactionId).toLowerCase().trim());
+    if (existing && isRecordAuditLockedForWrite(existing)) {
+      return;
+    }
     deleteStoredTransaction(transactionId);
     deleteTransaction(transactionId).catch(err => console.warn('Supabase delete tx error:', err));
     setTransactions(getStoredTransactions());
   };
 
   const handleBatchUpdateTransactions = (updatedTxs: Transaction[], deletedIds: string[]) => {
-    if (deletedIds && deletedIds.length > 0) {
-      deleteMultipleTransactions(deletedIds);
-      deletedIds.forEach(id => deleteTransaction(id).catch(() => {}));
+    const currentById = new Map<string, Transaction>();
+    getStoredTransactions().forEach(t => {
+      if (t && t.id) currentById.set(String(t.id).toLowerCase().trim(), t);
+    });
+    const allowedDeletes = (deletedIds || []).filter(id => {
+      const existing = currentById.get(String(id).toLowerCase().trim());
+      return !(existing && isRecordAuditLockedForWrite(existing));
+    });
+    if (allowedDeletes.length > 0) {
+      deleteMultipleTransactions(allowedDeletes);
+      allowedDeletes.forEach(id => deleteTransaction(id).catch(() => {}));
     }
-    if (updatedTxs && updatedTxs.length > 0) {
-      saveMultipleTransactions(updatedTxs);
-      updatedTxs.forEach(tx => upsertTransaction(tx).catch(() => {}));
+    const allowedUpdates = (updatedTxs || []).filter(tx => {
+      if (!tx || !tx.id) return false;
+      const existing = currentById.get(String(tx.id).toLowerCase().trim());
+      if (existing && isRecordAuditLockedForWrite(existing) && !tx.unlock_expires_at) return false;
+      const newIso = extractLocalIsoDateStr(tx.date || tx.timestamp || tx.createdAt);
+      const oldIso = existing ? extractLocalIsoDateStr(existing.date || existing.timestamp || existing.createdAt) : '';
+      if (!existing || (newIso && newIso !== oldIso)) {
+        const pBlock = checkDateAgainstLockedAuditPeriod(tx.campaignId, tx.date || tx.timestamp || tx.createdAt, {
+          isOnlineLiveGateway: tx.paymentMethod === 'phonepe'
+        });
+        if (pBlock.isBlocked && !tx.unlock_expires_at) return false;
+      }
+      return true;
+    });
+    if (allowedUpdates.length > 0) {
+      saveMultipleTransactions(allowedUpdates);
+      allowedUpdates.forEach(tx => upsertTransaction(tx).catch(() => {}));
     }
     setTransactions(getStoredTransactions());
   };

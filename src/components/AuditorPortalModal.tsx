@@ -1822,7 +1822,11 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
       campaign.id,
       { name: effName, phone: effPhone },
       periodStr,
-      auditNotes || `Cash Book (${periodStr}) verified and locked.`
+      auditNotes || `Cash Book (${periodStr}) verified and locked.`,
+      {
+        fromDate: appointedFromDate || cashBookAuditData.effFrom || undefined,
+        toDate: appointedToDate || cashBookAuditData.effTo || undefined
+      }
     );
 
     setTick(t => t + 1);
@@ -2039,7 +2043,12 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
         { name: effName, phone: effPhone },
         periodStr,
         notesStr,
-        { isDualAuditMode: true, totalActiveAuditors: dualAuditSummary.auditorsList.length }
+        {
+          isDualAuditMode: true,
+          totalActiveAuditors: dualAuditSummary.auditorsList.length,
+          fromDate: appointedFromDate || cashBookAuditData.effFrom || undefined,
+          toDate: appointedToDate || cashBookAuditData.effTo || undefined
+        }
       );
       setTick(t => t + 1);
       if (res.isAwaitingCoAuditor) {
@@ -2084,7 +2093,13 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
         { name: effName, phone: effPhone },
         periodStr,
         notesStr,
-        { isDualAuditMode: true, totalActiveAuditors: dualAuditSummary.auditorsList.length, forceFinalLock: true }
+        {
+          isDualAuditMode: true,
+          totalActiveAuditors: dualAuditSummary.auditorsList.length,
+          forceFinalLock: true,
+          fromDate: appointedFromDate || cashBookAuditData.effFrom || undefined,
+          toDate: appointedToDate || cashBookAuditData.effTo || undefined
+        }
       );
       setTick(t => t + 1);
       setIsConfirmingLock(false);
@@ -2112,7 +2127,11 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
         campaign.id,
         { name: auditorName.trim(), phone: auditorPhone.trim() },
         (isRestrictedAuditor && appointedPeriodLabel) ? appointedPeriodLabel : auditPeriod.trim(),
-        auditNotes.trim()
+        auditNotes.trim(),
+        {
+          fromDate: appointedFromDate || cashBookAuditData.effFrom || undefined,
+          toDate: appointedToDate || cashBookAuditData.effTo || undefined
+        }
       );
 
       setTick(t => t + 1);

@@ -1,4 +1,4 @@
-import { Campaign, Transaction, CreatorProfile, BawmCategory, SystemPricingConfig, SectionQuickPreset, AuditLog, AnnouncementBanner, AnnouncementItem, MemberRecord, RonPayWallet, WalletTransaction, StaffAccount, PaymentGatewayConfig, KumtluangExpense, AuditorAccessGrant, ModificationRequest } from '../types';
+import { Campaign, Transaction, CreatorProfile, BawmCategory, SystemPricingConfig, SectionQuickPreset, AuditLog, AnnouncementBanner, AnnouncementItem, MemberRecord, RonPayWallet, WalletTransaction, StaffAccount, PaymentGatewayConfig, KumtluangExpense, AuditorAccessGrant, ModificationRequest, LockedAuditPeriod } from '../types';
 import { INITIAL_CAMPAIGNS, INITIAL_TRANSACTIONS, INITIAL_EXPENSES, DEFAULT_PRICING_CONFIG, INITIAL_REGISTERED_CREATORS, BMP_SHILLONG_DEFAULT_LOGO, YMA_DEFAULT_LOGO, BCM_EBENEZER_DEFAULT_LOGO } from '../data/initialData';
 import { compressDataUrl } from './imageCompressor';
 import {
@@ -4402,6 +4402,129 @@ export function migrateCampaignMembersPrefix(campaignId: string, oldPrefix: stri
   return migratedCount;
 }
 
+export const extractLocalIsoDateStr = (rawVal?: any): string => {
+  if (!rawVal) return '';
+  const s = String(rawVal).trim();
+  if (!s) return '';
+  if (s.length >= 10 && /^\d{4}-\d{2}-\d{2}/.test(s)) {
+    return s.slice(0, 10);
+  }
+  const d = new Date(s);
+  if (!isNaN(d.getTime())) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }
+  return '';
+};
+
+export const isRecordAuditLockedForWrite = (rec: any): boolean => {
+  if (!rec) return false;
+  const locked = Boolean(rec.is_locked || rec.metadata?.is_locked);
+  if (!locked) return false;
+  const expStr = rec.unlock_expires_at || rec.metadata?.unlock_expires_at;
+  if (expStr) {
+    const expMs = new Date(expStr).getTime();
+    if (!isNaN(expMs) && expMs > Date.now()) {
+      return false;
+    }
+  }
+  return true;
+};
+
+export const getCampaignLockedAuditPeriods = (campaignId?: string): LockedAuditPeriod[] => {
+  if (!campaignId) return [];
+  const cleanCampId = String(campaignId).toLowerCase().trim();
+  const camp = getStoredCampaigns().find(c => String(c.id).toLowerCase().trim() === cleanCampId);
+  if (!camp) return [];
+
+  const list: LockedAuditPeriod[] = [];
+  const seen = new Set<string>();
+  const addPeriod = (p: any) => {
+    if (!p || !p.lockedAt) return;
+    const key = `${p.fromDate || ''}|${p.toDate || ''}|${p.periodLabel || ''}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    list.push({
+      id: p.id || `AUDP-${key}`,
+      periodLabel: p.periodLabel || 'Audited Period',
+      fromDate: p.fromDate || undefined,
+      toDate: p.toDate || undefined,
+      lockedAt: p.lockedAt,
+      lockedBy: p.lockedBy || 'Auditor',
+      lockedByPhone: p.lockedByPhone,
+      txCount: p.txCount,
+      expCount: p.expCount
+    });
+  };
+
+  const explicit = Array.isArray(camp.lockedAuditPeriods)
+    ? camp.lockedAuditPeriods
+    : (Array.isArray((camp as any).metadata?.lockedAuditPeriods) ? (camp as any).metadata.lockedAuditPeriods : []);
+  explicit.forEach(addPeriod);
+
+  // Backwards compatibility: if a legacy campaign was finalized/locked with appointed dates before lockedAuditPeriods existed
+  if (list.length === 0 && camp.lastAuditedAt) {
+    const meta = (camp as any).metadata || {};
+    const appFrom = meta.appointedAuditFromDate || '';
+    const appTo = meta.appointedAuditToDate || '';
+    const isFinal = camp.coAuditAlert?.status === 'finalized' || !camp.requireDualAuditorConsensus;
+    const hasAnyLocked =
+      getStoredTransactions().some(t => String(t.campaignId).toLowerCase().trim() === cleanCampId && Boolean(t.is_locked)) ||
+      getStoredExpenses().some(e => String(e.campaignId).toLowerCase().trim() === cleanCampId && Boolean(e.is_locked));
+
+    if (isFinal && hasAnyLocked && (appFrom || appTo)) {
+      addPeriod({
+        id: `AUDP-LEGACY-${cleanCampId}`,
+        periodLabel: camp.lastAuditPeriod || meta.appointedAuditPeriod || 'Audited Period',
+        fromDate: appFrom || undefined,
+        toDate: appTo || undefined,
+        lockedAt: camp.lastAuditedAt,
+        lockedBy: camp.lastAuditedBy || 'Auditor'
+      });
+    }
+  }
+
+  return list;
+};
+
+export const checkDateAgainstLockedAuditPeriod = (
+  campaignId?: string,
+  rawDate?: any,
+  options?: { isOnlineLiveGateway?: boolean }
+): { isBlocked: boolean; period?: LockedAuditPeriod; reason: string } => {
+  if (!campaignId) return { isBlocked: false, reason: '' };
+  const periods = getCampaignLockedAuditPeriods(campaignId);
+  if (periods.length === 0) return { isBlocked: false, reason: '' };
+
+  const targetDate = extractLocalIsoDateStr(rawDate) || extractLocalIsoDateStr(new Date().toISOString());
+  if (!targetDate) return { isBlocked: false, reason: '' };
+  const todayIso = extractLocalIsoDateStr(new Date().toISOString());
+
+  for (const p of periods) {
+    const pFrom = p.fromDate ? extractLocalIsoDateStr(p.fromDate) : '';
+    const pTo = p.toDate ? extractLocalIsoDateStr(p.toDate) : extractLocalIsoDateStr(p.lockedAt);
+    const matchesFrom = !pFrom || targetDate >= pFrom;
+    const matchesTo = !pTo || targetDate <= pTo;
+
+    if (matchesFrom && matchesTo) {
+      // Never drop real-money live PhonePe/online gateway settlement happening today after an earlier lock
+      if (options?.isOnlineLiveGateway && targetDate >= todayIso && p.lockedAt && new Date(p.lockedAt).getTime() <= Date.now()) {
+        continue;
+      }
+      const rangeText = pFrom && pTo ? `${pFrom} – ${pTo}` : pTo ? `${pTo} thleng` : p.periodLabel;
+      return {
+        isBlocked: true,
+        period: p,
+        reason: `🔒 Audit & Lock tawh hun bi (${p.periodLabel}: ${rangeText}) chhunga record thar thun emaw thlak danglam emaw phal a ni lo (Audited by ${p.lockedBy}).`
+      };
+    }
+  }
+
+  return { isBlocked: false, reason: '' };
+};
+
 export const saveTransaction = (tx: Transaction): void => {
   if (!tx || !tx.id) return;
   const nowIso = new Date().toISOString();
@@ -4558,10 +4681,20 @@ export const saveTransaction = (tx: Transaction): void => {
   tx.isSynced = false;
   const current = getStoredTransactions();
   const existingTx = current.find(t => String(t.id).toLowerCase().trim() === cleanTxId);
-  if (existingTx && existingTx.is_locked) {
-    const isUnlocked = existingTx.unlock_expires_at && new Date(existingTx.unlock_expires_at).getTime() > Date.now();
-    if (!isUnlocked && !tx.is_locked && !tx.unlock_expires_at) {
+  if (existingTx && isRecordAuditLockedForWrite(existingTx)) {
+    if (!tx.is_locked && !tx.unlock_expires_at) {
       console.warn(`[Audit Lock] Transaction ${tx.id} is locked by ${existingTx.locked_by || 'Auditor'}. Modification blocked.`);
+      return;
+    }
+  }
+  const txIsoDate = extractLocalIsoDateStr(tx.date || tx.timestamp || tx.createdAt);
+  const existingIsoDate = existingTx ? extractLocalIsoDateStr(existingTx.date || existingTx.timestamp || existingTx.createdAt) : '';
+  if (!existingTx || (txIsoDate && txIsoDate !== existingIsoDate)) {
+    const periodBlock = checkDateAgainstLockedAuditPeriod(tx.campaignId, tx.date || tx.timestamp || tx.createdAt, {
+      isOnlineLiveGateway: tx.paymentMethod === 'phonepe'
+    });
+    if (periodBlock.isBlocked && !tx.unlock_expires_at) {
+      console.warn(`[Audit Period Lock] Blocked transaction ${tx.id} on ${txIsoDate}: ${periodBlock.reason}`);
       return;
     }
   }
@@ -4855,10 +4988,26 @@ export const deleteStoredTransaction = (transactionId: string): void => {
 
 export const deleteMultipleTransactions = (transactionIds: string[]): void => {
   if (!transactionIds || transactionIds.length === 0) return;
-  const cleanIds = transactionIds.map(id => String(id).trim()).filter(Boolean);
-  const idSet = new Set(cleanIds.map(id => id.toLowerCase()));
-
   const current = getStoredTransactions();
+  const currentById = new Map<string, Transaction>();
+  current.forEach(t => {
+    if (t && t.id) currentById.set(String(t.id).toLowerCase().trim(), t);
+  });
+
+  // Strictly skip any transaction that is Audit & Locked
+  const cleanIds = transactionIds
+    .map(id => String(id).trim())
+    .filter(id => {
+      if (!id) return false;
+      const existing = currentById.get(id.toLowerCase());
+      if (existing && isRecordAuditLockedForWrite(existing)) {
+        console.warn(`[Audit Lock] Skipped deleting locked transaction ${id}.`);
+        return false;
+      }
+      return true;
+    });
+  if (cleanIds.length === 0) return;
+  const idSet = new Set(cleanIds.map(id => id.toLowerCase()));
 
   for (const id of cleanIds) {
     markTransactionAsDeleted(id, false);
@@ -4898,8 +5047,28 @@ export const saveMultipleTransactions = (txs: Transaction[]): void => {
   });
   
   const nowStamp = new Date().toISOString();
+  const acceptedTxs: Transaction[] = [];
   txs.forEach(tx => {
     if (!tx || !tx.id) return;
+    const cleanKey = String(tx.id).toLowerCase().trim();
+    const existingTx = txMap.get(cleanKey);
+
+    if (existingTx && isRecordAuditLockedForWrite(existingTx) && !tx.unlock_expires_at) {
+      console.warn(`[Audit Lock] Batch save blocked modifying locked transaction ${tx.id}.`);
+      return;
+    }
+    const txIsoDate = extractLocalIsoDateStr(tx.date || tx.timestamp || tx.createdAt);
+    const existingIsoDate = existingTx ? extractLocalIsoDateStr(existingTx.date || existingTx.timestamp || existingTx.createdAt) : '';
+    if (!existingTx || (txIsoDate && txIsoDate !== existingIsoDate)) {
+      const periodBlock = checkDateAgainstLockedAuditPeriod(tx.campaignId, tx.date || tx.timestamp || tx.createdAt, {
+        isOnlineLiveGateway: tx.paymentMethod === 'phonepe'
+      });
+      if (periodBlock.isBlocked && !tx.unlock_expires_at) {
+        console.warn(`[Audit Period Lock] Batch save blocked transaction ${tx.id} inside audited period: ${periodBlock.reason}`);
+        return;
+      }
+    }
+
     if (!tx.createdAt) tx.createdAt = nowStamp;
     tx.updatedAt = nowStamp;
     tx.isSynced = false;
@@ -4941,7 +5110,8 @@ export const saveMultipleTransactions = (txs: Transaction[]): void => {
         }
       }
     }
-    txMap.set(String(tx.id).toLowerCase().trim(), tx);
+    acceptedTxs.push(tx);
+    txMap.set(cleanKey, tx);
     recordUserPaidTxId(tx.id);
     syncTransactionToFirestore(tx).catch(() => {});
     import('../services/supabaseService')
@@ -4950,6 +5120,8 @@ export const saveMultipleTransactions = (txs: Transaction[]): void => {
       })
       .catch(() => {});
   });
+
+  if (acceptedTxs.length === 0) return;
 
   const updated = Array.from(txMap.values());
   saveStoredTransactions(updated);
@@ -4963,9 +5135,9 @@ export const saveMultipleTransactions = (txs: Transaction[]): void => {
   safeApiFetch('/api/transactions/batch', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ transactions: txs })
+    body: JSON.stringify({ transactions: acceptedTxs })
   }).catch(() => {
-    txs.forEach(t => {
+    acceptedTxs.forEach(t => {
       safeApiFetch('/api/transactions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -4977,7 +5149,7 @@ export const saveMultipleTransactions = (txs: Transaction[]): void => {
   safeApiFetch('/api/data/sync', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ transactions: txs })
+    body: JSON.stringify({ transactions: acceptedTxs })
   }).catch(() => {});
 };
 
@@ -5361,6 +5533,19 @@ export const saveExpense = (expense: KumtluangExpense): void => {
   const cleanDate = /^\d{4}-\d{2}-\d{2}/.test(rawSpent)
     ? rawSpent.slice(0, 10)
     : stamp.slice(0, 10);
+  const existingExp = current.find(e => String(e.id).toLowerCase().trim() === String(expense.id).toLowerCase().trim());
+  if (existingExp && isRecordAuditLockedForWrite(existingExp) && !expense.is_locked && !expense.unlock_expires_at) {
+    console.warn(`[Audit Lock] Expense ${expense.id} is locked by ${existingExp.locked_by || 'Auditor'}. Modification blocked.`);
+    return;
+  }
+  const existingExpDate = existingExp ? extractLocalIsoDateStr(existingExp.spentDate || existingExp.date || existingExp.createdAt) : '';
+  if (!existingExp || (cleanDate && cleanDate !== existingExpDate)) {
+    const periodBlock = checkDateAgainstLockedAuditPeriod(expense.campaignId, cleanDate);
+    if (periodBlock.isBlocked && !expense.unlock_expires_at) {
+      console.warn(`[Audit Period Lock] Blocked expense ${expense.id} on ${cleanDate}: ${periodBlock.reason}`);
+      return;
+    }
+  }
   const headVal = expense.head || expense.expenseHead || 'General';
   const paidToVal = expense.paidTo || expense.payeeName || '';
   const purposeVal = expense.purpose || expense.description || '';
@@ -5402,12 +5587,9 @@ export const saveExpense = (expense: KumtluangExpense): void => {
 export const deleteStoredExpense = (expenseId: string): void => {
   const current = getStoredExpenses();
   const target = current.find(e => String(e.id).toLowerCase().trim() === String(expenseId).toLowerCase().trim());
-  if (target && target.is_locked) {
-    const isUnlocked = target.unlock_expires_at && new Date(target.unlock_expires_at).getTime() > Date.now();
-    if (!isUnlocked) {
-      console.warn(`[Audit Lock] Cannot delete locked expense ${expenseId}. Maker-Checker approval required.`);
-      return;
-    }
+  if (target && isRecordAuditLockedForWrite(target)) {
+    console.warn(`[Audit Lock] Cannot delete locked expense ${expenseId}. Maker-Checker approval required.`);
+    return;
   }
 
   markExpenseAsDeleted(expenseId);
@@ -5428,7 +5610,10 @@ export const deleteAllCampaignExpenses = (campaignId: string): void => {
   if (!campaignId) return;
   const cleanCampId = String(campaignId).toLowerCase().trim();
   const current = getStoredExpenses();
-  const targetExpenses = current.filter(e => String(e.campaignId).toLowerCase().trim() === cleanCampId);
+  const targetExpenses = current.filter(
+    e => String(e.campaignId).toLowerCase().trim() === cleanCampId && !isRecordAuditLockedForWrite(e)
+  );
+  const deletedIdSet = new Set(targetExpenses.map(e => String(e.id).toLowerCase().trim()));
   targetExpenses.forEach(e => {
     markExpenseAsDeleted(e.id);
     import('../services/SupabaseSync').then(({ deleteExpense }) => {
@@ -5436,7 +5621,7 @@ export const deleteAllCampaignExpenses = (campaignId: string): void => {
     }).catch(() => {});
     deleteExpenseFromFirestore(e.id).catch(() => {});
   });
-  const remaining = current.filter(e => String(e.campaignId).toLowerCase().trim() !== cleanCampId);
+  const remaining = current.filter(e => !deletedIdSet.has(String(e.id).toLowerCase().trim()));
   saveStoredExpenses(remaining);
 };
 
@@ -5444,10 +5629,18 @@ export const updateStoredExpense = (expense: KumtluangExpense): void => {
   const current = getStoredExpenses();
   const cleanId = String(expense.id).toLowerCase().trim();
   const existingExp = current.find(e => String(e.id).toLowerCase().trim() === cleanId);
-  if (existingExp && existingExp.is_locked) {
-    const isUnlocked = existingExp.unlock_expires_at && new Date(existingExp.unlock_expires_at).getTime() > Date.now();
-    if (!isUnlocked && !expense.is_locked && !expense.unlock_expires_at) {
+  if (existingExp && isRecordAuditLockedForWrite(existingExp)) {
+    if (!expense.is_locked && !expense.unlock_expires_at) {
       console.warn(`[Audit Lock] Expense ${expense.id} is locked by ${existingExp.locked_by || 'Auditor'}. Modification blocked.`);
+      return;
+    }
+  }
+  const expIsoDate = extractLocalIsoDateStr(expense.spentDate || expense.date || expense.createdAt);
+  const existingExpDate = existingExp ? extractLocalIsoDateStr(existingExp.spentDate || existingExp.date || existingExp.createdAt) : '';
+  if (!existingExp || (expIsoDate && expIsoDate !== existingExpDate)) {
+    const periodBlock = checkDateAgainstLockedAuditPeriod(expense.campaignId, expense.spentDate || expense.date);
+    if (periodBlock.isBlocked && !expense.unlock_expires_at) {
+      console.warn(`[Audit Period Lock] Blocked updating expense ${expense.id} into audited period: ${periodBlock.reason}`);
       return;
     }
   }
@@ -7066,7 +7259,7 @@ export const lockCampaignAuditPeriod = (
   auditor: string | { name: string; phone?: string },
   periodLabel: string,
   notes?: string,
-  options?: { isDualAuditMode?: boolean; totalActiveAuditors?: number; forceFinalLock?: boolean }
+  options?: { isDualAuditMode?: boolean; totalActiveAuditors?: number; forceFinalLock?: boolean; fromDate?: string; toDate?: string }
 ): {
   lockedCount: number;
   lockedTransactionsCount: number;
@@ -7086,6 +7279,16 @@ export const lockCampaignAuditPeriod = (
 
   const camps = getStoredCampaigns();
   const targetCamp = camps.find(c => String(c.id).toLowerCase().trim() === cleanCampId);
+  const effFromDate = extractLocalIsoDateStr(options?.fromDate || (targetCamp as any)?.metadata?.appointedAuditFromDate || '');
+  const effToDate = extractLocalIsoDateStr(options?.toDate || (targetCamp as any)?.metadata?.appointedAuditToDate || '');
+  const isDateWithinAuditScope = (rawD: any): boolean => {
+    const dIso = extractLocalIsoDateStr(rawD);
+    if (!effFromDate && !effToDate) return true;
+    if (!dIso) return false;
+    if (effFromDate && dIso < effFromDate) return false;
+    if (effToDate && dIso > effToDate) return false;
+    return true;
+  };
 
   // Determine active appointed auditors for this campaign
   const allGrants = getStoredAuditorGrants().filter(
@@ -7191,12 +7394,12 @@ export const lockCampaignAuditPeriod = (
   const lockedTxsToSync: Transaction[] = [];
   const lockedExpsToSync: KumtluangExpense[] = [];
 
-  // 1. Lock matching transactions
+  // 1. Lock matching transactions within the audited period
   try {
     const txs = getStoredTransactions();
     let txChanged = false;
     const updatedTxs = txs.map(t => {
-      if (String(t.campaignId).toLowerCase().trim() === cleanCampId) {
+      if (String(t.campaignId).toLowerCase().trim() === cleanCampId && isDateWithinAuditScope(t.timestamp || t.date || t.createdAt)) {
         if (!t.is_locked) txCount++;
         txChanged = true;
         const existingMap: Record<string, any> = {
@@ -7251,12 +7454,12 @@ export const lockCampaignAuditPeriod = (
     console.error('Failed to lock transactions for audit:', e);
   }
 
-  // 2. Lock matching expenses
+  // 2. Lock matching expenses within the audited period
   try {
     const exps = getStoredExpenses();
     let expChanged = false;
     const updatedExps = exps.map(e => {
-      if (String(e.campaignId).toLowerCase().trim() === cleanCampId) {
+      if (String(e.campaignId).toLowerCase().trim() === cleanCampId && isDateWithinAuditScope(e.spentDate || e.date || e.createdAt)) {
         if (!e.is_locked) expCount++;
         expChanged = true;
         const existingMap: Record<string, any> = {
@@ -7310,7 +7513,7 @@ export const lockCampaignAuditPeriod = (
     console.error('Failed to lock expenses for audit:', e);
   }
 
-  // 3. Update campaign metadata with audit timestamp, sign-offs, finalized coAuditAlert, and auditor info
+  // 3. Update campaign metadata with audit timestamp, sign-offs, finalized coAuditAlert, lockedAuditPeriods, and auditor info
   try {
     if (targetCamp) {
       const finalizedAlert = isDualMode
@@ -7327,10 +7530,31 @@ export const lockCampaignAuditPeriod = (
             summaryMessage: `✅ Auditor pahnih (${finalLockedByLabel}) audit a inmil thlap a, Joint Audit Certificate Final & Lock fel a ni e!`
           }
         : null;
+      const existingLockedPeriods: LockedAuditPeriod[] = Array.isArray(targetCamp.lockedAuditPeriods)
+        ? [...targetCamp.lockedAuditPeriods]
+        : (Array.isArray((targetCamp as any).metadata?.lockedAuditPeriods) ? [...(targetCamp as any).metadata.lockedAuditPeriods] : []);
+      const newLockedPeriod: LockedAuditPeriod = {
+        id: `AUDP_${Date.now()}`,
+        periodLabel,
+        fromDate: effFromDate || undefined,
+        toDate: effToDate || nowIso.slice(0, 10),
+        lockedAt: nowIso,
+        lockedBy: finalLockedByLabel,
+        lockedByPhone: auditorPhone || undefined,
+        txCount: lockedTxsToSync.length,
+        expCount: lockedExpsToSync.length
+      };
+      const periodKey = `${newLockedPeriod.fromDate || ''}|${newLockedPeriod.toDate || ''}|${newLockedPeriod.periodLabel}`;
+      const mergedLockedPeriods = [
+        ...existingLockedPeriods.filter(p => `${p.fromDate || ''}|${p.toDate || ''}|${p.periodLabel}` !== periodKey),
+        newLockedPeriod
+      ];
+
       const updatedCamp: Campaign = {
         ...targetCamp,
         auditSignOffs: finalMergedSignOffs,
         coAuditAlert: finalizedAlert,
+        lockedAuditPeriods: mergedLockedPeriods,
         lastAuditedAt: nowIso,
         lastAuditedBy: finalLockedByLabel,
         lastAuditPeriod: periodLabel,
@@ -7340,6 +7564,7 @@ export const lockCampaignAuditPeriod = (
           ...(targetCamp.metadata || {}),
           auditSignOffs: finalMergedSignOffs,
           coAuditAlert: finalizedAlert,
+          lockedAuditPeriods: mergedLockedPeriods,
           lastAuditedAt: nowIso,
           lastAuditedBy: finalLockedByLabel,
           lastAuditPeriod: periodLabel,

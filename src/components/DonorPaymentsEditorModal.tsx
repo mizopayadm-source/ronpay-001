@@ -15,12 +15,13 @@ import {
   AlertCircle,
   Clock,
   Layers,
-  ChevronDown
+  ChevronDown,
+  Lock
 } from 'lucide-react';
 import { Transaction, Campaign, MemberRecord, BawmCategory } from '../types';
 import { ALL_MONTH_NAMES_FULL, ALL_MONTH_NAMES_SHORT, getTransactionMonthInfo, getMonthIndex } from '../utils/monthHelper';
 import { formatDateDDMMYYYY } from '../utils/date';
-import { getMembers, saveMembers, addOrUpdateMember } from '../utils/storage';
+import { getMembers, saveMembers, addOrUpdateMember, isRecordAuditLockedForWrite, checkDateAgainstLockedAuditPeriod } from '../utils/storage';
 
 interface EditablePaymentEntry {
   tempId: string;
@@ -40,6 +41,8 @@ interface EditablePaymentEntry {
   campaignId: string;
   campaignTitle: string;
   createdAt?: string;
+  isLocked?: boolean;
+  lockedBy?: string;
 }
 
 interface DonorPaymentsEditorModalProps {
@@ -172,11 +175,13 @@ export const DonorPaymentsEditorModal: React.FC<DonorPaymentsEditorModalProps> =
         subCategory: t.subCategory,
         donorType: t.donorType,
         createdAt: t.createdAt || t.timestamp,
+        isLocked: isRecordAuditLockedForWrite(t),
+        lockedBy: t.locked_by || 'Auditor',
       };
 
       if (isMonthly && mInfo.fullMonth && ALL_MONTH_NAMES_FULL.includes(mInfo.fullMonth as any)) {
-        if (monthMap.has(monthKey)) {
-          // Merge duplicates for same month/year to prevent double entry
+        if (monthMap.has(monthKey) && !entryObj.isLocked && !monthMap.get(monthKey)!.isLocked) {
+          // Merge unlocked duplicates for same month/year to prevent double entry
           const existing = monthMap.get(monthKey)!;
           existing.amount += Number(t.amount) || 0;
           if (t.id) {
@@ -232,6 +237,10 @@ export const DonorPaymentsEditorModal: React.FC<DonorPaymentsEditorModalProps> =
     const existing = monthEntryMap.get(monthFullName);
 
     if (existing) {
+      if (existing.isLocked) {
+        setStatusMessage(`🔒 ${monthFullName} ${activeYear} payment hi Audit & Lock tawh (${existing.lockedBy || 'Auditor'}) a ni a, thlak danglam phal a ni lo.`);
+        return;
+      }
       if (numAmt <= 0) {
         // If 0, delete this entry
         handleDeleteEntry(existing.tempId);
@@ -257,14 +266,21 @@ export const DonorPaymentsEditorModal: React.FC<DonorPaymentsEditorModalProps> =
         }));
       }
     } else if (numAmt > 0) {
-      // Create new entry for this month
+      // Create new entry for this month — block if date falls inside a locked audit period
       const monthIdx = ALL_MONTH_NAMES_FULL.indexOf(monthFullName as any);
       const mTwoDigit = String(monthIdx + 1).padStart(2, '0');
+      const targetDateStr = `${activeYear}-${mTwoDigit}-15`;
+      const targetCampId = currentCampaign?.id || activeCampaignId || transactions[0]?.campaignId;
+      const periodBlock = checkDateAgainstLockedAuditPeriod(targetCampId, targetDateStr);
+      if (periodBlock.isBlocked) {
+        setStatusMessage(periodBlock.reason);
+        return;
+      }
       const primaryCat = currentMemberId ? (subCategoriesList[0] || 'BMP Fund') : 'General';
       const newEntry: EditablePaymentEntry = {
         tempId: `new-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`,
         amount: numAmt,
-        dateStr: `${activeYear}-${mTwoDigit}-15`,
+        dateStr: targetDateStr,
         periodMonth: monthFullName,
         periodYear: activeYear,
         periodType: 'monthly',
@@ -318,6 +334,10 @@ export const DonorPaymentsEditorModal: React.FC<DonorPaymentsEditorModalProps> =
   // Delete a single transaction entry
   const handleDeleteEntry = (tempId: string) => {
     const target = entries.find(e => e.tempId === tempId);
+    if (target?.isLocked) {
+      setStatusMessage(`🔒 Payment #${target.periodLabel || 'record'} hi Audit & Lock tawh (${target.lockedBy || 'Auditor'}) a ni a, paih phal a ni lo.`);
+      return;
+    }
     const targetId = target?.originalId || (!tempId.startsWith('new-') ? tempId : undefined);
     if (targetId) {
       setDeletedIds(prev => Array.from(new Set([...prev, targetId])));
@@ -330,6 +350,10 @@ export const DonorPaymentsEditorModal: React.FC<DonorPaymentsEditorModalProps> =
   const handleUpdateEntryField = (tempId: string, field: keyof EditablePaymentEntry, val: any) => {
     setEntries(prev => prev.map(e => {
       if (e.tempId !== tempId) return e;
+      if (e.isLocked) {
+        setStatusMessage(`🔒 Payment #${e.periodLabel || 'record'} hi Audit & Lock tawh a ni a, thlak danglam phal a ni lo.`);
+        return e;
+      }
       const updated = { ...e, [field]: val };
       if (field === 'amount') {
         const numAmt = parseFloat(val) || 0;
@@ -351,6 +375,10 @@ export const DonorPaymentsEditorModal: React.FC<DonorPaymentsEditorModalProps> =
     const num = parseFloat(amtStr) || 0;
     setEntries(prev => prev.map(e => {
       if (e.tempId !== tempId) return e;
+      if (e.isLocked) {
+        setStatusMessage(`🔒 Payment #${e.periodLabel || 'record'} hi Audit & Lock tawh a ni a, thlak danglam phal a ni lo.`);
+        return e;
+      }
       const newBreakdown = { ...e.subCategoryBreakdown, [catName]: num };
       // Auto compute total if multiple subcategories
       const subTotal = Object.values(newBreakdown).reduce((s, v) => s + (Number(v) || 0), 0);
@@ -421,7 +449,26 @@ export const DonorPaymentsEditorModal: React.FC<DonorPaymentsEditorModalProps> =
     const cleanEntries: EditablePaymentEntry[] = [];
     const allDeletedIds = new Set(deletedIds);
 
+    // Block saving any NEW or unlocked-date-moved entries whose date falls inside a sealed Audit Period
+    for (const e of entries) {
+      if (e.isLocked) continue;
+      const origTx = e.originalId ? transactions.find(t => t.id === e.originalId) : undefined;
+      const origDate = origTx ? String(origTx.date || origTx.timestamp || '').slice(0, 10) : '';
+      if (!origTx || (e.dateStr && e.dateStr !== origDate)) {
+        const campIdForEntry = e.campaignId || activeCampaignId || transactions[0]?.campaignId;
+        const pBlock = checkDateAgainstLockedAuditPeriod(campIdForEntry, e.dateStr);
+        if (pBlock.isBlocked) {
+          setStatusMessage(`${pBlock.reason} (${e.periodLabel || e.dateStr})`);
+          return;
+        }
+      }
+    }
+
     entries.forEach(e => {
+      if (e.isLocked) {
+        // Never merge or alter Audit-locked entries
+        return;
+      }
       const isMonthly = e.periodType === 'monthly' && ALL_MONTH_NAMES_FULL.includes(e.periodMonth as any);
       if (isMonthly) {
         const mKey = `${e.periodMonth.trim().toLowerCase()}_${e.periodYear}`;
@@ -443,7 +490,14 @@ export const DonorPaymentsEditorModal: React.FC<DonorPaymentsEditorModalProps> =
       }
     });
 
-    // Convert entries to real Transaction objects
+    // Ensure no locked transaction ID is ever included in allDeletedIds
+    transactions.forEach(t => {
+      if (isRecordAuditLockedForWrite(t) && t.id) {
+        allDeletedIds.delete(t.id);
+      }
+    });
+
+    // Convert unlocked entries to real Transaction objects
     const finalTransactions: Transaction[] = cleanEntries.map(e => {
       let isoTimestamp = nowIso;
       if (e.dateStr) {
@@ -705,11 +759,15 @@ export const DonorPaymentsEditorModal: React.FC<DonorPaymentsEditorModalProps> =
                         type="number"
                         min="0"
                         step="50"
+                        disabled={Boolean(existingEntry?.isLocked)}
                         value={existingEntry ? existingEntry.amount : ''}
                         placeholder="0"
                         onChange={(e) => handleQuickMonthAmountChange(monthName, e.target.value)}
+                        title={existingEntry?.isLocked ? 'Audit & Lock tawh a ni' : undefined}
                         className={`w-full pl-5 pr-1 py-1 text-xs font-black rounded-lg border outline-none text-right transition-all ${
-                          isPaid 
+                          existingEntry?.isLocked
+                            ? 'bg-emerald-50 border-emerald-300 text-emerald-900 cursor-not-allowed opacity-85'
+                            : isPaid 
                             ? 'bg-white dark:bg-slate-900 border-indigo-300 dark:border-indigo-700 text-indigo-950 dark:text-indigo-200 focus:ring-2 focus:ring-indigo-500' 
                             : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 focus:border-indigo-400'
                         }`}
@@ -779,17 +837,28 @@ export const DonorPaymentsEditorModal: React.FC<DonorPaymentsEditorModalProps> =
                         }`}>
                           {entry.paymentMethod === 'cash' ? '💵 CASH' : '⚡ ONLINE'}
                         </span>
+                        {entry.isLocked && (
+                          <span className="text-[10px] font-black px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-900 border border-emerald-300 inline-flex items-center gap-1">
+                            <Lock className="w-3 h-3" /> Audited &amp; Locked
+                          </span>
+                        )}
                       </div>
 
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteEntry(entry.tempId)}
-                        className="text-rose-500 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 px-2 py-1 rounded-lg transition-colors cursor-pointer flex items-center gap-1 border border-rose-200 dark:border-rose-900/60"
-                        title="Paih (Delete this payment)"
-                      >
-                        <Trash2 className="w-3.5 h-3.5 text-rose-500" />
-                        <span className="text-[11px] font-bold text-rose-600 dark:text-rose-400">Paih</span>
-                      </button>
+                      {entry.isLocked ? (
+                        <span className="text-[10.5px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-lg inline-flex items-center gap-1">
+                          <Lock className="w-3 h-3" /> Lock Awm Mek
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteEntry(entry.tempId)}
+                          className="text-rose-500 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 px-2 py-1 rounded-lg transition-colors cursor-pointer flex items-center gap-1 border border-rose-200 dark:border-rose-900/60"
+                          title="Paih (Delete this payment)"
+                        >
+                          <Trash2 className="w-3.5 h-3.5 text-rose-500" />
+                          <span className="text-[11px] font-bold text-rose-600 dark:text-rose-400">Paih</span>
+                        </button>
+                      )}
                     </div>
 
                     {/* Main Row Inputs */}
@@ -805,9 +874,14 @@ export const DonorPaymentsEditorModal: React.FC<DonorPaymentsEditorModalProps> =
                             type="number"
                             min="0"
                             step="10"
+                            disabled={Boolean(entry.isLocked)}
                             value={entry.amount || ''}
                             onChange={(e) => handleUpdateEntryField(entry.tempId, 'amount', parseFloat(e.target.value) || 0)}
-                            className="w-full pl-7 pr-3 py-2 text-sm font-black bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-indigo-950 dark:text-indigo-200 focus:ring-2 focus:ring-indigo-500 outline-none"
+                            className={`w-full pl-7 pr-3 py-2 text-sm font-black border rounded-lg outline-none ${
+                              entry.isLocked
+                                ? 'bg-slate-100 border-slate-200 text-slate-600 cursor-not-allowed'
+                                : 'bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-700 text-indigo-950 dark:text-indigo-200 focus:ring-2 focus:ring-indigo-500'
+                            }`}
                             placeholder="0"
                           />
                         </div>
@@ -821,9 +895,14 @@ export const DonorPaymentsEditorModal: React.FC<DonorPaymentsEditorModalProps> =
                         </label>
                         <input 
                           type="date"
+                          disabled={Boolean(entry.isLocked)}
                           value={entry.dateStr}
                           onChange={(e) => handleUpdateEntryField(entry.tempId, 'dateStr', e.target.value)}
-                          className="w-full px-3 py-2 text-xs font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-800 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                          className={`w-full px-3 py-2 text-xs font-bold border rounded-lg outline-none ${
+                            entry.isLocked
+                              ? 'bg-slate-100 border-slate-200 text-slate-600 cursor-not-allowed'
+                              : 'bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-700 text-slate-800 dark:text-white focus:ring-2 focus:ring-indigo-500'
+                          }`}
                         />
                       </div>
 
@@ -833,9 +912,14 @@ export const DonorPaymentsEditorModal: React.FC<DonorPaymentsEditorModalProps> =
                           Pek Thla (Month)
                         </label>
                         <select
+                          disabled={Boolean(entry.isLocked)}
                           value={entry.periodMonth}
                           onChange={(e) => handleUpdateEntryField(entry.tempId, 'periodMonth', e.target.value)}
-                          className="w-full px-2.5 py-2 text-xs font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-800 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                          className={`w-full px-2.5 py-2 text-xs font-bold border rounded-lg outline-none ${
+                            entry.isLocked
+                              ? 'bg-slate-100 border-slate-200 text-slate-500 cursor-not-allowed'
+                              : 'bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-700 text-slate-800 dark:text-white focus:ring-2 focus:ring-indigo-500'
+                          }`}
                         >
                           {ALL_MONTH_NAMES_FULL.map(m => (
                             <option key={m} value={m}>{m}</option>
@@ -855,9 +939,14 @@ export const DonorPaymentsEditorModal: React.FC<DonorPaymentsEditorModalProps> =
                           Payment Mode
                         </label>
                         <select
+                          disabled={Boolean(entry.isLocked)}
                           value={entry.paymentMethod}
                           onChange={(e) => handleUpdateEntryField(entry.tempId, 'paymentMethod', e.target.value as 'online' | 'cash')}
-                          className="w-full px-2.5 py-2 text-xs font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-800 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                          className={`w-full px-2.5 py-2 text-xs font-bold border rounded-lg outline-none ${
+                            entry.isLocked
+                              ? 'bg-slate-100 border-slate-200 text-slate-500 cursor-not-allowed'
+                              : 'bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-700 text-slate-800 dark:text-white focus:ring-2 focus:ring-indigo-500'
+                          }`}
                         >
                           <option value="online">⚡ Online (UPI / NetBanking)</option>
                           <option value="cash">💵 Cash Counter</option>
@@ -887,10 +976,15 @@ export const DonorPaymentsEditorModal: React.FC<DonorPaymentsEditorModalProps> =
                                 <input 
                                   type="number"
                                   min="0"
+                                  disabled={Boolean(entry.isLocked)}
                                   value={entry.subCategoryBreakdown[cat] || ''}
                                   placeholder="0"
                                   onChange={(e) => handleSubCategoryChange(entry.tempId, cat, e.target.value)}
-                                  className="w-full pl-5 pr-1 py-1 text-xs font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-md text-slate-800 dark:text-white outline-none focus:ring-1 focus:ring-indigo-500"
+                                  className={`w-full pl-5 pr-1 py-1 text-xs font-bold border rounded-md outline-none ${
+                                    entry.isLocked
+                                      ? 'bg-slate-100 border-slate-200 text-slate-500 cursor-not-allowed'
+                                      : 'bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-700 text-slate-800 dark:text-white focus:ring-1 focus:ring-indigo-500'
+                                  }`}
                                 />
                               </div>
                             </div>
@@ -903,10 +997,15 @@ export const DonorPaymentsEditorModal: React.FC<DonorPaymentsEditorModalProps> =
                     <div>
                       <input 
                         type="text"
+                        disabled={Boolean(entry.isLocked)}
                         value={entry.remark}
                         onChange={(e) => handleUpdateEntryField(entry.tempId, 'remark', e.target.value)}
                         placeholder="Remark / Note (Optional - e.g. Pu Kunga pekchhawng, etc.)"
-                        className="w-full px-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-700 dark:text-slate-300 outline-none focus:ring-1 focus:ring-indigo-500"
+                        className={`w-full px-3 py-1.5 text-xs border rounded-lg outline-none ${
+                          entry.isLocked
+                            ? 'bg-slate-100 border-slate-200 text-slate-500 cursor-not-allowed'
+                            : 'bg-slate-50 dark:bg-slate-900/60 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 focus:ring-1 focus:ring-indigo-500'
+                        }`}
                       />
                     </div>
                   </div>
@@ -931,7 +1030,7 @@ export const DonorPaymentsEditorModal: React.FC<DonorPaymentsEditorModalProps> =
               </span>
             </div>
 
-            {onDeleteAll && transactions.length > 0 && (
+            {onDeleteAll && entries.some(e => !e.isLocked) && (
               !isConfirmingDeleteAll ? (
                 <button
                   type="button"
@@ -940,7 +1039,7 @@ export const DonorPaymentsEditorModal: React.FC<DonorPaymentsEditorModalProps> =
                   className="px-3 py-2 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-xl text-xs font-bold border border-rose-200 dark:border-rose-900 transition-colors ml-2 cursor-pointer"
                 >
                   <Trash2 className="w-3.5 h-3.5 inline mr-1" />
-                  Paih Vek (Delete All)
+                  {entries.some(e => e.isLocked) ? 'Lock Lo Chin Paih' : 'Paih Vek (Delete All)'}
                 </button>
               ) : (
                 <div className="flex items-center gap-1.5 ml-2 bg-rose-50 dark:bg-rose-950/50 p-1 rounded-xl border border-rose-300 dark:border-rose-800">

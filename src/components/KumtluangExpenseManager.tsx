@@ -62,7 +62,9 @@ import {
   saveCampaign,
   safeApiFetch,
   markRecordAuditVerification,
-  checkAuditorAccessForCampaign
+  checkAuditorAccessForCampaign,
+  checkDateAgainstLockedAuditPeriod,
+  isRecordAuditLockedForWrite
 } from '../utils/storage';
 import { supabase } from '../lib/supabase';
 import { syncAllLocalExpensesToFirestore, fetchExpensesFromFirestore } from '../services/firestoreSync';
@@ -1247,6 +1249,14 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
       return;
     }
 
+    const effectiveSpentDate = spentDateInput || new Date().toISOString().split('T')[0];
+    const periodBlock = checkDateAgainstLockedAuditPeriod(campaign.id, effectiveSpentDate);
+    if (periodBlock.isBlocked) {
+      setFormError(periodBlock.reason);
+      showToast(periodBlock.reason, 'error');
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
@@ -1353,6 +1363,18 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
       return;
     }
 
+    if (isRecordAuditLockedForWrite(editingExpense)) {
+      setEditFormError('🔒 He voucher hi Audit & Lock tawh a ni a, thlak danglam phal a ni lo.');
+      return;
+    }
+
+    const targetEditDate = editSpentDateInput || editingExpense.spentDate;
+    const editPeriodBlock = checkDateAgainstLockedAuditPeriod(campaign.id, targetEditDate);
+    if (editPeriodBlock.isBlocked && !editingExpense.unlock_expires_at) {
+      setEditFormError(editPeriodBlock.reason);
+      return;
+    }
+
     const updated: KumtluangExpense = {
       ...editingExpense,
       amount: amt,
@@ -1415,10 +1437,15 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
   };
 
   const confirmClearAllVouchers = () => {
+    const lockedRemaining = expenseList.filter(e => isRecordAuditLockedForWrite(e));
     deleteAllCampaignExpenses(campaign.id);
-    setExpenseList([]);
+    setExpenseList(lockedRemaining);
     setShowClearAllVouchersConfirm(false);
-    showToast('Bawm expenditure zawng zawng paih fai a ni ta e.', 'info');
+    if (lockedRemaining.length > 0) {
+      showToast(`Audit Lock tawh voucher ${lockedRemaining.length} him taka venhim a ni a, lock loh zawng paih fai a ni e.`, 'info');
+    } else {
+      showToast('Bawm expenditure zawng zawng paih fai a ni ta e.', 'info');
+    }
   };
 
   // Add Custom Expense Head

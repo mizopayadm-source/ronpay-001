@@ -83,7 +83,9 @@ import {
   PERMANENTLY_PURGED_TX_IDS,
   getStoredTransactions,
   saveStoredTransactions,
-  reconcileWithAuthoritativeTransactions
+  reconcileWithAuthoritativeTransactions,
+  isRecordAuditLockedForWrite,
+  checkDateAgainstLockedAuditPeriod
 } from '../utils/storage';
 import { getUserRole } from '../utils/rbac';
 import { INITIAL_TRANSACTIONS } from '../data/initialData';
@@ -1190,10 +1192,19 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
       return;
     }
 
-    const confirmMsg = `${cleanTarget}${totalAmount ? ` (₹${totalAmount.toLocaleString('en-IN')})` : ''} pekna zawng zawng (${donorTxs.length} entries) hi paih hlen i chiang em?\n\n(Hriattirna: Entry thenkhat/pakhat chauh siamtha emaw paih duh chuan 'Ennawn / Edit' hmang rawh le)`;
+    const unlockedDonorTxs = donorTxs.filter(t => !isRecordAuditLockedForWrite(t));
+    if (unlockedDonorTxs.length === 0) {
+      showExportSuccessToast(`🔒 He donor records (${donorTxs.length}) hi Audit & Lock vek a ni a, paih phal a ni lo.`, 0);
+      return;
+    }
+
+    const lockNotice = unlockedDonorTxs.length < donorTxs.length
+      ? `\n\n(Hriattirna: Audit Lock tawh records ${donorTxs.length - unlockedDonorTxs.length} him taka venhim a ni ang)`
+      : '';
+    const confirmMsg = `${cleanTarget}${totalAmount ? ` (₹${totalAmount.toLocaleString('en-IN')})` : ''} pekna lock loh records (${unlockedDonorTxs.length} entries) hi paih i chiang em?${lockNotice}\n\n(Entry thenkhat/pakhat chauh siamtha emaw paih duh chuan 'Ennawn / Edit' hmang rawh le)`;
     if (!window.confirm(confirmMsg)) return;
 
-    const idsToDelete = donorTxs.map(t => t.id).filter(Boolean);
+    const idsToDelete = unlockedDonorTxs.map(t => t.id).filter(Boolean);
     const delSet = new Set(idsToDelete.map(id => String(id).toLowerCase().trim()));
     setServerTransactions(prev => prev ? prev.filter(t => !delSet.has(String(t.id).toLowerCase().trim())) : null);
 
@@ -1208,31 +1219,40 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
   };
 
   const handleSaveDonorGroup = (updatedTxs: Transaction[], deletedIds: string[]) => {
-    const delSet = new Set((deletedIds || []).map(id => String(id).toLowerCase().trim()));
+    const storedMap = new Map(getStoredTransactions().map(t => [String(t.id).toLowerCase().trim(), t]));
+    const safeDeletedIds = (deletedIds || []).filter(id => {
+      const existing = storedMap.get(String(id).toLowerCase().trim());
+      return !(existing && isRecordAuditLockedForWrite(existing));
+    });
+    const safeUpdatedTxs = (updatedTxs || []).filter(u => {
+      const existing = storedMap.get(String(u.id).toLowerCase().trim());
+      return !(existing && isRecordAuditLockedForWrite(existing));
+    });
+    const delSet = new Set(safeDeletedIds.map(id => String(id).toLowerCase().trim()));
     setServerTransactions(prev => {
       if (!prev) return null;
       let next = prev.filter(t => !delSet.has(String(t.id).toLowerCase().trim()));
-      if (updatedTxs && updatedTxs.length > 0) {
-        const updateMap = new Map(updatedTxs.map(u => [String(u.id).toLowerCase().trim(), u]));
+      if (safeUpdatedTxs.length > 0) {
+        const updateMap = new Map(safeUpdatedTxs.map(u => [String(u.id).toLowerCase().trim(), u]));
         next = next.map(t => updateMap.get(String(t.id).toLowerCase().trim()) || t);
       }
       return next;
     });
 
-    if (deletedIds && deletedIds.length > 0) {
-      deleteMultipleTransactions(deletedIds);
+    if (safeDeletedIds.length > 0) {
+      deleteMultipleTransactions(safeDeletedIds);
       if (onDeleteTransaction) {
-        deletedIds.forEach(id => onDeleteTransaction(id));
+        safeDeletedIds.forEach(id => onDeleteTransaction(id));
       }
     }
-    if (updatedTxs && updatedTxs.length > 0) {
-      saveMultipleTransactions(updatedTxs);
+    if (safeUpdatedTxs.length > 0) {
+      saveMultipleTransactions(safeUpdatedTxs);
       if (onUpdateTransaction) {
-        updatedTxs.forEach(tx => onUpdateTransaction(tx));
+        safeUpdatedTxs.forEach(tx => onUpdateTransaction(tx));
       }
     }
     if (onBatchUpdateTransactions) {
-      onBatchUpdateTransactions(updatedTxs, deletedIds);
+      onBatchUpdateTransactions(safeUpdatedTxs, safeDeletedIds);
     }
     setEditingDonorGroup(null);
     showExportSuccessToast(
@@ -2962,7 +2982,8 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
           onClose={() => setEditingDonorGroup(null)}
           onSaveAll={handleSaveDonorGroup}
           onDeleteAll={() => {
-            const allIds = editingDonorGroup.donorTransactions.map(t => t.id).filter(Boolean);
+            const unlockedTxs = editingDonorGroup.donorTransactions.filter(t => !isRecordAuditLockedForWrite(t));
+            const allIds = unlockedTxs.map(t => t.id).filter(Boolean);
             const delSet = new Set(allIds.map(id => String(id).toLowerCase().trim()));
             if (allIds.length > 0) {
               setServerTransactions(prev => prev ? prev.filter(t => !delSet.has(String(t.id).toLowerCase().trim())) : null);
@@ -2973,7 +2994,14 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
               if (onDeleteTransaction) {
                 allIds.forEach(id => onDeleteTransaction(id));
               }
-              showExportSuccessToast(`He donor records ${allIds.length} zawng zawng paih fai a ni ta.`, allIds.length);
+              showExportSuccessToast(
+                unlockedTxs.length < editingDonorGroup.donorTransactions.length
+                  ? `Lock loh records ${allIds.length} paih a ni (Audit Lock ${editingDonorGroup.donorTransactions.length - unlockedTxs.length} venhim a ni).`
+                  : `He donor records ${allIds.length} zawng zawng paih fai a ni ta.`,
+                allIds.length
+              );
+            } else {
+              showExportSuccessToast(`🔒 Audit & Lock tawh records a nih avangin paih phal a ni lo.`, 0);
             }
             setEditingDonorGroup(null);
           }}
@@ -3112,11 +3140,29 @@ const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
   const platformFee: number = Math.round(currentSubtotal * 0.01);
   const totalAmount: number = currentSubtotal + platformFee;
 
+  const isAuditLocked = isRecordAuditLockedForWrite(transaction);
+  const [editLockError, setEditLockError] = useState<string | null>(null);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setEditLockError(null);
+
+    if (isAuditLocked) {
+      setEditLockError(`🔒 He transaction hi ${transaction.locked_by || 'Auditor'}-in a Audit & Lock tawh a ni a, thlak danglam phal a ni lo.`);
+      return;
+    }
+
+    const origDate = String(transaction.date || transaction.timestamp || '').slice(0, 10);
+    if (paymentDate && paymentDate !== origDate) {
+      const pBlock = checkDateAgainstLockedAuditPeriod(transaction.campaignId, paymentDate);
+      if (pBlock.isBlocked) {
+        setEditLockError(pBlock.reason);
+        return;
+      }
+    }
 
     if (currentSubtotal <= 0) {
-      alert('Pek zat (Amount) hi ₹0 aia tam a ni tur a ni.');
+      setEditLockError('Pek zat (Amount) hi ₹0 aia tam a ni tur a ni.');
       return;
     }
 
@@ -3153,6 +3199,10 @@ const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
   };
 
   const handleDeleteClick = () => {
+    if (isAuditLocked) {
+      setEditLockError(`🔒 He transaction hi Audit & Lock tawh a ni a, paih phal a ni lo.`);
+      return;
+    }
     if (window.confirm(`I chiang maw? He transaction (Donor: ${transaction.donorName}, Amount: ₹${transaction.amount}) hi paih hlen a ni dawn e.`)) {
       onDelete(transaction.id);
     }
@@ -3163,8 +3213,8 @@ const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
       <div className="bg-white rounded-3xl max-w-md w-full p-5 border border-slate-200 shadow-2xl space-y-4 my-auto">
         <div className="flex justify-between items-center border-b border-slate-100 pb-3">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center">
-              <Edit3 className="w-4 h-4" />
+            <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${isAuditLocked ? 'bg-emerald-100 text-emerald-700' : 'bg-indigo-100 text-indigo-700'}`}>
+              {isAuditLocked ? <Lock className="w-4 h-4" /> : <Edit3 className="w-4 h-4" />}
             </div>
             <div>
               <h3 className="font-black text-slate-900 text-sm">Mimal Donation Siamthatna</h3>
@@ -3178,6 +3228,24 @@ const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
             <X className="w-4 h-4" />
           </button>
         </div>
+
+        {isAuditLocked && (
+          <div className="p-3 rounded-2xl bg-emerald-50 border border-emerald-300 text-emerald-950 text-xs font-bold flex items-start gap-2">
+            <Lock className="w-4 h-4 text-emerald-700 shrink-0 mt-0.5" />
+            <div>
+              <div>🔒 Audit &amp; Lock Awm Mek ({transaction.locked_by || 'Auditor'})</div>
+              <div className="text-[11px] font-medium text-emerald-800 mt-0.5">
+                He receipt hi audit zawh leh lock fel tawh a ni. Pawisa zat, date, leh record tihdanglam emaw paih emaw phal a ni lo.
+              </div>
+            </div>
+          </div>
+        )}
+
+        {editLockError && (
+          <div className="p-3 rounded-2xl bg-rose-50 border border-rose-300 text-rose-800 text-xs font-bold">
+            {editLockError}
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-3.5 text-xs max-h-[70vh] overflow-y-auto pr-1">
           {/* Donor Name */}
@@ -3411,23 +3479,27 @@ const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
                 onClick={onClose}
                 className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 rounded-xl transition cursor-pointer text-xs"
               >
-                Cancel
+                {isAuditLocked ? 'Khar Rawh (Close)' : 'Cancel'}
               </button>
-              <button
-                type="submit"
-                className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-black py-2.5 rounded-xl transition cursor-pointer text-xs shadow-md flex items-center justify-center gap-1.5"
-              >
-                <Check className="w-4 h-4" /> Save Siamthatna
-              </button>
+              {!isAuditLocked && (
+                <button
+                  type="submit"
+                  className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-black py-2.5 rounded-xl transition cursor-pointer text-xs shadow-md flex items-center justify-center gap-1.5"
+                >
+                  <Check className="w-4 h-4" /> Save Siamthatna
+                </button>
+              )}
             </div>
 
-            <button
-              type="button"
-              onClick={handleDeleteClick}
-              className="w-full bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold py-2 rounded-xl transition cursor-pointer text-xs flex items-center justify-center gap-1 border border-rose-200"
-            >
-              <Trash2 className="w-3.5 h-3.5" /> He Transaction Record hi paih rawh (Delete)
-            </button>
+            {!isAuditLocked && (
+              <button
+                type="button"
+                onClick={handleDeleteClick}
+                className="w-full bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold py-2 rounded-xl transition cursor-pointer text-xs flex items-center justify-center gap-1 border border-rose-200"
+              >
+                <Trash2 className="w-3.5 h-3.5" /> He Transaction Record hi paih rawh (Delete)
+              </button>
+            )}
           </div>
         </form>
       </div>

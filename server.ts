@@ -5667,6 +5667,7 @@ async function syncFromSupabase(db: DatabaseSchema, force: boolean = false): Pro
               requireDualAuditorConsensus: meta.requireDualAuditorConsensus ?? r.requireDualAuditorConsensus,
               auditScope: meta.auditScope ?? r.auditScope,
               coAuditAlert: meta.coAuditAlert ?? r.coAuditAlert ?? undefined,
+              lockedAuditPeriods: Array.isArray(meta.lockedAuditPeriods) ? meta.lockedAuditPeriods : (Array.isArray(r.lockedAuditPeriods) ? r.lockedAuditPeriods : undefined),
               lastAuditedAt: meta.lastAuditedAt || r.lastAuditedAt || undefined,
               lastAuditedBy: meta.lastAuditedBy || r.lastAuditedBy || undefined,
               lastAuditPeriod: meta.lastAuditPeriod || r.lastAuditPeriod || undefined,
@@ -5903,30 +5904,96 @@ app.post('/api/data/sync', async (req: Request, res: Response) => {
     }
     if (Array.isArray(body.transactions) && body.transactions.length > 0) {
       const delTxSet = new Set<string>((db.deletedTransactionIds || []).map((id: string) => String(id).toLowerCase().trim()));
-      db.transactions = mergeCollections(db.transactions, body.transactions, 'id', delTxSet);
-      db.transactions = reconcileAndDeduplicateTransactions(db.transactions, delTxSet);
+      const existingTxMap = new Map<string, any>();
+      (db.transactions || []).forEach((t: any) => {
+        if (t && t.id) existingTxMap.set(String(t.id).toLowerCase().trim(), t);
+      });
+      const allowedIncomingTxs = body.transactions.filter((t: any) => {
+        if (!t || !t.id) return false;
+        const cleanKey = String(t.id).toLowerCase().trim();
+        const existingRec = existingTxMap.get(cleanKey);
+        if (existingRec && isServerRecordAuditLocked(existingRec) && !t.unlock_expires_at) {
+          return false;
+        }
+        const txIso = extractServerIsoDate(t.date || t.timestamp || t.createdAt);
+        const existingIso = existingRec ? extractServerIsoDate(existingRec.date || existingRec.timestamp || existingRec.createdAt) : '';
+        if (!existingRec || (txIso && txIso !== existingIso)) {
+          const pBlock = checkServerLockedAuditPeriod(db, t.campaignId, t.date || t.timestamp || t.createdAt, t.paymentMethod === 'phonepe');
+          if (pBlock.isBlocked && !t.unlock_expires_at && !t.is_locked) return false;
+        }
+        return true;
+      });
+      if (allowedIncomingTxs.length > 0) {
+        db.transactions = mergeCollections(db.transactions, allowedIncomingTxs, 'id', delTxSet);
+        db.transactions = reconcileAndDeduplicateTransactions(db.transactions, delTxSet);
+      }
     }
     if (Array.isArray(body.deletedTransactionIds) && body.deletedTransactionIds.length > 0) {
-      const deletedSet = new Set<string>(
-        body.deletedTransactionIds.map((id: any) => String(id).toLowerCase().trim())
-      );
-      db.transactions = (db.transactions || []).filter(t => !deletedSet.has(String(t.id).toLowerCase().trim()));
-      db.deletedTransactionIds = Array.from(new Set<string>([
-        ...(db.deletedTransactionIds || []),
-        ...Array.from(deletedSet)
-      ]));
+      const existingTxMap = new Map<string, any>();
+      (db.transactions || []).forEach((t: any) => {
+        if (t && t.id) existingTxMap.set(String(t.id).toLowerCase().trim(), t);
+      });
+      const allowedDeletedTxIds = body.deletedTransactionIds
+        .map((id: any) => String(id).toLowerCase().trim())
+        .filter((id: string) => {
+          if (!id) return false;
+          const existingRec = existingTxMap.get(id);
+          return !(existingRec && isServerRecordAuditLocked(existingRec));
+        });
+      if (allowedDeletedTxIds.length > 0) {
+        const deletedSet = new Set<string>(allowedDeletedTxIds);
+        db.transactions = (db.transactions || []).filter(t => !deletedSet.has(String(t.id).toLowerCase().trim()));
+        db.deletedTransactionIds = Array.from(new Set<string>([
+          ...(db.deletedTransactionIds || []),
+          ...Array.from(deletedSet)
+        ]));
+      }
     }
     if (Array.isArray(body.deletedExpenseIds) && body.deletedExpenseIds.length > 0) {
-      const delExpSet = new Set<string>(body.deletedExpenseIds.map((id: any) => String(id).toLowerCase().trim()));
-      db.expenses = (db.expenses || []).filter(e => !delExpSet.has(String(e.id).toLowerCase().trim()));
-      db.deletedExpenseIds = Array.from(new Set<string>([
-        ...(db.deletedExpenseIds || []),
-        ...Array.from(delExpSet)
-      ]));
+      const existingExpMap = new Map<string, any>();
+      (db.expenses || []).forEach((e: any) => {
+        if (e && e.id) existingExpMap.set(String(e.id).toLowerCase().trim(), e);
+      });
+      const allowedDeletedExpIds = body.deletedExpenseIds
+        .map((id: any) => String(id).toLowerCase().trim())
+        .filter((id: string) => {
+          if (!id) return false;
+          const existingExp = existingExpMap.get(id);
+          return !(existingExp && isServerRecordAuditLocked(existingExp));
+        });
+      if (allowedDeletedExpIds.length > 0) {
+        const delExpSet = new Set<string>(allowedDeletedExpIds);
+        db.expenses = (db.expenses || []).filter(e => !delExpSet.has(String(e.id).toLowerCase().trim()));
+        db.deletedExpenseIds = Array.from(new Set<string>([
+          ...(db.deletedExpenseIds || []),
+          ...Array.from(delExpSet)
+        ]));
+      }
     }
     if (Array.isArray(body.expenses) && body.expenses.length > 0) {
       const serverDelExpSet = new Set<string>((db.deletedExpenseIds || []).map((id: any) => String(id).toLowerCase().trim()));
-      db.expenses = mergeCollections(db.expenses || [], body.expenses, 'id', serverDelExpSet);
+      const existingExpMap = new Map<string, any>();
+      (db.expenses || []).forEach((e: any) => {
+        if (e && e.id) existingExpMap.set(String(e.id).toLowerCase().trim(), e);
+      });
+      const allowedIncomingExps = body.expenses.filter((e: any) => {
+        if (!e || !e.id) return false;
+        const cleanKey = String(e.id).toLowerCase().trim();
+        const existingExp = existingExpMap.get(cleanKey);
+        if (existingExp && isServerRecordAuditLocked(existingExp) && !e.unlock_expires_at) {
+          return false;
+        }
+        const expIso = extractServerIsoDate(e.date || e.createdAt);
+        const existingIso = existingExp ? extractServerIsoDate(existingExp.date || existingExp.createdAt) : '';
+        if (!existingExp || (expIso && expIso !== existingIso)) {
+          const pBlock = checkServerLockedAuditPeriod(db, e.campaignId || e.campaign_id, e.date || e.createdAt, false);
+          if (pBlock.isBlocked && !e.unlock_expires_at && !e.is_locked) return false;
+        }
+        return true;
+      });
+      if (allowedIncomingExps.length > 0) {
+        db.expenses = mergeCollections(db.expenses || [], allowedIncomingExps, 'id', serverDelExpSet);
+      }
     }
     if (Array.isArray(body.creators) && body.creators.length > 0) {
       db.creators = mergeCollections(db.creators, body.creators, 'phone');
@@ -7577,6 +7644,62 @@ app.post('/api/supabase/config', (req: Request, res: Response) => {
   }
 });
 
+function extractServerIsoDate(rawVal: any): string {
+  if (!rawVal) return '';
+  const s = String(rawVal).trim();
+  if (!s) return '';
+  if (s.length >= 10 && /^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+  const d = new Date(s);
+  return !isNaN(d.getTime()) ? d.toISOString().slice(0, 10) : '';
+}
+
+function isServerRecordAuditLocked(rec: any): boolean {
+  if (!rec) return false;
+  const locked = Boolean(rec.is_locked || rec.metadata?.is_locked);
+  if (!locked) return false;
+  const expStr = rec.unlock_expires_at || rec.metadata?.unlock_expires_at;
+  if (expStr) {
+    const expMs = new Date(expStr).getTime();
+    if (!isNaN(expMs) && expMs > Date.now()) return false;
+  }
+  return true;
+}
+
+function checkServerLockedAuditPeriod(
+  db: any,
+  campaignId: string | undefined,
+  rawDate: any,
+  isOnlineLiveGateway = false
+): { isBlocked: boolean; reason: string } {
+  if (!campaignId) return { isBlocked: false, reason: '' };
+  const cleanCampId = String(campaignId).toLowerCase().trim();
+  const camp = (db.campaigns || []).find((c: any) => String(c.id).toLowerCase().trim() === cleanCampId);
+  if (!camp) return { isBlocked: false, reason: '' };
+
+  const periods: any[] = Array.isArray(camp.lockedAuditPeriods)
+    ? camp.lockedAuditPeriods
+    : (Array.isArray(camp.metadata?.lockedAuditPeriods) ? camp.metadata.lockedAuditPeriods : []);
+  if (periods.length === 0) return { isBlocked: false, reason: '' };
+
+  const targetDate = extractServerIsoDate(rawDate) || new Date().toISOString().slice(0, 10);
+  const todayIso = new Date().toISOString().slice(0, 10);
+  for (const p of periods) {
+    if (!p || !p.lockedAt) continue;
+    const pFrom = p.fromDate ? extractServerIsoDate(p.fromDate) : '';
+    const pTo = p.toDate ? extractServerIsoDate(p.toDate) : extractServerIsoDate(p.lockedAt);
+    const matchesFrom = !pFrom || targetDate >= pFrom;
+    const matchesTo = !pTo || targetDate <= pTo;
+    if (matchesFrom && matchesTo) {
+      if (isOnlineLiveGateway && targetDate >= todayIso) continue;
+      return {
+        isBlocked: true,
+        reason: `🔒 Audit & Lock tawh hun bi (${p.periodLabel || 'Audited Period'}) chhunga record thar thun emaw thlak danglam emaw phal a ni lo.`
+      };
+    }
+  }
+  return { isBlocked: false, reason: '' };
+}
+
 app.post('/api/transactions', (req: Request, res: Response) => {
   try {
     const tx = req.body;
@@ -7584,12 +7707,27 @@ app.post('/api/transactions', (req: Request, res: Response) => {
       return res.status(400).json({ success: false, message: 'Invalid transaction payload' });
     }
     const db = getDatabase();
+    const cleanId = String(tx.id).toLowerCase().trim();
+    const existingRecord = (db.transactions || []).find((t: any) => String(t.id).toLowerCase().trim() === cleanId);
+    if (existingRecord && isServerRecordAuditLocked(existingRecord) && !tx.is_locked && !tx.unlock_expires_at) {
+      return res.status(403).json({
+        success: false,
+        message: `🔒 Transaction ${tx.id} hi Audit & Lock tawh a ni a, thlak danglam phal a ni lo.`
+      });
+    }
+    const txIsoDate = extractServerIsoDate(tx.date || tx.timestamp || tx.createdAt);
+    const existingIsoDate = existingRecord ? extractServerIsoDate(existingRecord.date || existingRecord.timestamp || existingRecord.createdAt) : '';
+    if (!existingRecord || (txIsoDate && txIsoDate !== existingIsoDate)) {
+      const pBlock = checkServerLockedAuditPeriod(db, tx.campaignId, tx.date || tx.timestamp || tx.createdAt, tx.paymentMethod === 'phonepe');
+      if (pBlock.isBlocked && !tx.unlock_expires_at) {
+        return res.status(403).json({ success: false, message: pBlock.reason });
+      }
+    }
 
     tx.updatedAt = new Date().toISOString();
     tx.totalAmount = Number(tx.amount) || 0;
     tx.campaignNetReceived = Number(tx.amount) || 0;
     // If this transaction was previously deleted, resurrect or clean it from tombstone
-    const cleanId = String(tx.id).toLowerCase().trim();
     db.deletedTransactionIds = (db.deletedTransactionIds || []).filter(id => id !== cleanId);
 
     // Forward transaction directly to Supabase PostgREST
@@ -7680,7 +7818,29 @@ app.post('/api/transactions/batch', (req: Request, res: Response) => {
     const { transactions: batchTxs } = req.body || {};
     if (Array.isArray(batchTxs) && batchTxs.length > 0) {
       const db = getDatabase();
-      const validTxs = batchTxs.filter((t: any) => t && t.id && t.status !== 'deleted');
+      const existingTxMap = new Map<string, any>();
+      (db.transactions || []).forEach((t: any) => {
+        if (t && t.id) existingTxMap.set(String(t.id).toLowerCase().trim(), t);
+      });
+      const validTxs = batchTxs.filter((t: any) => {
+        if (!t || !t.id || t.status === 'deleted') return false;
+        const existingRec = existingTxMap.get(String(t.id).toLowerCase().trim());
+        if (existingRec && isServerRecordAuditLocked(existingRec) && !t.unlock_expires_at) {
+          return false;
+        }
+        const txIso = extractServerIsoDate(t.date || t.timestamp || t.createdAt);
+        const exIso = existingRec ? extractServerIsoDate(existingRec.date || existingRec.timestamp || existingRec.createdAt) : '';
+        if (!existingRec || (txIso && txIso !== exIso)) {
+          const pBlock = checkServerLockedAuditPeriod(db, t.campaignId, t.date || t.timestamp || t.createdAt, t.paymentMethod === 'phonepe');
+          if (pBlock.isBlocked && !t.unlock_expires_at) {
+            return false;
+          }
+        }
+        return true;
+      });
+      if (validTxs.length === 0) {
+        return res.json({ success: true, count: 0, skippedLocked: batchTxs.length });
+      }
       const idSet = new Set(validTxs.map((t: any) => String(t.id).toLowerCase().trim()));
       
       db.deletedTransactionIds = (db.deletedTransactionIds || []).filter((id: string) => !idSet.has(id));
@@ -7796,6 +7956,13 @@ app.delete('/api/transactions/:id', (req: Request, res: Response) => {
     const { id } = req.params;
     const db = getDatabase();
     const cleanId = String(id).toLowerCase().trim();
+    const existingRec = (db.transactions || []).find((t: any) => String(t.id).toLowerCase().trim() === cleanId);
+    if (existingRec && isServerRecordAuditLocked(existingRec)) {
+      return res.status(403).json({
+        success: false,
+        message: `🔒 Transaction ${id} hi Audit & Lock tawh a ni a, paih phal a ni lo.`
+      });
+    }
     db.transactions = (db.transactions || []).filter((t: any) => String(t.id).toLowerCase().trim() !== cleanId);
     db.deletedTransactionIds = Array.from(new Set([...(db.deletedTransactionIds || []), cleanId]));
     saveDatabase(db);
@@ -7837,7 +8004,20 @@ app.post('/api/transactions/delete-batch', (req: Request, res: Response) => {
     const { ids } = req.body || {};
     if (Array.isArray(ids) && ids.length > 0) {
       const db = getDatabase();
-      const cleanIds = ids.map((i: any) => String(i).toLowerCase().trim());
+      const lockedSet = new Set(
+        (db.transactions || [])
+          .filter((t: any) => isServerRecordAuditLocked(t))
+          .map((t: any) => String(t.id).toLowerCase().trim())
+      );
+      const cleanIds = ids
+        .map((i: any) => String(i).toLowerCase().trim())
+        .filter((cid: string) => cid && !lockedSet.has(cid));
+      if (cleanIds.length === 0) {
+        return res.status(403).json({
+          success: false,
+          message: '🔒 Audit & Lock tawh transactions paih phal a ni lo.'
+        });
+      }
       const idSet = new Set(cleanIds);
       db.transactions = (db.transactions || []).filter((t: any) => !idSet.has(String(t.id).toLowerCase().trim()));
       db.deletedTransactionIds = Array.from(new Set([...(db.deletedTransactionIds || []), ...cleanIds]));
@@ -7982,9 +8162,25 @@ app.post('/api/expenses', (req: Request, res: Response) => {
     if (!raw || !raw.id) {
       return res.status(400).json({ success: false, message: 'Invalid expense payload' });
     }
+    const db = getDatabase();
+    const cleanExpId = String(raw.id).toLowerCase().trim();
+    const existingExp = (db.expenses || []).find((e: any) => String(e.id).toLowerCase().trim() === cleanExpId);
+    if (existingExp && isServerRecordAuditLocked(existingExp) && !raw.is_locked && !raw.unlock_expires_at) {
+      return res.status(403).json({
+        success: false,
+        message: `🔒 Expense ${raw.id} hi Audit & Lock tawh a ni a, thlak danglam phal a ni lo.`
+      });
+    }
     const nowIso = new Date().toISOString();
     const rawDate = String(raw.spentDate || raw.date || raw.metadata?.spentDate || '').trim();
     const cleanDate = /^\d{4}-\d{2}-\d{2}/.test(rawDate) ? rawDate.slice(0, 10) : nowIso.slice(0, 10);
+    const exExpDate = existingExp ? extractServerIsoDate(existingExp.spentDate || existingExp.date || existingExp.createdAt) : '';
+    if (!existingExp || (cleanDate && cleanDate !== exExpDate)) {
+      const pBlock = checkServerLockedAuditPeriod(db, raw.campaignId || raw.campaign_id, cleanDate, false);
+      if (pBlock.isBlocked && !raw.unlock_expires_at) {
+        return res.status(403).json({ success: false, message: pBlock.reason });
+      }
+    }
     const headVal = raw.head || raw.expenseHead || raw.metadata?.head || 'General';
     const paidToVal = raw.paidTo || raw.payee || raw.payeeName || raw.metadata?.paidTo || '';
     const purposeVal = raw.purpose || raw.description || raw.metadata?.purpose || '';
@@ -8016,7 +8212,6 @@ app.post('/api/expenses', (req: Request, res: Response) => {
         spentDate: cleanDate
       }
     };
-    const db = getDatabase();
     db.expenses = mergeCollections(db.expenses || [], [expense], 'id');
     saveDatabase(db);
     broadcastServerEvent('state_updated', { timestamp: db.lastUpdated });
@@ -8060,6 +8255,13 @@ app.delete('/api/expenses/:id', (req: Request, res: Response) => {
     const { id } = req.params;
     const db = getDatabase();
     const cleanId = String(id).toLowerCase().trim();
+    const existingExp = (db.expenses || []).find((e: any) => String(e.id).toLowerCase().trim() === cleanId);
+    if (existingExp && isServerRecordAuditLocked(existingExp)) {
+      return res.status(403).json({
+        success: false,
+        message: `🔒 Expense ${id} hi Audit & Lock tawh a ni a, paih phal a ni lo.`
+      });
+    }
     db.expenses = (db.expenses || []).filter((e: any) => String(e.id).toLowerCase().trim() !== cleanId);
     db.deletedExpenseIds = Array.from(new Set([...(db.deletedExpenseIds || []), cleanId]));
     saveDatabase(db);
