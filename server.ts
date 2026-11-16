@@ -7794,10 +7794,11 @@ app.post('/api/announcement', (req: Request, res: Response) => {
 });
 
 // Kumtluang Pawl / NGO Pawisa Hman Chhuahna (Expenses) APIs
-app.get('/api/expenses', (req: Request, res: Response) => {
+app.get('/api/expenses', async (req: Request, res: Response) => {
   try {
     const { campaignId } = req.query;
     const db = getDatabase();
+    await syncFromSupabase(db, false);
     const delExpSet = new Set((db.deletedExpenseIds || []).map((id: any) => String(id).toLowerCase().trim()));
     let result = (db.expenses || []).filter((e: any) => e && e.id && !delExpSet.has(String(e.id).toLowerCase().trim()));
     if (campaignId && campaignId !== 'all') {
@@ -7812,13 +7813,77 @@ app.get('/api/expenses', (req: Request, res: Response) => {
 
 app.post('/api/expenses', (req: Request, res: Response) => {
   try {
-    const expense = req.body;
-    if (!expense || !expense.id) {
+    const raw = req.body;
+    if (!raw || !raw.id) {
       return res.status(400).json({ success: false, message: 'Invalid expense payload' });
     }
+    const nowIso = new Date().toISOString();
+    const rawDate = String(raw.spentDate || raw.date || raw.metadata?.spentDate || '').trim();
+    const cleanDate = /^\d{4}-\d{2}-\d{2}/.test(rawDate) ? rawDate.slice(0, 10) : nowIso.slice(0, 10);
+    const headVal = raw.head || raw.expenseHead || raw.metadata?.head || 'General';
+    const paidToVal = raw.paidTo || raw.payee || raw.payeeName || raw.metadata?.paidTo || '';
+    const purposeVal = raw.purpose || raw.description || raw.metadata?.purpose || '';
+    const voucherVal = raw.voucherNo || raw.voucher_no || raw.metadata?.voucherNo || '';
+    const expense = {
+      ...raw,
+      head: headVal,
+      expenseHead: headVal,
+      paidTo: paidToVal,
+      payee: paidToVal,
+      payeeName: paidToVal,
+      purpose: purposeVal,
+      description: purposeVal,
+      voucherNo: voucherVal,
+      date: cleanDate,
+      spentDate: cleanDate,
+      updatedAt: nowIso,
+      metadata: {
+        ...(raw.metadata || {}),
+        head: headVal,
+        expenseHead: headVal,
+        paidTo: paidToVal,
+        payee: paidToVal,
+        payeeName: paidToVal,
+        purpose: purposeVal,
+        description: purposeVal,
+        voucherNo: voucherVal,
+        date: cleanDate,
+        spentDate: cleanDate
+      }
+    };
     const db = getDatabase();
     db.expenses = mergeCollections(db.expenses || [], [expense], 'id');
     saveDatabase(db);
+    broadcastServerEvent('state_updated', { timestamp: db.lastUpdated });
+
+    // Background upsert to Supabase expenses table
+    const sbConfig = (db as any).supabaseConfig || {};
+    const sbUrl = sbConfig.url || process.env.VITE_SUPABASE_URL || 'https://aqrplcmpealgruduwnhw.supabase.co';
+    const sbKey = sbConfig.anonKey || process.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable__zS5fiKvBI5u6HYgour64g_g_tJj5WL';
+    if (sbUrl && sbKey) {
+      fetch(`${sbUrl}/rest/v1/expenses?on_conflict=id`, {
+        method: 'POST',
+        headers: {
+          'apikey': sbKey,
+          'Authorization': `Bearer ${sbKey}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'resolution=merge-duplicates,return=minimal'
+        },
+        body: JSON.stringify({
+          id: expense.id,
+          campaign_id: expense.campaignId || expense.campaign_id || '',
+          voucher_no: voucherVal || null,
+          payee: paidToVal || null,
+          purpose: purposeVal || null,
+          amount: Number(expense.amount) || 0,
+          date: cleanDate,
+          created_at: expense.createdAt || nowIso,
+          updated_at: nowIso,
+          metadata: expense.metadata
+        })
+      }).catch(() => {});
+    }
+
     res.json({ success: true, expense, data: db });
   } catch (err: any) {
     res.status(500).json({ success: false, message: err.message });
@@ -7833,6 +7898,7 @@ app.delete('/api/expenses/:id', (req: Request, res: Response) => {
     db.expenses = (db.expenses || []).filter((e: any) => String(e.id).toLowerCase().trim() !== cleanId);
     db.deletedExpenseIds = Array.from(new Set([...(db.deletedExpenseIds || []), cleanId]));
     saveDatabase(db);
+    broadcastServerEvent('state_updated', { timestamp: db.lastUpdated });
     res.json({ success: true, message: `Expense ${id} deleted successfully` });
   } catch (err: any) {
     res.status(500).json({ success: false, message: err.message });

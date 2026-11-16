@@ -211,20 +211,38 @@ export const normalizeTransaction = (row: any): Transaction => {
 };
 
 export const mapExpenseToSupabase = (e: any) => {
+  const rawSpent = String(e.spentDate || e.date || e.metadata?.spentDate || '').trim();
+  const cleanDate = /^\d{4}-\d{2}-\d{2}/.test(rawSpent)
+    ? rawSpent.slice(0, 10)
+    : new Date().toISOString().slice(0, 10);
+  const headVal = e.head || e.expenseHead || e.metadata?.head || 'General';
+  const paidToVal = e.paidTo || e.payee || e.payeeName || e.metadata?.paidTo || '';
+  const purposeVal = e.purpose || e.description || e.metadata?.purpose || '';
+  const voucherVal = e.voucherNo || e.voucher_no || e.metadata?.voucherNo || '';
+
   return {
     id: e.id,
     campaign_id: e.campaignId || e.campaign_id || '',
-    voucher_no: e.voucherNo || e.voucher_no || null,
-    payee: e.paidTo || e.payee || null,
-    purpose: e.purpose || null,
+    voucher_no: voucherVal || null,
+    payee: paidToVal || null,
+    purpose: purposeVal || null,
     amount: Number(e.amount) || 0,
-    date: e.spentDate || e.date || null,
+    date: cleanDate,
     created_at: e.createdAt ? new Date(e.createdAt).toISOString() : new Date().toISOString(),
     updated_at: new Date().toISOString(),
     metadata: {
       ...(e.metadata || {}),
-      head: e.head,
-      paymentMode: e.paymentMode,
+      head: headVal,
+      expenseHead: headVal,
+      paidTo: paidToVal,
+      payee: paidToVal,
+      payeeName: paidToVal,
+      purpose: purposeVal,
+      description: purposeVal,
+      voucherNo: voucherVal,
+      date: cleanDate,
+      spentDate: cleanDate,
+      paymentMode: e.paymentMode || 'Cash',
       recordedBy: e.recordedBy,
       recordedByPhone: e.recordedByPhone,
       recordedAt: e.recordedAt,
@@ -255,26 +273,50 @@ export const normalizeExpense = (row: any): KumtluangExpense => {
   const resolvedMarkedBy = ('audit_marked_by' in row && row.audit_marked_by !== undefined) ? row.audit_marked_by : (meta.audit_marked_by || undefined);
   const resolvedMarkedAt = ('audit_marked_at' in row && row.audit_marked_at !== undefined) ? row.audit_marked_at : (meta.audit_marked_at || undefined);
   const resolvedVerifications = row.auditor_verifications || meta.auditor_verifications || undefined;
+
+  const pickCleanDate = (...candidates: any[]): string => {
+    for (const c of candidates) {
+      const s = String(c || '').trim();
+      if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+    }
+    for (const c of candidates) {
+      const s = String(c || '').trim();
+      if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+    }
+    return '';
+  };
+
+  const cleanSpentDate = pickCleanDate(row.date, meta.spentDate, meta.date, row.spentDate, row.created_at, row.createdAt);
+  const headVal = meta.head || row.head || meta.expenseHead || row.expenseHead || 'General';
+  const paidToVal = row.payee || row.paidTo || meta.paidTo || meta.payee || row.payeeName || '';
+  const purposeVal = row.purpose || meta.purpose || row.description || meta.description || '';
+  const voucherVal = row.voucher_no || row.voucherNo || meta.voucherNo || '';
+
   return {
     ...meta,
     ...row,
     id: row.id,
     campaignId: row.campaign_id || row.campaignId || '',
-    campaignTitle: meta.campaignTitle || row.campaign_title || '',
-    voucherNo: row.voucher_no || row.voucherNo || '',
+    campaignTitle: meta.campaignTitle || row.campaign_title || row.campaignTitle || '',
+    voucherNo: voucherVal,
     amount: Number(row.amount) || 0,
-    head: meta.head || row.head || 'General',
-    purpose: row.purpose || '',
-    paidTo: row.payee || row.paidTo || '',
-    paymentMode: meta.paymentMode || row.payment_mode || 'Cash',
-    spentDate: row.date || row.spentDate || '',
-    recordedBy: meta.recordedBy || 'Admin',
-    recordedByPhone: meta.recordedByPhone || '',
+    head: headVal,
+    expenseHead: headVal,
+    purpose: purposeVal,
+    description: purposeVal,
+    paidTo: paidToVal,
+    payee: paidToVal,
+    payeeName: paidToVal,
+    paymentMode: meta.paymentMode || row.payment_mode || row.paymentMode || 'Cash',
+    date: cleanSpentDate,
+    spentDate: cleanSpentDate,
+    recordedBy: meta.recordedBy || row.recordedBy || 'Admin',
+    recordedByPhone: meta.recordedByPhone || row.recordedByPhone || '',
     recordedAt: meta.recordedAt || row.created_at || new Date().toISOString(),
-    createdAt: row.created_at || new Date().toISOString(),
-    updatedAt: row.updated_at || new Date().toISOString(),
-    status: meta.status || 'approved',
-    attachmentUrl: meta.attachmentUrl || null,
+    createdAt: row.created_at || row.createdAt || new Date().toISOString(),
+    updatedAt: row.updated_at || row.updatedAt || new Date().toISOString(),
+    status: meta.status || row.status || 'approved',
+    attachmentUrl: meta.attachmentUrl || row.attachmentUrl || null,
     audit_mark: resolvedMark || undefined,
     audit_query: resolvedQuery || undefined,
     audit_marked_by: resolvedMarkedBy || undefined,

@@ -1901,6 +1901,149 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
     printHtmlSafely(certHtml);
   };
 
+  // Generate & Print Official Co-Auditor Comparison & Discrepancy Result Report
+  const handlePrintCoAuditorResultReport = () => {
+    const aud1 = dualAuditSummary.auditorsList[0];
+    const aud2 = dualAuditSummary.auditorsList[1];
+    const txDiffCount = aud1 && aud2 ? Math.abs(aud1.txVerifiedCount - aud2.txVerifiedCount) : 0;
+    const txDiffAmt = aud1 && aud2 ? Math.abs(aud1.txVerifiedAmount - aud2.txVerifiedAmount) : 0;
+    const expDiffCount = aud1 && aud2 ? Math.abs(aud1.expVerifiedCount - aud2.expVerifiedCount) : 0;
+    const expDiffAmt = aud1 && aud2 ? Math.abs(aud1.expVerifiedAmount - aud2.expVerifiedAmount) : 0;
+    const aud1Net = aud1 ? cashBookAuditData.openingBalance + aud1.txVerifiedAmount - aud1.expVerifiedAmount : 0;
+    const aud2Net = aud2 ? cashBookAuditData.openingBalance + aud2.txVerifiedAmount - aud2.expVerifiedAmount : 0;
+    const netDiffAmt = aud1 && aud2 ? Math.abs(aud1Net - aud2Net) : 0;
+
+    const discrepancyRowsHtml = dualAuditSummary.discrepancyItems.map((item, i) => `
+      <tr>
+        <td style="text-align:center;">${i + 1}</td>
+        <td>
+          <span style="font-size:9px;font-weight:800;padding:2px 6px;border-radius:4px;background:${item.recordType === 'expense' ? '#ffe4e6' : '#dcfce7'};color:${item.recordType === 'expense' ? '#9f1239' : '#166534'};">
+            ${item.recordType === 'expense' ? 'SENSO / EXPENSE' : 'SUM LUT / RECEIPT'}
+          </span>
+        </td>
+        <td>${item.displayDate}</td>
+        <td><strong>${item.title}</strong></td>
+        <td style="text-align:right;font-weight:800;">₹${item.amount.toLocaleString('en-IN')}</td>
+        ${item.verifications.map(v => `
+          <td style="text-align:center;">
+            <span style="font-size:9.5px;font-weight:800;padding:2px 6px;border-radius:4px;background:${v.mark === 'verified' ? '#dcfce7' : v.mark === 'flagged' ? '#fee2e2' : '#fef3c7'};color:${v.mark === 'verified' ? '#166534' : v.mark === 'flagged' ? '#991b1b' : '#92400e'};">
+              ${v.mark === 'verified' ? '✓ Dik (Audited)' : v.mark === 'flagged' ? `⚠️ Query (${v.query || 'Enfiah ngai'})` : '⏳ La Audit Lo'}
+            </span>
+          </td>
+        `).join('')}
+      </tr>
+    `).join('');
+
+    const reportHtml = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <title>Co-Auditor Khaikhinna & Audit Result - ${campaign.title}</title>
+        <style>
+          @page { size: A4; margin: 14mm; }
+          body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #0f172a; margin: 0; padding: 12px; font-size: 11px; }
+          .header { text-align: center; border-bottom: 2px solid #0f172a; padding-bottom: 10px; margin-bottom: 14px; }
+          .title { font-size: 18px; font-weight: 900; margin: 0; text-transform: uppercase; }
+          .sub { font-size: 12px; color: #475569; margin: 4px 0 0 0; font-weight: 600; }
+          .verdict { padding: 10px 14px; border-radius: 8px; font-weight: 900; font-size: 12px; margin-bottom: 14px; text-align: center; border: 1.5px solid ${dualAuditSummary.hasDiscrepancies ? '#e11d48' : '#059669'}; background: ${dualAuditSummary.hasDiscrepancies ? '#fff1f2' : '#ecfdf5'}; color: ${dualAuditSummary.hasDiscrepancies ? '#9f1239' : '#065f46'}; }
+          table { width: 100%; border-collapse: collapse; margin-bottom: 18px; font-size: 10.5px; }
+          th, td { border: 1px solid #cbd5e1; padding: 6px 8px; text-align: left; }
+          th { background: #f1f5f9; font-weight: 800; text-transform: uppercase; font-size: 9.5px; color: #334155; }
+          .sec-title { font-size: 12px; font-weight: 900; text-transform: uppercase; margin: 14px 0 6px 0; color: #0f172a; }
+          .sig-row { margin-top: 32px; display: flex; justify-content: space-between; gap: 16px; }
+          .sig-box { width: 200px; border-top: 1px solid #0f172a; padding-top: 6px; text-align: center; font-size: 11px; }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1 class="title">${campaign.title} — CO-AUDITOR KHAIKHINNA &amp; AUDIT RESULT REPORT</h1>
+          <p class="sub">Audit Period: ${cashBookAuditData.rangeLabel} • Printed: ${formatDateDDMMYYYY(new Date().toISOString())}</p>
+        </div>
+
+        <div class="verdict">
+          ${dualAuditSummary.hasDiscrepancies
+            ? `⚠️ AUDIT RESULT: AUDITOR PAHNIH AUDIT NA A INANG LO (${dualAuditSummary.discrepancyItems.length} Records Inthlau — Senso: ${dualAuditSummary.expDiscrepancyItems.length}, Sum Lut: ${dualAuditSummary.txDiscrepancyItems.length})`
+            : `✅ AUDIT RESULT: AUDITOR PAHNIH AUDIT NA A INANG THLAP (100% CONSENSUS — ${dualAuditSummary.consensusVerifiedCount} Verified)`}
+        </div>
+
+        <div class="sec-title">1. Auditor Pahnih Audit Zat Khaikhinna (Side-by-Side Comparison)</div>
+        <table>
+          <thead>
+            <tr>
+              <th>Account Head</th>
+              <th style="text-align:right;">System Total</th>
+              <th style="text-align:right;">1. ${aud1?.auditorName || 'Auditor 1'} (✓ Dik)</th>
+              <th style="text-align:right;">2. ${aud2?.auditorName || 'Auditor 2'} (✓ Dik)</th>
+              <th style="text-align:right;">Inthlauhna (Difference)</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Dr. Receipts (Sum Lut / Thawhlawm)</strong></td>
+              <td style="text-align:right;">${cashBookAuditData.inRangeTxs.length} items • <strong>₹${cashBookAuditData.periodReceiptsTotal.toLocaleString('en-IN')}</strong></td>
+              <td style="text-align:right;color:#065f46;font-weight:700;">✓${aud1?.txVerifiedCount || 0} items • ₹${(aud1?.txVerifiedAmount || 0).toLocaleString('en-IN')}</td>
+              <td style="text-align:right;color:#065f46;font-weight:700;">✓${aud2?.txVerifiedCount || 0} items • ₹${(aud2?.txVerifiedAmount || 0).toLocaleString('en-IN')}</td>
+              <td style="text-align:right;font-weight:800;color:${txDiffAmt > 0 || txDiffCount > 0 ? '#be123c' : '#059669'};">
+                ${txDiffAmt > 0 || txDiffCount > 0 ? `⚡ ${txDiffCount} items • ₹${txDiffAmt.toLocaleString('en-IN')}` : '✓ Inang Thlap (₹0)'}
+              </td>
+            </tr>
+            <tr>
+              <td><strong>Cr. Payments (Expenditure / Senso)</strong></td>
+              <td style="text-align:right;">${cashBookAuditData.inRangeExps.length} vouchers • <strong>₹${cashBookAuditData.periodPaymentsTotal.toLocaleString('en-IN')}</strong></td>
+              <td style="text-align:right;color:#9f1239;font-weight:700;">✓${aud1?.expVerifiedCount || 0} vouchers • ₹${(aud1?.expVerifiedAmount || 0).toLocaleString('en-IN')}</td>
+              <td style="text-align:right;color:#9f1239;font-weight:700;">✓${aud2?.expVerifiedCount || 0} vouchers • ₹${(aud2?.expVerifiedAmount || 0).toLocaleString('en-IN')}</td>
+              <td style="text-align:right;font-weight:800;color:${expDiffAmt > 0 || expDiffCount > 0 || dualAuditSummary.expDiscrepancyItems.length > 0 ? '#be123c' : '#059669'};">
+                ${expDiffAmt > 0 || expDiffCount > 0 || dualAuditSummary.expDiscrepancyItems.length > 0 ? `⚡ ${dualAuditSummary.expDiscrepancyItems.length} vouchers inang lo • ₹${expDiffAmt.toLocaleString('en-IN')}` : '✓ Inang Thlap (₹0)'}
+              </td>
+            </tr>
+            <tr style="background:#f8fafc;">
+              <td><strong>Audited Net Balance (Opening ₹${cashBookAuditData.openingBalance.toLocaleString('en-IN')} + Lut - Senso)</strong></td>
+              <td style="text-align:right;"><strong>₹${cashBookAuditData.closingBalance.toLocaleString('en-IN')}</strong></td>
+              <td style="text-align:right;font-weight:800;">₹${aud1Net.toLocaleString('en-IN')}</td>
+              <td style="text-align:right;font-weight:800;">₹${aud2Net.toLocaleString('en-IN')}</td>
+              <td style="text-align:right;font-weight:800;color:${netDiffAmt > 0 ? '#be123c' : '#059669'};">
+                ${netDiffAmt > 0 ? `⚡ ₹${netDiffAmt.toLocaleString('en-IN')} Inthlau` : '✓ Inang Thlap (₹0)'}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="sec-title">2. Record Inang Lo &amp; Query List Kimchang (${dualAuditSummary.discrepancyItems.length} Items)</div>
+        <table>
+          <thead>
+            <tr>
+              <th style="width:32px;text-align:center;">Sl.</th>
+              <th>Type</th>
+              <th>Date</th>
+              <th>Particulars / Voucher / Donor</th>
+              <th style="text-align:right;">Amount (₹)</th>
+              ${dualAuditSummary.auditorsList.map((a, idx) => `<th style="text-align:center;">${idx + 1}. ${a.auditorName}</th>`).join('')}
+            </tr>
+          </thead>
+          <tbody>
+            ${discrepancyRowsHtml || `<tr><td colspan="${5 + dualAuditSummary.auditorsList.length}" style="text-align:center;color:#059669;font-weight:800;padding:14px;">✓✓ Auditor pahnih audit na a inang vek e (Inang lo pakhat mah a awm lo).</td></tr>`}
+          </tbody>
+        </table>
+
+        <div class="sig-row">
+          <div class="sig-box">
+            <strong>Treasurer / Bawm Vawngtu</strong><br/>
+            <span style="color:#64748b;font-size:10px;">${(campaign as any)?.createdByName || campaign?.createdBy || 'Treasurer'}</span>
+          </div>
+          ${dualAuditSummary.auditorsList.map((aud, idx) => `
+            <div class="sig-box">
+              <strong>${aud.auditorName}</strong><br/>
+              <span style="color:#64748b;font-size:10px;">Sum Endiktu (Auditor ${idx + 1}) • Ph: ${aud.auditorPhone || 'N/A'}</span>
+            </div>
+          `).join('')}
+        </div>
+      </body>
+      </html>
+    `;
+    printHtmlSafely(reportHtml);
+  };
+
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-0 sm:p-2.5 overflow-y-auto animate-fade-in">
       <div 
@@ -2187,7 +2330,7 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                   >
                     <AlertCircle className="w-3 h-3" />
                     <span>
-                      ⚡ Inang Lo / Query ({dualAuditSummary.discrepancyItems.length} — Senso: {dualAuditSummary.expDiscrepancyItems.length}, Lut: {dualAuditSummary.txDiscrepancyItems.length}) — {showDiscrepancyDrawer ? 'Khâr Rawh' : 'Enfiah Rawh'}
+                      ⚡ Inang Lo / Query ({dualAuditSummary.discrepancyItems.length} — Senso: {dualAuditSummary.expDiscrepancyItems.length}, Lut: {dualAuditSummary.txDiscrepancyItems.length}) — {showDiscrepancyDrawer ? 'Khâr Rawh' : 'Result En Rawh'}
                     </span>
                   </button>
                 ) : isDualAuditMode && dualAuditSummary.isJointFinalized ? (
@@ -2196,6 +2339,18 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                     <span>✓✓ Final Joint Audited</span>
                   </span>
                 ) : null}
+
+                {isDualAuditMode && dualAuditSummary.auditorsList.length >= 2 && (
+                  <button
+                    type="button"
+                    onClick={handlePrintCoAuditorResultReport}
+                    title="Auditor pahnih audit na inang lo leh khaikhinna result print / save PDF rawh"
+                    className="px-2.5 py-0.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-black text-[10px] flex items-center gap-1 cursor-pointer shadow-xs"
+                  >
+                    <Printer className="w-3 h-3" />
+                    <span>Print Khaikhinna Result</span>
+                  </button>
+                )}
               </div>
             </div>
 
@@ -2206,39 +2361,72 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                   <span className="font-black text-rose-200 flex items-center gap-1.5">
                     <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
                     <span>
-                      🔍 Auditor Pahnih ({dualAuditSummary.auditorsList.map(a => a.auditorName).join(' vs ')}) Audit Inang Lo &amp; Khaikhinna ({dualAuditSummary.discrepancyItems.length} items):
+                      🔍 Auditor Pahnih ({dualAuditSummary.auditorsList.map(a => a.auditorName).join(' vs ')}) Audit Result Inang Lo &amp; Khaikhinna ({dualAuditSummary.discrepancyItems.length} items):
                     </span>
                   </span>
-                  <button
-                    type="button"
-                    onClick={() => setShowDiscrepancyDrawer(false)}
-                    className="text-[10px] px-2 py-0.5 rounded bg-rose-900 hover:bg-rose-800 text-rose-200 font-bold cursor-pointer"
-                  >
-                    ✕ Khâr Rawh
-                  </button>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={handlePrintCoAuditorResultReport}
+                      className="text-[10px] px-2.5 py-0.5 rounded bg-indigo-600 hover:bg-indigo-500 text-white font-black cursor-pointer flex items-center gap-1"
+                    >
+                      <Printer className="w-3 h-3" />
+                      <span>Print Inang Lo Result</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowDiscrepancyDrawer(false)}
+                      className="text-[10px] px-2 py-0.5 rounded bg-rose-900 hover:bg-rose-800 text-rose-200 font-bold cursor-pointer"
+                    >
+                      ✕ Khâr Rawh
+                    </button>
+                  </div>
                 </div>
 
-                {/* Side-by-Side Auditor Comparison Summary Card */}
-                {dualAuditSummary.auditorsList.length >= 2 && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 bg-slate-950/70 p-2.5 rounded-xl border border-rose-500/30">
-                    {dualAuditSummary.auditorsList.map((aud, idx) => (
-                      <div key={aud.auditorKey} className="bg-slate-900/90 border border-slate-700/80 rounded-lg p-2 flex flex-col gap-1">
-                        <div className="font-black text-white text-xs flex items-center justify-between">
-                          <span>👤 Auditor {idx + 1}: {aud.auditorName}</span>
-                          <span className="text-[10px] font-mono text-slate-400">{aud.auditorPhone}</span>
+                {/* Side-by-Side Auditor Comparison Summary Card + Variance */}
+                {dualAuditSummary.auditorsList.length >= 2 && (() => {
+                  const a1 = dualAuditSummary.auditorsList[0];
+                  const a2 = dualAuditSummary.auditorsList[1];
+                  const txDiffAmt = Math.abs((a1?.txVerifiedAmount || 0) - (a2?.txVerifiedAmount || 0));
+                  const expDiffAmt = Math.abs((a1?.expVerifiedAmount || 0) - (a2?.expVerifiedAmount || 0));
+                  return (
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 bg-slate-950/70 p-2.5 rounded-xl border border-rose-500/30">
+                      {dualAuditSummary.auditorsList.map((aud, idx) => (
+                        <div key={aud.auditorKey} className="bg-slate-900/90 border border-slate-700/80 rounded-lg p-2 flex flex-col gap-1">
+                          <div className="font-black text-white text-xs flex items-center justify-between">
+                            <span>👤 Auditor {idx + 1}: {aud.auditorName}</span>
+                            <span className="text-[10px] font-mono text-slate-400">{aud.auditorPhone}</span>
+                          </div>
+                          <div className="flex items-center justify-between text-[10.5px] text-emerald-300 font-bold">
+                            <span>Dr. Receipts (Sum Lut) Audit:</span>
+                            <span>{aud.txVerifiedCount} items • ₹{aud.txVerifiedAmount.toLocaleString('en-IN')}</span>
+                          </div>
+                          <div className="flex items-center justify-between text-[10.5px] text-rose-300 font-bold">
+                            <span>Cr. Payments (Senso) Audit:</span>
+                            <span>{aud.expVerifiedCount} vouchers • ₹{aud.expVerifiedAmount.toLocaleString('en-IN')}</span>
+                          </div>
                         </div>
-                        <div className="flex items-center justify-between text-[10.5px] text-emerald-300 font-bold">
-                          <span>Dr. Receipts (Sum Lut) Audit:</span>
-                          <span>{aud.txVerifiedCount} items • ₹{aud.txVerifiedAmount.toLocaleString('en-IN')}</span>
+                      ))}
+                      <div className="bg-rose-950/90 border border-rose-500/50 rounded-lg p-2 flex flex-col justify-between gap-1">
+                        <div className="font-black text-amber-300 text-xs">
+                          ⚖️ Audit Result Inthlauhna (Variance)
                         </div>
-                        <div className="flex items-center justify-between text-[10.5px] text-rose-300 font-bold">
-                          <span>Cr. Payments (Expenditure / Senso) Audit:</span>
-                          <span>{aud.expVerifiedCount} vouchers • ₹{aud.expVerifiedAmount.toLocaleString('en-IN')}</span>
+                        <div className="flex items-center justify-between text-[10.5px] text-white font-bold">
+                          <span>Sum Lut Inthlau:</span>
+                          <span className={dualAuditSummary.txDiscrepancyItems.length > 0 ? 'text-amber-300 font-black' : 'text-emerald-300'}>
+                            {dualAuditSummary.txDiscrepancyItems.length} items • ₹{txDiffAmt.toLocaleString('en-IN')}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between text-[10.5px] text-white font-bold">
+                          <span>Senso (Expense) Inthlau:</span>
+                          <span className={dualAuditSummary.expDiscrepancyItems.length > 0 ? 'text-rose-300 font-black' : 'text-emerald-300'}>
+                            {dualAuditSummary.expDiscrepancyItems.length} vouchers • ₹{expDiffAmt.toLocaleString('en-IN')}
+                          </span>
                         </div>
                       </div>
-                    ))}
-                  </div>
-                )}
+                    </div>
+                  );
+                })()}
 
                 <div className="max-h-60 overflow-y-auto divide-y divide-rose-800/60 pr-1">
                   {dualAuditSummary.discrepancyItems.map(item => (
@@ -3910,6 +4098,108 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                 </div>
               </div>
 
+              {/* Co-Auditor Side-by-Side Comparison & Discrepancy Result Table */}
+              {isDualAuditMode && dualAuditSummary.auditorsList.length >= 2 && (() => {
+                const a1 = dualAuditSummary.auditorsList[0];
+                const a2 = dualAuditSummary.auditorsList[1];
+                const txDiffAmt = Math.abs((a1?.txVerifiedAmount || 0) - (a2?.txVerifiedAmount || 0));
+                const expDiffAmt = Math.abs((a1?.expVerifiedAmount || 0) - (a2?.expVerifiedAmount || 0));
+                return (
+                  <div className={`border-2 rounded-2xl overflow-hidden shadow-2xs ${
+                    dualAuditSummary.hasDiscrepancies ? 'border-rose-300 bg-rose-50/30' : 'border-emerald-300 bg-emerald-50/30'
+                  }`}>
+                    <div className={`px-4 py-3 flex items-center justify-between flex-wrap gap-2 text-white ${
+                      dualAuditSummary.hasDiscrepancies ? 'bg-rose-900' : 'bg-emerald-900'
+                    }`}>
+                      <div className="text-xs sm:text-sm font-black flex items-center gap-2">
+                        {dualAuditSummary.hasDiscrepancies ? (
+                          <AlertCircle className="w-4 h-4 text-amber-300 shrink-0" />
+                        ) : (
+                          <CheckCircle2 className="w-4 h-4 text-emerald-300 shrink-0" />
+                        )}
+                        <span>
+                          {dualAuditSummary.hasDiscrepancies
+                            ? `⚠️ Co-Auditor Audit Result: INANG LO AWM (${dualAuditSummary.discrepancyItems.length} Items — Senso: ${dualAuditSummary.expDiscrepancyItems.length}, Lut: ${dualAuditSummary.txDiscrepancyItems.length})`
+                            : `✅ Co-Auditor Audit Result: AUDITOR PAHNIH AUDIT NA A INANG THLAP (100% CONSENSUS)`}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {dualAuditSummary.hasDiscrepancies && (
+                          <button
+                            type="button"
+                            onClick={() => setShowDiscrepancyDrawer(true)}
+                            className="px-2.5 py-1 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-[10.5px] cursor-pointer"
+                          >
+                            🔍 Inang Lo List Enna ({dualAuditSummary.discrepancyItems.length})
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={handlePrintCoAuditorResultReport}
+                          className="px-2.5 py-1 rounded-lg bg-white/15 hover:bg-white/25 text-white font-black text-[10.5px] flex items-center gap-1 cursor-pointer"
+                        >
+                          <Printer className="w-3.5 h-3.5" />
+                          <span>Print Khaikhinna Result</span>
+                        </button>
+                      </div>
+                    </div>
+                    <div className="overflow-x-auto bg-white">
+                      <table className="w-full text-left border-collapse text-xs">
+                        <thead>
+                          <tr className="bg-slate-100 border-b border-slate-200 text-[10px] font-black uppercase text-slate-700">
+                            <th className="p-3">Account Head</th>
+                            <th className="p-3 text-right">System Total</th>
+                            <th className="p-3 text-right bg-indigo-50/60 text-indigo-950">1. {a1?.auditorName}</th>
+                            <th className="p-3 text-right bg-indigo-50/60 text-indigo-950">2. {a2?.auditorName}</th>
+                            <th className="p-3 text-right bg-rose-50/70 text-rose-900">Result / Inthlauhna</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-200 font-medium">
+                          <tr>
+                            <td className="p-3 font-extrabold text-emerald-900">1. Dr. Receipts (Sum Lut)</td>
+                            <td className="p-3 text-right font-bold">
+                              ₹{cashBookAuditData.periodReceiptsTotal.toLocaleString('en-IN')} ({cashBookAuditData.inRangeTxs.length})
+                            </td>
+                            <td className="p-3 text-right bg-indigo-50/20 font-black text-emerald-700">
+                              ✓{a1?.txVerifiedCount || 0} • ₹{(a1?.txVerifiedAmount || 0).toLocaleString('en-IN')}
+                            </td>
+                            <td className="p-3 text-right bg-indigo-50/20 font-black text-emerald-700">
+                              ✓{a2?.txVerifiedCount || 0} • ₹{(a2?.txVerifiedAmount || 0).toLocaleString('en-IN')}
+                            </td>
+                            <td className="p-3 text-right bg-rose-50/30 font-black">
+                              {dualAuditSummary.txDiscrepancyItems.length > 0 ? (
+                                <span className="text-rose-700">⚡ {dualAuditSummary.txDiscrepancyItems.length} inang lo (₹{txDiffAmt.toLocaleString('en-IN')})</span>
+                              ) : (
+                                <span className="text-emerald-700">✓ Inang Thlap</span>
+                              )}
+                            </td>
+                          </tr>
+                          <tr>
+                            <td className="p-3 font-extrabold text-rose-900">2. Cr. Payments (Expenditure / Senso)</td>
+                            <td className="p-3 text-right font-bold">
+                              ₹{cashBookAuditData.periodPaymentsTotal.toLocaleString('en-IN')} ({cashBookAuditData.inRangeExps.length})
+                            </td>
+                            <td className="p-3 text-right bg-indigo-50/20 font-black text-rose-700">
+                              ✓{a1?.expVerifiedCount || 0} • ₹{(a1?.expVerifiedAmount || 0).toLocaleString('en-IN')}
+                            </td>
+                            <td className="p-3 text-right bg-indigo-50/20 font-black text-rose-700">
+                              ✓{a2?.expVerifiedCount || 0} • ₹{(a2?.expVerifiedAmount || 0).toLocaleString('en-IN')}
+                            </td>
+                            <td className="p-3 text-right bg-rose-50/30 font-black">
+                              {dualAuditSummary.expDiscrepancyItems.length > 0 ? (
+                                <span className="text-rose-700">⚡ {dualAuditSummary.expDiscrepancyItems.length} vouchers inang lo (₹{expDiffAmt.toLocaleString('en-IN')})</span>
+                              ) : (
+                                <span className="text-emerald-700">✓ Inang Thlap</span>
+                              )}
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                );
+              })()}
+
               {/* Column-wise Audit Verification Summary Table */}
               <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-2xs">
                 <div className="bg-slate-900 text-white px-4 py-3 flex items-center justify-between flex-wrap gap-2">
@@ -5487,11 +5777,21 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                 </div>
               </div>
 
-              <div className="flex items-center justify-center gap-3">
+              <div className="flex items-center justify-center gap-3 flex-wrap">
+                {isDualAuditMode && dualAuditSummary.auditorsList.length >= 2 && (
+                  <button
+                    type="button"
+                    onClick={handlePrintCoAuditorResultReport}
+                    className="py-3 px-5 bg-indigo-700 hover:bg-indigo-600 text-white font-bold text-xs rounded-2xl shadow transition flex items-center gap-2 cursor-pointer"
+                  >
+                    <Printer className="w-4 h-4" />
+                    <span>Print Co-Auditor Khaikhinna &amp; Inang Lo Result</span>
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={handlePrintCertificate}
-                  className="py-3 px-6 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-2xl shadow transition flex items-center gap-2"
+                  className="py-3 px-6 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-2xl shadow transition flex items-center gap-2 cursor-pointer"
                 >
                   <Printer className="w-4 h-4" />
                   <span>Print / Save PDF Certificate</span>

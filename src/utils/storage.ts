@@ -5066,17 +5066,47 @@ export const saveStoredExpenses = (expenses: KumtluangExpense[], skipServer: boo
 
 export const saveExpense = (expense: KumtluangExpense): void => {
   const current = getStoredExpenses();
-  const idx = current.findIndex(e => String(e.id).toLowerCase().trim() === String(expense.id).toLowerCase().trim());
+  const stamp = new Date().toISOString();
+  const rawSpent = String(expense.spentDate || expense.date || '').trim();
+  const cleanDate = /^\d{4}-\d{2}-\d{2}/.test(rawSpent)
+    ? rawSpent.slice(0, 10)
+    : stamp.slice(0, 10);
+  const headVal = expense.head || expense.expenseHead || 'General';
+  const paidToVal = expense.paidTo || expense.payeeName || '';
+  const purposeVal = expense.purpose || expense.description || '';
+  const normalizedExpense: KumtluangExpense = {
+    ...expense,
+    head: headVal,
+    expenseHead: headVal,
+    paidTo: paidToVal,
+    payeeName: paidToVal,
+    purpose: purposeVal,
+    description: purposeVal,
+    date: cleanDate,
+    spentDate: cleanDate,
+    updatedAt: stamp
+  };
+  const idx = current.findIndex(e => String(e.id).toLowerCase().trim() === String(normalizedExpense.id).toLowerCase().trim());
   let updated: KumtluangExpense[];
   if (idx >= 0) {
     updated = [...current];
-    updated[idx] = expense;
+    updated[idx] = normalizedExpense;
   } else {
-    updated = [expense, ...current];
+    updated = [normalizedExpense, ...current];
   }
   saveStoredExpenses(updated);
-  // Instant real-time Firestore sync
-  syncExpenseToFirestore(expense).catch(() => {});
+  syncExpenseToFirestore(normalizedExpense).catch(() => {});
+  import('../services/SupabaseSync').then(({ upsertExpense }) => {
+    upsertExpense(normalizedExpense).catch(() => {});
+  }).catch(() => {});
+  import('../services/crossTabSync').then(({ broadcastStateChange }) => {
+    broadcastStateChange('expenses', normalizedExpense);
+  }).catch(() => {});
+  safeApiFetch('/api/expenses', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(normalizedExpense)
+  }).catch(() => {});
 };
 
 export const deleteStoredExpense = (expenseId: string): void => {
