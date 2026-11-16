@@ -43,7 +43,8 @@ import {
   MODIFICATION_REQUESTS_KEY,
   broadcastTabSync,
   safeApiFetch,
-  SYSTEM_HARD_PURGE_TIMESTAMP
+  SYSTEM_HARD_PURGE_TIMESTAMP,
+  reconcileRecordAuditorVerifications
 } from './storage';
 import {
   syncCampaignToFirestore,
@@ -221,7 +222,18 @@ export async function syncAllWithServer(forceAuthoritative: boolean = false): Pr
               if (spt && spt.id) {
                 const k = String(spt.id).toLowerCase().trim();
                 const prev = mergedMap.get(k);
-                mergedMap.set(k, prev ? { ...prev, ...spt } : spt);
+                if (!prev) {
+                  mergedMap.set(k, spt);
+                } else {
+                  const prevTime = new Date(prev.updatedAt || prev.audit_marked_at || prev.audit_date || prev.timestamp || 0).getTime();
+                  const supaTime = new Date(spt.updatedAt || spt.audit_marked_at || spt.audit_date || spt.timestamp || 0).getTime();
+                  const baseMerged = prevTime >= supaTime ? { ...spt, ...prev } : { ...prev, ...spt };
+                  mergedMap.set(k, reconcileRecordAuditorVerifications(
+                    prevTime >= supaTime ? spt : prev,
+                    prevTime >= supaTime ? prev : spt,
+                    baseMerged
+                  ));
+                }
               }
             }
             serverData.transactions = Array.from(mergedMap.values());
@@ -1091,7 +1103,18 @@ export async function pullLatestServerState(): Promise<SyncDataState | null> {
               if (spt && spt.id) {
                 const k = String(spt.id).toLowerCase().trim();
                 const prev = mergedMap.get(k);
-                mergedMap.set(k, prev ? { ...prev, ...spt } : spt);
+                if (!prev) {
+                  mergedMap.set(k, spt);
+                } else {
+                  const prevTime = new Date(prev.updatedAt || prev.audit_marked_at || prev.audit_date || prev.timestamp || 0).getTime();
+                  const supaTime = new Date(spt.updatedAt || spt.audit_marked_at || spt.audit_date || spt.timestamp || 0).getTime();
+                  const baseMerged = prevTime >= supaTime ? { ...spt, ...prev } : { ...prev, ...spt };
+                  mergedMap.set(k, reconcileRecordAuditorVerifications(
+                    prevTime >= supaTime ? spt : prev,
+                    prevTime >= supaTime ? prev : spt,
+                    baseMerged
+                  ));
+                }
               }
             }
             serverData.transactions = Array.from(mergedMap.values());
@@ -1134,27 +1157,16 @@ export async function pullLatestServerState(): Promise<SyncDataState | null> {
                 const localTime = new Date(lt.updatedAt || lt.audit_marked_at || lt.audit_date || lt.timestamp || 0).getTime();
                 const serverTime = new Date(existing.updatedAt || existing.audit_marked_at || existing.audit_date || existing.timestamp || 0).getTime();
 
-                if (localStatus === 'completed' && existingStatus === 'pending') {
-                  txMap.set(k, { ...existing, ...lt, status: 'completed', isSynced: true });
-                } else if (localTime >= serverTime) {
-                  txMap.set(k, { ...existing, ...lt, isSynced: true });
-                } else {
-                  const merged = { ...lt, ...existing, isSynced: true };
-                  if (lt.audit_mark !== undefined && existing.audit_mark === undefined) {
-                    merged.audit_mark = lt.audit_mark;
-                    merged.audit_query = lt.audit_query;
-                    merged.audit_marked_by = lt.audit_marked_by;
-                    merged.audit_marked_at = lt.audit_marked_at;
-                  }
-                  if (lt.is_locked !== undefined && existing.is_locked === undefined) {
-                    merged.is_locked = lt.is_locked;
-                    merged.locked_by = lt.locked_by;
-                    merged.audit_date = lt.audit_date;
-                    merged.audit_period = lt.audit_period;
-                    merged.audit_notes = lt.audit_notes;
-                  }
-                  txMap.set(k, merged);
-                }
+                const baseMerged = localStatus === 'completed' && existingStatus === 'pending'
+                  ? { ...existing, ...lt, status: 'completed' as const, isSynced: true }
+                  : (localTime >= serverTime ? { ...existing, ...lt, isSynced: true } : { ...lt, ...existing, isSynced: true });
+
+                const reconciled = reconcileRecordAuditorVerifications(
+                  localTime >= serverTime ? existing : lt,
+                  localTime >= serverTime ? lt : existing,
+                  baseMerged
+                );
+                txMap.set(k, reconciled);
               } else {
                 // Valid local transaction not yet on server/Supabase — retain and push UP to Supabase/server!
                 txMap.set(k, lt);

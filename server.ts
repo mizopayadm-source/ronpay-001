@@ -5019,23 +5019,11 @@ function mergeCollections<T extends Record<string, any>>(serverList: T[], client
       }
     }
 
-    // Merge auditSignOffs on Campaigns by auditorKey
-    const signA = olderObj?.auditSignOffs || olderObj?.metadata?.auditSignOffs;
-    const signB = newerObj?.auditSignOffs || newerObj?.metadata?.auditSignOffs;
+    // Merge auditSignOffs on Campaigns: if newerObj explicitly defines auditSignOffs, respect it (including removals when an auditor undoes an item)
+    const signA = olderObj?.auditSignOffs ?? olderObj?.metadata?.auditSignOffs;
+    const signB = newerObj?.auditSignOffs ?? newerObj?.metadata?.auditSignOffs;
     if (Array.isArray(signA) || Array.isArray(signB)) {
-      const signMap = new Map<string, any>();
-      for (const s of (Array.isArray(signA) ? signA : [])) {
-        if (s && s.auditorKey) signMap.set(String(s.auditorKey), s);
-      }
-      for (const s of (Array.isArray(signB) ? signB : [])) {
-        if (s && s.auditorKey) {
-          const prev = signMap.get(String(s.auditorKey));
-          if (!prev || new Date(s.signedAt || 0).getTime() >= new Date(prev.signedAt || 0).getTime()) {
-            signMap.set(String(s.auditorKey), s);
-          }
-        }
-      }
-      const mergedSigns = Array.from(signMap.values());
+      const mergedSigns = Array.isArray(signB) ? signB : (Array.isArray(signA) ? signA : []);
       baseMerged.auditSignOffs = mergedSigns;
       if (baseMerged.metadata && typeof baseMerged.metadata === 'object') {
         baseMerged.metadata = { ...baseMerged.metadata, auditSignOffs: mergedSigns };
@@ -6089,49 +6077,130 @@ app.post('/api/audit/sync-action', async (req: Request, res: Response) => {
       }
     }
 
+    // If any action in this batch is clearing/undoing a record, automatically remove that auditor's sign-off from the affected campaign(s)
+    const updatedCampToPush: any[] = [];
+    for (const action of itemsToProcess) {
+      const isClearing = action.mark === null || action.mark === undefined || (action.mark as string) === '' || action.mark === 'unchecked';
+      if (!isClearing) continue;
+      const rawPhone = String(action.auditorPhone || '').replace(/\D/g, '').slice(-10);
+      const aKey = rawPhone.length >= 8
+        ? rawPhone
+        : (String(action.auditorName || 'auditor').trim().toLowerCase().replace(/[^a-z0-9]/g, '_') || 'auditor');
+      const targetRec = action.recordType === 'expense'
+        ? updatedExpToPush.find((e: any) => String(e.id || '').toLowerCase().trim() === String(action.recordId || '').toLowerCase().trim())
+        : updatedTxToPush.find((t: any) => String(t.id || '').toLowerCase().trim() === String(action.recordId || '').toLowerCase().trim());
+      const campId = String(targetRec?.campaignId || targetRec?.campaign_id || body.campaign?.id || '').toLowerCase().trim();
+      if (!campId) continue;
+
+      db.campaigns = (db.campaigns || []).map((c: any) => {
+        if (String(c.id || '').toLowerCase().trim() !== campId) return c;
+        const existingSignOffs = Array.isArray(c.auditSignOffs)
+          ? c.auditSignOffs
+          : (Array.isArray(c.metadata?.auditSignOffs) ? c.metadata.auditSignOffs : []);
+        const filteredSignOffs = existingSignOffs.filter((s: any) => {
+          if (!s) return false;
+          const sPhone = String(s.auditorPhone || s.auditorKey || '').replace(/\D/g, '').slice(-10);
+          if (rawPhone.length >= 8 && sPhone.length >= 8 && sPhone === rawPhone) return false;
+          if (String(s.auditorKey || '').toLowerCase().trim() === aKey) return false;
+          return true;
+        });
+        if (filteredSignOffs.length === existingSignOffs.length && !c.lastAuditedAt) return c;
+        const nextCamp = {
+          ...c,
+          auditSignOffs: filteredSignOffs,
+          lastAuditedAt: undefined,
+          lastAuditedBy: undefined,
+          updatedAt: nowIso,
+          metadata: {
+            ...(c.metadata || {}),
+            auditSignOffs: filteredSignOffs,
+            lastAuditedAt: null,
+            lastAuditedBy: null
+          }
+        };
+        updatedCampToPush.push(nextCamp);
+        return nextCamp;
+      });
+    }
+
     if (body.campaign && body.campaign.id) {
       db.campaigns = mergeCollections(db.campaigns || [], [body.campaign], 'id');
+      const mergedCamp = (db.campaigns || []).find((c: any) => String(c.id || '').toLowerCase().trim() === String(body.campaign.id || '').toLowerCase().trim());
+      if (mergedCamp && !updatedCampToPush.some((u: any) => u.id === mergedCamp.id)) {
+        updatedCampToPush.push(mergedCamp);
+      }
     }
 
     saveDatabase(db);
-    broadcastServerEvent('state_updated', { timestamp: db.lastUpdated });
-    broadcastServerEvent('audit_action_synced', { timestamp: db.lastUpdated, count: itemsToProcess.length });
+    lastServerSupabaseSync = Date.now();
 
-    // Background push to Supabase so cloud storage stays 100% in sync
+    // Push to Supabase BEFORE broadcasting SSE state_updated so cloud storage is already updated when clients pull state
+    const supaPromises: Promise<any>[] = [];
     if (updatedTxToPush.length > 0) {
-      Promise.allSettled(updatedTxToPush.map(tx =>
-        fetch(`${sbUrl}/rest/v1/transactions?id=eq.${encodeURIComponent(tx.id)}`, {
-          method: 'PATCH',
-          headers: {
-            'apikey': sbKey,
-            'Authorization': `Bearer ${sbKey}`,
-            'Content-Type': 'application/json',
-            'Prefer': 'return=minimal'
-          },
-          body: JSON.stringify({
-            updated_at: nowIso,
-            metadata: tx.metadata || {}
-          })
-        })
-      )).catch(() => {});
+      for (const tx of updatedTxToPush) {
+        supaPromises.push(
+          fetch(`${sbUrl}/rest/v1/transactions?id=eq.${encodeURIComponent(tx.id)}`, {
+            method: 'PATCH',
+            headers: {
+              'apikey': sbKey,
+              'Authorization': `Bearer ${sbKey}`,
+              'Content-Type': 'application/json',
+              'Prefer': 'return=minimal'
+            },
+            body: JSON.stringify({
+              updated_at: nowIso,
+              metadata: tx.metadata || {}
+            })
+          }).catch(() => {})
+        );
+      }
     }
     if (updatedExpToPush.length > 0) {
-      Promise.allSettled(updatedExpToPush.map(exp =>
-        fetch(`${sbUrl}/rest/v1/expenses?id=eq.${encodeURIComponent(exp.id)}`, {
-          method: 'PATCH',
-          headers: {
-            'apikey': sbKey,
-            'Authorization': `Bearer ${sbKey}`,
-            'Content-Type': 'application/json',
-            'Prefer': 'return=minimal'
-          },
-          body: JSON.stringify({
-            updated_at: nowIso,
-            metadata: exp.metadata || {}
-          })
-        })
-      )).catch(() => {});
+      for (const exp of updatedExpToPush) {
+        supaPromises.push(
+          fetch(`${sbUrl}/rest/v1/expenses?id=eq.${encodeURIComponent(exp.id)}`, {
+            method: 'PATCH',
+            headers: {
+              'apikey': sbKey,
+              'Authorization': `Bearer ${sbKey}`,
+              'Content-Type': 'application/json',
+              'Prefer': 'return=minimal'
+            },
+            body: JSON.stringify({
+              updated_at: nowIso,
+              metadata: exp.metadata || {}
+            })
+          }).catch(() => {})
+        );
+      }
     }
+    if (updatedCampToPush.length > 0) {
+      for (const camp of updatedCampToPush) {
+        supaPromises.push(
+          fetch(`${sbUrl}/rest/v1/campaigns?id=eq.${encodeURIComponent(camp.id)}`, {
+            method: 'PATCH',
+            headers: {
+              'apikey': sbKey,
+              'Authorization': `Bearer ${sbKey}`,
+              'Content-Type': 'application/json',
+              'Prefer': 'return=minimal'
+            },
+            body: JSON.stringify({
+              updated_at: nowIso,
+              metadata: camp.metadata || {}
+            })
+          }).catch(() => {})
+        );
+      }
+    }
+
+    if (supaPromises.length > 0) {
+      await Promise.allSettled(supaPromises);
+      lastServerSupabaseSync = Date.now();
+    }
+
+    broadcastServerEvent('state_updated', { timestamp: db.lastUpdated });
+    broadcastServerEvent('audit_action_synced', { timestamp: db.lastUpdated, count: itemsToProcess.length });
 
     res.json({
       success: true,

@@ -27,6 +27,18 @@ const activeSharedChannels = new Map<string, any>();
 const sharedTableListeners = new Map<string, Set<(payload: any) => void>>();
 const realtimeFallbackTables = new Set<string>();
 
+export const invalidateSupabaseTableCache = (table?: string) => {
+  if (!table) {
+    tableCacheMap.clear();
+    return;
+  }
+  for (const key of Array.from(tableCacheMap.keys())) {
+    if (key === table || key.startsWith(`${table}_`)) {
+      tableCacheMap.delete(key);
+    }
+  }
+};
+
 export const subscribeToTable = (
   table: string, 
   onUpdate: (payload: any) => void
@@ -418,6 +430,7 @@ export const mapCampaignToSupabase = (camp: any) => {
       auditChecklist: camp.auditChecklist,
       auditSignOffs: camp.auditSignOffs,
       requireDualAuditorConsensus: camp.requireDualAuditorConsensus,
+      auditScope: camp.auditScope,
       lastAuditedAt: camp.lastAuditedAt,
       lastAuditedBy: camp.lastAuditedBy,
       lastAuditPeriod: camp.lastAuditPeriod,
@@ -509,6 +522,9 @@ export const normalizeCampaign = (row: any): Campaign => {
     authorizedOfficers: meta.authorizedOfficers ?? row.authorizedOfficers,
     auditorGrants,
     auditChecklist: meta.auditChecklist ?? row.auditChecklist,
+    auditSignOffs: Array.isArray(meta.auditSignOffs) ? meta.auditSignOffs : (Array.isArray(row.auditSignOffs) ? row.auditSignOffs : undefined),
+    requireDualAuditorConsensus: meta.requireDualAuditorConsensus ?? row.requireDualAuditorConsensus,
+    auditScope: meta.auditScope ?? row.auditScope,
     lastAuditedAt: meta.lastAuditedAt ?? row.lastAuditedAt,
     lastAuditedBy: meta.lastAuditedBy ?? row.lastAuditedBy,
     lastAuditPeriod: meta.lastAuditPeriod ?? row.lastAuditPeriod,
@@ -805,6 +821,7 @@ export const fetchTableData = async <T>(table: string, options?: FetchDataFilter
 // CRUD Operations with Primary Key (`id`) Guard Deduplication
 // =========================================================================
 export const upsertTransaction = async (tx: Transaction) => {
+  invalidateSupabaseTableCache('transactions');
   const payload = mapTransactionToSupabase(tx);
   const { data, error } = await supabase
     .from('transactions')
@@ -814,6 +831,7 @@ export const upsertTransaction = async (tx: Transaction) => {
 };
 
 export const deleteTransaction = async (id: string) => {
+  invalidateSupabaseTableCache('transactions');
   const { error } = await supabase
     .from('transactions')
     .delete()
@@ -822,6 +840,7 @@ export const deleteTransaction = async (id: string) => {
 };
 
 export const upsertCampaign = async (camp: Campaign) => {
+  invalidateSupabaseTableCache('campaigns');
   const payload = mapCampaignToSupabase(camp);
   const { data, error } = await supabase
     .from('campaigns')
@@ -831,6 +850,7 @@ export const upsertCampaign = async (camp: Campaign) => {
 };
 
 export const deleteCampaign = async (id: string) => {
+  invalidateSupabaseTableCache('campaigns');
   const { error } = await supabase
     .from('campaigns')
     .delete()
@@ -839,6 +859,7 @@ export const deleteCampaign = async (id: string) => {
 };
 
 export const upsertMember = async (member: MemberRecord) => {
+  invalidateSupabaseTableCache('members');
   const payload = mapMemberToSupabase(member);
   const { data, error } = await supabase
     .from('members')
@@ -848,6 +869,7 @@ export const upsertMember = async (member: MemberRecord) => {
 };
 
 export const updateMemberDirect = async (member: MemberRecord, oldId?: string) => {
+  invalidateSupabaseTableCache('members');
   const payload = mapMemberToSupabase(member);
   const targetId = oldId || member.id;
   const { data, error } = await supabase
@@ -867,6 +889,7 @@ export const updateMemberDirect = async (member: MemberRecord, oldId?: string) =
 };
 
 export const deleteMember = async (id: string) => {
+  invalidateSupabaseTableCache('members');
   const { error } = await supabase
     .from('members')
     .delete()
@@ -875,6 +898,7 @@ export const deleteMember = async (id: string) => {
 };
 
 export const upsertExpense = async (expense: KumtluangExpense) => {
+  invalidateSupabaseTableCache('expenses');
   const payload = mapExpenseToSupabase(expense);
   const { data, error } = await supabase
     .from('expenses')
@@ -884,6 +908,7 @@ export const upsertExpense = async (expense: KumtluangExpense) => {
 };
 
 export const deleteExpense = async (id: string) => {
+  invalidateSupabaseTableCache('expenses');
   const { error } = await supabase
     .from('expenses')
     .delete()

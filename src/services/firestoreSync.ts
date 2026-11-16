@@ -10,10 +10,10 @@ export const recalibratePublicPoolStatsFromFirestore = async (...args: any[]) =>
 export const syncAllLocalExpensesToFirestore = async (...args: any[]) => {};
 export const fetchExpensesFromFirestore = async (...args: any[]): Promise<KumtluangExpense[]> => {
   try {
-    const fresh = await fetchTableData<KumtluangExpense>('expenses');
+    const fresh = await fetchTableData<KumtluangExpense>('expenses', { forceAll: true });
     if (Array.isArray(fresh) && fresh.length > 0) {
       saveStoredExpenses(fresh, true);
-      return fresh;
+      return getStoredExpenses();
     }
   } catch {}
   return getStoredExpenses();

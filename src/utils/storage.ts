@@ -803,15 +803,33 @@ export const saveStoredCampaigns = (campaigns: Campaign[], skipServerPush: boole
         } catch {}
       }
 
+      // When saving from background cloud/cache sync (skipServerPush === true), preserve newer local auditSignOffs
+      const prevTime = prevCamp ? new Date(prevCamp.updatedAt || prevCamp.updated_at || 0).getTime() : 0;
+      const incTime = new Date((c as any).updatedAt || (c as any).updated_at || 0).getTime();
+      const usePrevAuditState = skipServerPush && prevCamp && prevTime > incTime;
+      const effectiveSignOffs = usePrevAuditState
+        ? (prevCamp.auditSignOffs ?? prevCamp.metadata?.auditSignOffs)
+        : (c.auditSignOffs ?? (c as any).metadata?.auditSignOffs);
+      const effectiveLastAuditedAt = usePrevAuditState ? prevCamp.lastAuditedAt : c.lastAuditedAt;
+      const effectiveLastAuditedBy = usePrevAuditState ? prevCamp.lastAuditedBy : c.lastAuditedBy;
+      const effectiveUpdatedAt = usePrevAuditState ? prevCamp.updatedAt : (c as any).updatedAt;
+
       return {
         ...c,
         orgCode: code,
+        ...(effectiveUpdatedAt !== undefined ? { updatedAt: effectiveUpdatedAt } : {}),
+        ...(effectiveSignOffs !== undefined ? { auditSignOffs: effectiveSignOffs } : {}),
+        lastAuditedAt: effectiveLastAuditedAt,
+        lastAuditedBy: effectiveLastAuditedBy,
         ...(cleanGrants !== undefined ? { auditorGrants: cleanGrants } : {}),
         ...(effectiveExpenseHeads !== undefined ? { expenseHeads: effectiveExpenseHeads } : {}),
-        ...(c.metadata || cleanGrants !== undefined || effectiveExpenseHeads !== undefined
+        ...(c.metadata || cleanGrants !== undefined || effectiveExpenseHeads !== undefined || effectiveSignOffs !== undefined
           ? {
               metadata: {
                 ...(c.metadata || {}),
+                ...(effectiveSignOffs !== undefined ? { auditSignOffs: effectiveSignOffs } : {}),
+                lastAuditedAt: effectiveLastAuditedAt || null,
+                lastAuditedBy: effectiveLastAuditedBy || null,
                 ...(cleanGrants !== undefined ? { auditorGrants: cleanGrants } : {}),
                 ...(effectiveExpenseHeads !== undefined ? { expenseHeads: effectiveExpenseHeads } : {}),
                 ...(delGrantSet.size > 0 ? { deletedAuditorGrantIds: Array.from(delGrantSet) } : {})
@@ -1517,15 +1535,127 @@ export const getStoredTransactions = (): Transaction[] => {
 
 let _syncServerTxTimer: any = null;
 
+export const reconcileRecordAuditorVerifications = <T extends Record<string, any>>(
+  olderRec: T | undefined | null,
+  newerRec: T,
+  baseMerged?: T
+): T => {
+  const merged: any = baseMerged ? { ...baseMerged } : { ...(olderRec || {}), ...newerRec };
+  const verA = olderRec?.auditor_verifications || olderRec?.metadata?.auditor_verifications;
+  const verB = newerRec?.auditor_verifications || newerRec?.metadata?.auditor_verifications;
+
+  if (verA || verB) {
+    const mergedVer: Record<string, any> = {};
+    const keys = new Set([...Object.keys(verA || {}), ...Object.keys(verB || {})]);
+    for (const ak of keys) {
+      const entryA = verA?.[ak];
+      const entryB = verB?.[ak];
+      if (entryA && !entryB) {
+        mergedVer[ak] = entryA;
+      } else if (!entryA && entryB) {
+        mergedVer[ak] = entryB;
+      } else if (entryA && entryB) {
+        const tA = new Date(entryA.markedAt || 0).getTime();
+        const tB = new Date(entryB.markedAt || 0).getTime();
+        mergedVer[ak] = tB >= tA ? entryB : entryA;
+      }
+    }
+    merged.auditor_verifications = mergedVer;
+    const activeEntries = Object.values(mergedVer).filter(
+      (v: any) => v && (v.mark === 'verified' || v.mark === 'flagged')
+    );
+    const flaggedEntries = activeEntries.filter((v: any) => v.mark === 'flagged');
+    const verifiedEntries = activeEntries.filter((v: any) => v.mark === 'verified');
+
+    if (flaggedEntries.length > 0) {
+      merged.audit_mark = 'flagged';
+      merged.audit_query = flaggedEntries.map((f: any) => `${f.auditorName}: ${f.query || 'Query'}`).join(' | ');
+      merged.audit_marked_by = flaggedEntries.map((f: any) => f.auditorName).join(', ');
+    } else if (verifiedEntries.length > 0) {
+      merged.audit_mark = 'verified';
+      merged.audit_query = undefined;
+      merged.audit_marked_by = verifiedEntries.map((v: any) => v.auditorName).join(', ');
+    } else {
+      merged.audit_mark = undefined;
+      merged.audit_query = undefined;
+      merged.audit_marked_by = undefined;
+      merged.audit_marked_at = undefined;
+      merged.is_locked = false;
+      merged.locked_by = undefined;
+      merged.locked_at = undefined;
+    }
+
+    if (merged.metadata && typeof merged.metadata === 'object') {
+      merged.metadata = {
+        ...merged.metadata,
+        audit_mark: merged.audit_mark || null,
+        audit_query: merged.audit_query || null,
+        audit_marked_by: merged.audit_marked_by || null,
+        auditor_verifications: mergedVer,
+        is_locked: Boolean(merged.is_locked)
+      };
+    }
+    return merged as T;
+  }
+
+  if (
+    (newerRec?.metadata && newerRec.metadata.audit_mark === null) ||
+    ('audit_mark' in (newerRec || {}) && (newerRec.audit_mark === null || newerRec.audit_mark === undefined))
+  ) {
+    merged.audit_mark = undefined;
+    merged.audit_query = undefined;
+    merged.audit_marked_by = undefined;
+    merged.audit_marked_at = undefined;
+    if (newerRec?.is_locked === false || newerRec?.metadata?.is_locked === false) {
+      merged.is_locked = false;
+      merged.locked_by = undefined;
+      merged.locked_at = undefined;
+    }
+  }
+  return merged as T;
+};
+
 export const saveStoredTransactions = (transactions: Transaction[], skipServerPush: boolean = false) => {
   try {
-    localStorage.setItem(TRANSACTIONS_KEY, JSON.stringify(transactions));
-    localStorage.setItem('ronpay_transactions_v2', JSON.stringify(transactions));
-    localStorage.setItem('ronpay_transactions', JSON.stringify(transactions));
+    let finalTransactions = transactions;
+
+    // When saving a background/cloud sync snapshot (skipServerPush === true),
+    // never allow stale cached cloud verifications to overwrite newer local audit/undo actions!
+    if (skipServerPush && typeof localStorage !== 'undefined') {
+      try {
+        const rawExisting = localStorage.getItem(TRANSACTIONS_KEY);
+        if (rawExisting) {
+          const parsedExisting: Transaction[] = JSON.parse(rawExisting);
+          if (Array.isArray(parsedExisting) && parsedExisting.length > 0) {
+            const localMap = new Map<string, Transaction>();
+            for (const lt of parsedExisting) {
+              if (lt && lt.id) localMap.set(String(lt.id).toLowerCase().trim(), lt);
+            }
+            finalTransactions = transactions.map(inc => {
+              if (!inc || !inc.id) return inc;
+              const prev = localMap.get(String(inc.id).toLowerCase().trim());
+              if (!prev) return inc;
+              const prevTime = new Date(prev.updatedAt || prev.audit_marked_at || prev.timestamp || 0).getTime();
+              const incTime = new Date(inc.updatedAt || inc.audit_marked_at || inc.timestamp || 0).getTime();
+              const base = incTime >= prevTime ? { ...prev, ...inc } : { ...inc, ...prev };
+              return reconcileRecordAuditorVerifications(
+                incTime >= prevTime ? prev : inc,
+                incTime >= prevTime ? inc : prev,
+                base
+              );
+            });
+          }
+        }
+      } catch {}
+    }
+
+    localStorage.setItem(TRANSACTIONS_KEY, JSON.stringify(finalTransactions));
+    localStorage.setItem('ronpay_transactions_v2', JSON.stringify(finalTransactions));
+    localStorage.setItem('ronpay_transactions', JSON.stringify(finalTransactions));
 
     // Broadcast local event for immediate real-time sync across components/tabs
     if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('ronpay_transactions_updated', { detail: transactions }));
+      window.dispatchEvent(new CustomEvent('ronpay_transactions_updated', { detail: finalTransactions }));
       broadcastTabSync('transactions');
     }
 
@@ -1535,7 +1665,7 @@ export const saveStoredTransactions = (transactions: Transaction[], skipServerPu
         if (_syncServerTxTimer) clearTimeout(_syncServerTxTimer);
         _syncServerTxTimer = setTimeout(() => {
           const deletedIds = Array.from(getDeletedTransactionIds());
-          const newOrModifiedTxs = transactions.filter(t => t && t.id && (t.isSynced === false || (t as any).isOfflinePending));
+          const newOrModifiedTxs = finalTransactions.filter(t => t && t.id && (t.isSynced === false || (t as any).isOfflinePending));
           if (newOrModifiedTxs.length === 0 && deletedIds.length === 0) return;
           safeApiFetch('/api/data/sync', {
             method: 'POST',
@@ -1570,18 +1700,11 @@ export const saveStoredTransactions = (transactions: Transaction[], skipServerPu
                     const localTime = new Date((existingLocal as any).updatedAt || existingLocal.createdAt || existingLocal.timestamp || 0).getTime();
                     const serverTime = new Date((st as any).updatedAt || st.createdAt || st.timestamp || 0).getTime();
                     if (serverTime > localTime) {
-                      const mergedTx: Transaction = { ...existingLocal, ...st };
-                      if (st.metadata && st.metadata.audit_mark === null) {
-                        mergedTx.audit_mark = undefined;
-                        mergedTx.audit_query = undefined;
-                        mergedTx.audit_marked_by = undefined;
-                        mergedTx.audit_marked_at = undefined;
-                        if (st.metadata.is_locked === false) {
-                          mergedTx.is_locked = false;
-                          mergedTx.locked_by = undefined;
-                          mergedTx.locked_at = undefined;
-                        }
-                      }
+                      const mergedTx = reconcileRecordAuditorVerifications(
+                        existingLocal,
+                        st,
+                        { ...existingLocal, ...st }
+                      );
                       localMap.set(k, mergedTx);
                       hasNewFromOtherWindow = true;
                     }
@@ -2754,13 +2877,44 @@ export const restoreFullDatabaseBackup = (
     let restoredMembersCount = 0;
     let restoredExpensesCount = 0;
 
+    const restoreNowIso = new Date().toISOString();
+    const stampRestoredRecord = <T extends Record<string, any>>(rec: T): T => {
+      if (!rec || typeof rec !== 'object') return rec;
+      const rawVer = rec.auditor_verifications || rec.metadata?.auditor_verifications;
+      let stampedVer: Record<string, any> | undefined = undefined;
+      if (rawVer && typeof rawVer === 'object') {
+        stampedVer = {};
+        for (const [k, v] of Object.entries(rawVer)) {
+          if (v && typeof v === 'object') {
+            stampedVer[k] = { ...v, markedAt: restoreNowIso };
+          }
+        }
+      }
+      const nextMeta = rec.metadata && typeof rec.metadata === 'object'
+        ? {
+            ...rec.metadata,
+            audit_mark: rec.audit_mark || null,
+            ...(stampedVer ? { auditor_verifications: stampedVer } : {})
+          }
+        : rec.metadata;
+      return {
+        ...rec,
+        updatedAt: restoreNowIso,
+        ...(stampedVer ? { auditor_verifications: stampedVer } : {}),
+        ...(nextMeta ? { metadata: nextMeta } : {})
+      };
+    };
+
     if (isCreatorOnlyScope) {
       // -------------------------------------------------------------
       // CREATOR-SCOPED RESTORE: PROTECT ALL OTHER CREATORS' DATA!
       // Merges only this creator's campaigns, transactions, members & expenses.
       // NEVER overwrites or wipes other creators' Bawms!
       // -------------------------------------------------------------
-      const incomingCampaigns: Campaign[] = Array.isArray(data.campaigns) ? data.campaigns : [];
+      const incomingCampaigns: Campaign[] = (Array.isArray(data.campaigns) ? data.campaigns : []).map(c => ({
+        ...c,
+        updatedAt: restoreNowIso
+      }));
       const currentCampaigns = getStoredCampaigns();
       const incomingCampMap = new Map(incomingCampaigns.map(c => [String(c.id).toLowerCase().trim(), c]));
 
@@ -2781,15 +2935,22 @@ export const restoreFullDatabaseBackup = (
       saveStoredCampaigns(mergedCampaigns);
       restoredCampaignsCount = incomingCampaigns.length;
 
-      // 2. Merge transactions: merge incoming into existing transactions without losing others
-      const incomingTx: Transaction[] = Array.isArray(data.transactions) ? data.transactions : [];
+      // 2. Merge transactions: merge incoming into existing transactions with fresh restore timestamps
+      const incomingTx: Transaction[] = (Array.isArray(data.transactions) ? data.transactions : []).map(stampRestoredRecord);
       const existingTx = getStoredTransactions();
-      const mergedTx = mergeTransactions(existingTx, incomingTx);
-      saveStoredTransactions(mergedTx);
+      const txMap = new Map(existingTx.map(t => [String(t.id).toLowerCase().trim(), t]));
+      incomingTx.forEach(t => {
+        if (t && t.id) txMap.set(String(t.id).toLowerCase().trim(), t);
+      });
+      const mergedTx = Array.from(txMap.values());
+      saveStoredTransactions(mergedTx, true);
       restoredTxnCount = incomingTx.length;
 
       // 3. Merge members:
-      const incomingMembers: MemberRecord[] = Array.isArray(data.members) ? data.members : [];
+      const incomingMembers: MemberRecord[] = (Array.isArray(data.members) ? data.members : []).map(m => ({
+        ...m,
+        updatedAt: restoreNowIso
+      }));
       const existingMembers = getMembers();
       const memMap = new Map(existingMembers.map(m => [String(m.id).toLowerCase().trim(), m]));
       incomingMembers.forEach(m => {
@@ -2800,17 +2961,17 @@ export const restoreFullDatabaseBackup = (
       restoredMembersCount = incomingMembers.length;
 
       // 4. Merge expenses:
-      const incomingExpenses: KumtluangExpense[] = Array.isArray(data.expenses) ? data.expenses : [];
+      const incomingExpenses: KumtluangExpense[] = (Array.isArray(data.expenses) ? data.expenses : []).map(stampRestoredRecord);
       const existingExpenses = getStoredExpenses();
       const expMap = new Map(existingExpenses.map(e => [String(e.id).toLowerCase().trim(), e]));
       incomingExpenses.forEach(e => {
         if (e && e.id) expMap.set(String(e.id).toLowerCase().trim(), e);
       });
       const mergedExpenses = Array.from(expMap.values());
-      saveStoredExpenses(mergedExpenses);
+      saveStoredExpenses(mergedExpenses, true);
       restoredExpensesCount = incomingExpenses.length;
 
-      // Sync only the merged data to server
+      // Sync only the merged data to server & Supabase
       safeApiFetch('/api/data/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -2820,6 +2981,16 @@ export const restoreFullDatabaseBackup = (
           members: incomingMembers,
           expenses: incomingExpenses,
         })
+      }).catch(() => {});
+
+      import('../services/SupabaseSync').then(({ upsertCampaign, upsertTransaction, upsertExpense, invalidateSupabaseTableCache }) => {
+        invalidateSupabaseTableCache();
+        incomingCampaigns.forEach(c => upsertCampaign(c).catch(() => {}));
+        incomingTx.forEach(t => upsertTransaction(t).catch(() => {}));
+        incomingExpenses.forEach(e => upsertExpense(e).catch(() => {}));
+      }).catch(() => {});
+      import('../services/supabaseService').then(({ invalidateSupabaseTransactionsCache }) => {
+        invalidateSupabaseTransactionsCache();
       }).catch(() => {});
 
       recordAuditLog(
@@ -2841,21 +3012,31 @@ export const restoreFullDatabaseBackup = (
     }
 
     // Full system restore for Super Admin
+    const stampedCampaigns: Campaign[] = Array.isArray(data.campaigns)
+      ? data.campaigns.map((c: Campaign) => ({ ...c, updatedAt: restoreNowIso }))
+      : [];
+    const stampedTransactions: Transaction[] = Array.isArray(data.transactions)
+      ? data.transactions.map(stampRestoredRecord)
+      : [];
+    const stampedExpenses: KumtluangExpense[] = Array.isArray(data.expenses)
+      ? data.expenses.map(stampRestoredRecord)
+      : [];
+
     if (Array.isArray(data.campaigns)) {
-      saveStoredCampaigns(data.campaigns);
-      restoredCampaignsCount = data.campaigns.length;
+      saveStoredCampaigns(stampedCampaigns);
+      restoredCampaignsCount = stampedCampaigns.length;
     }
     if (Array.isArray(data.transactions)) {
-      saveStoredTransactions(data.transactions);
-      restoredTxnCount = data.transactions.length;
+      saveStoredTransactions(stampedTransactions, true);
+      restoredTxnCount = stampedTransactions.length;
     }
     if (Array.isArray(data.members)) {
       saveMembers(data.members);
       restoredMembersCount = data.members.length;
     }
     if (Array.isArray(data.expenses)) {
-      saveStoredExpenses(data.expenses);
-      restoredExpensesCount = data.expenses.length;
+      saveStoredExpenses(stampedExpenses, true);
+      restoredExpensesCount = stampedExpenses.length;
     }
     if (Array.isArray(data.staffAccounts)) {
       saveStoredStaffAccounts(data.staffAccounts);
@@ -2881,18 +3062,28 @@ export const restoreFullDatabaseBackup = (
       saveStoredUserPaidTxIds(data.userPaidTxIds);
     }
 
-    // Sync restored payload to server
+    // Sync restored payload to server & Supabase
     safeApiFetch('/api/data/sync', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        campaigns: data.campaigns,
-        transactions: data.transactions,
+        campaigns: stampedCampaigns,
+        transactions: stampedTransactions,
         members: data.members,
-        expenses: data.expenses,
+        expenses: stampedExpenses,
         staffAccounts: data.staffAccounts,
         creators: data.creatorsList || data.creators
       })
+    }).catch(() => {});
+
+    import('../services/SupabaseSync').then(({ upsertCampaign, upsertTransaction, upsertExpense, invalidateSupabaseTableCache }) => {
+      invalidateSupabaseTableCache();
+      stampedCampaigns.forEach(c => upsertCampaign(c).catch(() => {}));
+      stampedTransactions.forEach(t => upsertTransaction(t).catch(() => {}));
+      stampedExpenses.forEach(e => upsertExpense(e).catch(() => {}));
+    }).catch(() => {});
+    import('../services/supabaseService').then(({ invalidateSupabaseTransactionsCache }) => {
+      invalidateSupabaseTransactionsCache();
     }).catch(() => {});
 
     recordAuditLog(
@@ -5072,10 +5263,65 @@ export const getStoredExpenses = (campaignId?: string): KumtluangExpense[] => {
   }
 };
 
+export const reconcileExpenses = (
+  existingLocal: KumtluangExpense[],
+  incomingCloud: KumtluangExpense[]
+): KumtluangExpense[] => {
+  const delSet = getDeletedExpenseIds();
+  const map = new Map<string, KumtluangExpense>();
+
+  for (const le of existingLocal || []) {
+    if (!le || !le.id) continue;
+    const k = String(le.id).toLowerCase().trim();
+    if (delSet.has(k)) continue;
+    map.set(k, le);
+  }
+
+  for (const ce of incomingCloud || []) {
+    if (!ce || !ce.id) continue;
+    const k = String(ce.id).toLowerCase().trim();
+    if (delSet.has(k)) continue;
+    const prev = map.get(k);
+    if (!prev) {
+      map.set(k, ce);
+    } else {
+      const prevTime = new Date(prev.updatedAt || prev.audit_marked_at || prev.recordedAt || prev.spentDate || 0).getTime();
+      const incTime = new Date(ce.updatedAt || ce.audit_marked_at || ce.recordedAt || ce.spentDate || 0).getTime();
+      const base = incTime >= prevTime ? { ...prev, ...ce } : { ...ce, ...prev };
+      const merged = reconcileRecordAuditorVerifications(
+        incTime >= prevTime ? prev : ce,
+        incTime >= prevTime ? ce : prev,
+        base
+      );
+      map.set(k, merged);
+    }
+  }
+
+  return Array.from(map.values()).sort((a, b) => {
+    const timeA = new Date(a.spentDate || a.recordedAt || 0).getTime();
+    const timeB = new Date(b.spentDate || b.recordedAt || 0).getTime();
+    return timeB - timeA;
+  });
+};
+
 export const saveStoredExpenses = (expenses: KumtluangExpense[], skipServer: boolean = false): void => {
   try {
     const delSet = getDeletedExpenseIds();
-    const cleanExpenses = expenses.filter(e => e && e.id && !delSet.has(String(e.id).toLowerCase().trim()));
+    let cleanExpenses = expenses.filter(e => e && e.id && !delSet.has(String(e.id).toLowerCase().trim()));
+
+    // When saving a background/cloud sync snapshot (skipServer === true),
+    // reconcile per-auditor verifications by markedAt so stale cached cloud fetches never overwrite local audit/undo!
+    if (skipServer && typeof localStorage !== 'undefined') {
+      try {
+        const rawExisting = localStorage.getItem(KUMTLUANG_EXPENSES_KEY);
+        if (rawExisting) {
+          const parsedExisting: KumtluangExpense[] = JSON.parse(rawExisting);
+          if (Array.isArray(parsedExisting) && parsedExisting.length > 0) {
+            cleanExpenses = reconcileExpenses(parsedExisting, cleanExpenses);
+          }
+        }
+      } catch {}
+    }
 
     if (typeof localStorage !== 'undefined') {
       localStorage.setItem(KUMTLUANG_EXPENSES_KEY, JSON.stringify(cleanExpenses));
@@ -5457,34 +5703,12 @@ export function mergeTransactions(existing: Transaction[], incoming: Transaction
     } else {
       const prevTime = new Date(prev.updatedAt || prev.audit_marked_at || prev.audit_date || prev.timestamp || 0).getTime();
       const incTime = new Date(inc.updatedAt || inc.audit_marked_at || inc.audit_date || inc.timestamp || 0).getTime();
-      const newer = incTime >= prevTime ? inc : prev;
-      const merged: Transaction = incTime >= prevTime ? { ...prev, ...inc } : { ...inc, ...prev };
-      if (newer.metadata && newer.metadata.audit_mark === null) {
-        merged.audit_mark = undefined;
-        merged.audit_query = undefined;
-        merged.audit_marked_by = undefined;
-        merged.audit_marked_at = undefined;
-        if (newer.metadata.is_locked === false) {
-          merged.is_locked = false;
-          merged.locked_by = undefined;
-          merged.locked_at = undefined;
-        }
-      } else {
-        // Preserve local audit verification marks & locks if incoming row lacks them and local was marked more recently
-        if (prev.audit_mark !== undefined && inc.audit_mark === undefined && prevTime >= incTime) {
-          merged.audit_mark = prev.audit_mark;
-          merged.audit_query = prev.audit_query;
-          merged.audit_marked_by = prev.audit_marked_by;
-          merged.audit_marked_at = prev.audit_marked_at;
-        }
-        if (prev.is_locked !== undefined && inc.is_locked === undefined && prevTime >= incTime) {
-          merged.is_locked = prev.is_locked;
-          merged.locked_by = prev.locked_by;
-          merged.audit_date = prev.audit_date;
-          merged.audit_period = prev.audit_period;
-          merged.audit_notes = prev.audit_notes;
-        }
-      }
+      const base: Transaction = incTime >= prevTime ? { ...prev, ...inc } : { ...inc, ...prev };
+      const merged = reconcileRecordAuditorVerifications(
+        incTime >= prevTime ? prev : inc,
+        incTime >= prevTime ? inc : prev,
+        base
+      );
       map.set(k, merged);
     }
   });
@@ -5544,33 +5768,12 @@ export function reconcileWithAuthoritativeTransactions(
     if (cloudItem) {
       const prevTime = new Date(prev.updatedAt || prev.audit_marked_at || prev.audit_date || prev.timestamp || 0).getTime();
       const incTime = new Date(cloudItem.updatedAt || cloudItem.audit_marked_at || cloudItem.audit_date || cloudItem.timestamp || 0).getTime();
-      const newer = incTime >= prevTime ? cloudItem : prev;
-      const merged: Transaction = incTime >= prevTime ? { ...prev, ...cloudItem, isSynced: true } : { ...cloudItem, ...prev, isSynced: true };
-      if (newer.metadata && newer.metadata.audit_mark === null) {
-        merged.audit_mark = undefined;
-        merged.audit_query = undefined;
-        merged.audit_marked_by = undefined;
-        merged.audit_marked_at = undefined;
-        if (newer.metadata.is_locked === false) {
-          merged.is_locked = false;
-          merged.locked_by = undefined;
-          merged.locked_at = undefined;
-        }
-      } else {
-        if (prev.audit_mark !== undefined && cloudItem.audit_mark === undefined && prevTime >= incTime) {
-          merged.audit_mark = prev.audit_mark;
-          merged.audit_query = prev.audit_query;
-          merged.audit_marked_by = prev.audit_marked_by;
-          merged.audit_marked_at = prev.audit_marked_at;
-        }
-        if (prev.is_locked !== undefined && cloudItem.is_locked === undefined && prevTime >= incTime) {
-          merged.is_locked = prev.is_locked;
-          merged.locked_by = prev.locked_by;
-          merged.audit_date = prev.audit_date;
-          merged.audit_period = prev.audit_period;
-          merged.audit_notes = prev.audit_notes;
-        }
-      }
+      const base: Transaction = incTime >= prevTime ? { ...prev, ...cloudItem, isSynced: true } : { ...cloudItem, ...prev, isSynced: true };
+      const merged = reconcileRecordAuditorVerifications(
+        incTime >= prevTime ? prev : cloudItem,
+        incTime >= prevTime ? cloudItem : prev,
+        base
+      );
       cloudMap.set(k, merged);
     } else if (filterValid(prev)) {
       // Valid local transaction not yet in Supabase (or wiped by legacy reconcile) — preserve and sync UP to Supabase!
@@ -6669,14 +6872,54 @@ export const markBatchRecordsAuditVerification = (
         return t;
       });
       if (modifiedCount > 0) {
-        saveStoredTransactions(updated, false);
-        import('../services/SupabaseSync').then(({ upsertTransaction }) => {
+        const affectedCampIds = new Set(
+          modifiedTxs.map(t => String(t.campaignId || '').toLowerCase().trim()).filter(Boolean)
+        );
+        let updatedCampForSync: Campaign | undefined = undefined;
+        if (isClearing && affectedCampIds.size > 0) {
+          const allCamps = getStoredCampaigns();
+          allCamps.forEach(c => {
+            const cid = String(c.id || '').toLowerCase().trim();
+            if (affectedCampIds.has(cid)) {
+              const prevSigns = Array.isArray(c.auditSignOffs)
+                ? c.auditSignOffs
+                : Array.isArray((c as any).metadata?.auditSignOffs)
+                ? (c as any).metadata.auditSignOffs
+                : [];
+              if (prevSigns.some((s: any) => String(s?.auditorKey) === aKey)) {
+                const nextSigns = prevSigns.filter((s: any) => String(s?.auditorKey) !== aKey);
+                const nextCamp: Campaign = {
+                  ...c,
+                  auditSignOffs: nextSigns,
+                  lastAuditedAt: undefined,
+                  updatedAt: nowIso,
+                  metadata: {
+                    ...(c.metadata || {}),
+                    auditSignOffs: nextSigns,
+                    lastAuditedAt: null
+                  }
+                };
+                saveCampaign(nextCamp);
+                updatedCampForSync = nextCamp;
+              }
+            }
+          });
+        }
+        saveStoredTransactions(updated, true);
+        import('../services/SupabaseSync').then(({ upsertTransaction, invalidateSupabaseTableCache }) => {
+          invalidateSupabaseTableCache('transactions');
           modifiedTxs.forEach(tx => upsertTransaction(tx).catch(() => {}));
+        }).catch(() => {});
+        import('../services/supabaseService').then(({ invalidateSupabaseTransactionsCache }) => {
+          invalidateSupabaseTransactionsCache();
         }).catch(() => {});
         safeApiFetch('/api/audit/sync-action', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ items: syncItems })
+          body: JSON.stringify({
+            items: syncItems,
+            ...(updatedCampForSync ? { campaign: updatedCampForSync } : {})
+          })
         }).catch(() => {});
       }
     } else {
@@ -6728,14 +6971,51 @@ export const markBatchRecordsAuditVerification = (
         return e;
       });
       if (modifiedCount > 0) {
-        saveStoredExpenses(updated, false);
-        import('../services/SupabaseSync').then(({ upsertExpense }) => {
+        const affectedCampIds = new Set(
+          modifiedExps.map(e => String(e.campaignId || '').toLowerCase().trim()).filter(Boolean)
+        );
+        let updatedCampForSync: Campaign | undefined = undefined;
+        if (isClearing && affectedCampIds.size > 0) {
+          const allCamps = getStoredCampaigns();
+          allCamps.forEach(c => {
+            const cid = String(c.id || '').toLowerCase().trim();
+            if (affectedCampIds.has(cid)) {
+              const prevSigns = Array.isArray(c.auditSignOffs)
+                ? c.auditSignOffs
+                : Array.isArray((c as any).metadata?.auditSignOffs)
+                ? (c as any).metadata.auditSignOffs
+                : [];
+              if (prevSigns.some((s: any) => String(s?.auditorKey) === aKey)) {
+                const nextSigns = prevSigns.filter((s: any) => String(s?.auditorKey) !== aKey);
+                const nextCamp: Campaign = {
+                  ...c,
+                  auditSignOffs: nextSigns,
+                  lastAuditedAt: undefined,
+                  updatedAt: nowIso,
+                  metadata: {
+                    ...(c.metadata || {}),
+                    auditSignOffs: nextSigns,
+                    lastAuditedAt: null
+                  }
+                };
+                saveCampaign(nextCamp);
+                updatedCampForSync = nextCamp;
+              }
+            }
+          });
+        }
+        saveStoredExpenses(updated, true);
+        import('../services/SupabaseSync').then(({ upsertExpense, invalidateSupabaseTableCache }) => {
+          invalidateSupabaseTableCache('expenses');
           modifiedExps.forEach(exp => upsertExpense(exp).catch(() => {}));
         }).catch(() => {});
         safeApiFetch('/api/audit/sync-action', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ items: syncItems })
+          body: JSON.stringify({
+            items: syncItems,
+            ...(updatedCampForSync ? { campaign: updatedCampForSync } : {})
+          })
         }).catch(() => {});
       }
     }
