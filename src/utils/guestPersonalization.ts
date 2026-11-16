@@ -41,13 +41,33 @@ export const getGuestActivity = (): GuestActivity => {
     if (raw) {
       const parsed = JSON.parse(raw);
       if (parsed && typeof parsed === 'object') {
+        let lastDonorPhone = parsed.lastDonorPhone || undefined;
+        let lastDonorName = parsed.lastDonorName || undefined;
+
+        // Prevent cross-user leakage: if a user is logged in with a verified phone that differs from lastDonorPhone, strip the stale donor identity
+        try {
+          const rawProfile = localStorage.getItem('ronpay_creator_profile');
+          if (rawProfile) {
+            const prof = JSON.parse(rawProfile);
+            const profPhone = (prof?.phone || '').replace(/\D/g, '').slice(-10);
+            const donorPhone10 = (lastDonorPhone || '').replace(/\D/g, '').slice(-10);
+            if (profPhone && profPhone !== '9999999999' && donorPhone10 && donorPhone10 !== profPhone) {
+              lastDonorPhone = undefined;
+              lastDonorName = undefined;
+              delete parsed.lastDonorPhone;
+              delete parsed.lastDonorName;
+              localStorage.setItem(GUEST_ACTIVITY_KEY, JSON.stringify(parsed));
+            }
+          }
+        } catch {}
+
         return {
           visitCount: Number(parsed.visitCount) || 1,
           firstVisitedAt: parsed.firstVisitedAt || new Date().toISOString(),
           lastVisitedAt: parsed.lastVisitedAt || new Date().toISOString(),
           visitedCampaigns: Array.isArray(parsed.visitedCampaigns) ? parsed.visitedCampaigns : [],
-          lastDonorPhone: parsed.lastDonorPhone || undefined,
-          lastDonorName: parsed.lastDonorName || undefined,
+          lastDonorPhone,
+          lastDonorName,
           recentReceiptIds: Array.isArray(parsed.recentReceiptIds) ? parsed.recentReceiptIds : [],
           reengagementBannerDismissedAt: parsed.reengagementBannerDismissedAt,
           pwaBannerDismissedAt: parsed.pwaBannerDismissedAt,
@@ -147,6 +167,8 @@ export const recordGuestCampaignVisit = (campaign: {
 
 /**
  * Caches recent transaction details (phone number, name, receipt ID)
+ * Only stores lastDonorPhone / lastDonorName when an unauthenticated Guest is transacting for themselves,
+ * never when an Admin/Collector/Member/Auditor enters a Quick Entry or Cash transaction for another member.
  */
 export const recordGuestTransactionActivity = (tx: {
   id: string;
@@ -157,13 +179,27 @@ export const recordGuestTransactionActivity = (tx: {
   if (!tx || !tx.id) return;
   const current = getGuestActivity();
 
+  let shouldRecordDonorIdentity = true;
+  try {
+    const rawProfile = typeof window !== 'undefined' ? localStorage.getItem('ronpay_creator_profile') : null;
+    if (rawProfile) {
+      const prof = JSON.parse(rawProfile);
+      const profPhone = (prof?.phone || '').replace(/\D/g, '').slice(-10);
+      const profRole = (prof?.role || '').toUpperCase();
+      if (profPhone && profPhone !== '9999999999' && profRole !== 'GUEST') {
+        // A logged-in non-guest user is active; do not pollute guest donor identity with third-party member entries
+        shouldRecordDonorIdentity = false;
+      }
+    }
+  } catch {}
+
   const receipts = current.recentReceiptIds.filter(id => id !== tx.id);
   const updatedReceipts = [tx.id, ...receipts].slice(0, 10);
 
   const updated: GuestActivity = {
     ...current,
-    lastDonorPhone: tx.donorPhone ? tx.donorPhone.trim() : current.lastDonorPhone,
-    lastDonorName: tx.donorName ? tx.donorName.trim() : current.lastDonorName,
+    lastDonorPhone: shouldRecordDonorIdentity && tx.donorPhone ? tx.donorPhone.trim() : current.lastDonorPhone,
+    lastDonorName: shouldRecordDonorIdentity && tx.donorName ? tx.donorName.trim() : current.lastDonorName,
     recentReceiptIds: updatedReceipts,
   };
 
@@ -172,14 +208,14 @@ export const recordGuestTransactionActivity = (tx: {
 
 /**
  * Checks whether the current user is a repeat guest visitor:
- * - Profile is Guest (not an approved Creator or Admin)
+ * - Profile is genuinely an unauthenticated Guest (not a logged-in Creator, Admin, Auditor, or Member)
  * - Has visited 2 or more times, OR has cached campaigns/receipts from a prior session
  */
 export const isRepeatGuestVisitor = (profile?: CreatorProfile): boolean => {
   if (typeof window === 'undefined') return false;
 
-  // If user is a verified logged in creator or admin, they are not a guest
-  if (profile && profile.isApproved && profile.phone && profile.role !== 'GUEST' && profile.phone !== '9999999999') {
+  // If user is logged in with a real phone number and non-GUEST role (Creator, Admin, Auditor, Member), they are NOT a guest
+  if (profile && profile.phone && profile.phone !== '9999999999' && profile.role !== 'GUEST') {
     return false;
   }
 

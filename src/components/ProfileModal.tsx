@@ -428,7 +428,13 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
           <div className="flex justify-between items-center">
             <span className="text-slate-600 font-medium flex items-center gap-1.5"><ShieldCheck className="w-3.5 h-3.5 text-emerald-600" /> Account Status:</span>
             <span className="font-extrabold text-emerald-700 bg-emerald-100 border border-emerald-200 px-2.5 py-0.5 rounded text-[10px]">
-              {creatorProfile.isApproved ? 'APPROVED CREATOR' : 'STANDARD USER'}
+              {creatorProfile.isApproved
+                ? 'APPROVED CREATOR'
+                : creatorProfile.role === 'AUDITOR'
+                ? 'APPOINTED AUDITOR'
+                : creatorProfile.role === 'MEMBER'
+                ? 'VERIFIED MEMBER'
+                : 'STANDARD USER'}
             </span>
           </div>
 
@@ -742,8 +748,8 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
           </button>
         )}
 
-        {/* Creator Session Login / Logout Action */}
-        {creatorProfile.isApproved && creatorProfile.phone ? (
+        {/* Creator / Member / Auditor Session Login / Logout Action */}
+        {!isGuestUser(creatorProfile) && creatorProfile.phone ? (
           <div className="space-y-2">
             {onLoginClick && (
               <button

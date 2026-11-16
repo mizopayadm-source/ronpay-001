@@ -26,6 +26,7 @@ import {
   getNotificationPermission, 
   requestNotificationPermission 
 } from '../utils/pushNotifications';
+import { isGuestUser, getActiveAuditorGrantsForUser } from '../utils/storage';
 
 interface GuestReengagementBannerProps {
   creatorProfile: CreatorProfile;
@@ -61,12 +62,30 @@ export const GuestReengagementBanner: React.FC<GuestReengagementBannerProps> = (
     return () => window.removeEventListener('ronpay_guest_activity_updated', handleUpdate);
   }, []);
 
-  // Check if current user is guest
+  // Re-evaluate guest activity when creatorProfile changes so stale donor names are cleared
+  useEffect(() => {
+    setActivity(getGuestActivity());
+  }, [creatorProfile?.phone, creatorProfile?.role]);
+
+  // Check if current user is genuinely an unauthenticated guest (never show for logged-in Auditors, Members, Creators, or Admins)
   const isGuest = useMemo(() => {
     if (!creatorProfile) return true;
     const cleanRole = (creatorProfile.role || '').toUpperCase();
     const cleanPhone = (creatorProfile.phone || '').trim();
-    return cleanRole === 'GUEST' || !cleanPhone || cleanPhone === '9999999999' || !creatorProfile.isApproved;
+    if (!cleanPhone || cleanPhone === '9999999999') return true;
+    if (
+      creatorProfile.isAdmin ||
+      cleanRole === 'SUPER_ADMIN' ||
+      cleanRole === 'ADMIN' ||
+      cleanRole === 'MODERATOR' ||
+      cleanRole === 'AUDITOR' ||
+      cleanRole === 'MEMBER' ||
+      cleanRole === 'CREATOR'
+    ) {
+      return false;
+    }
+    if (getActiveAuditorGrantsForUser(cleanPhone).length > 0) return false;
+    return isGuestUser(creatorProfile);
   }, [creatorProfile]);
 
   // Repeat visitor: visitCount >= 2 OR has cached history

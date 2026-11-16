@@ -1644,7 +1644,10 @@ export const isGuestUser = (profile?: CreatorProfile | null): boolean => {
   if (profile.role === 'SUPER_ADMIN' || profile.role === 'ADMIN' || profile.role === 'MODERATOR') return false;
   const cleanName = (profile.name || '').trim().toLowerCase();
   const phone = (profile.phone || '').trim();
-  if (!phone || phone === '9999999999' || profile.role === 'GUEST') return true;
+  if (!phone || phone === '9999999999') return true;
+  if (profile.role === 'AUDITOR' || profile.role === 'MEMBER' || profile.role === 'CREATOR') return false;
+  if (getActiveAuditorGrantsForUser(phone).length > 0) return false;
+  if (profile.role === 'GUEST') return true;
   if (cleanName === 'khualmi' || cleanName === 'khualmi (guest user)' || cleanName === 'guest user' || cleanName === 'guest') return true;
   return false;
 };
@@ -1693,6 +1696,22 @@ export const getStoredCreatorProfile = (): CreatorProfile => {
           return GUEST_CREATOR_PROFILE;
         }
 
+        // Auto-upgrade any existing Auditor session that was previously saved with role 'GUEST'
+        const cleanPhone10 = (parsed.phone || '').replace(/\D/g, '').slice(-10);
+        if (cleanPhone10 && cleanPhone10 !== '9999999999') {
+          const activeAuditorGrants = getActiveAuditorGrantsForUser(cleanPhone10);
+          if (activeAuditorGrants.length > 0 && (parsed.role === 'GUEST' || (parsed.designation && parsed.designation.includes('Khualmi (Guest)')))) {
+            const primaryGrant = activeAuditorGrants[0];
+            parsed.role = 'AUDITOR';
+            const campTitle = primaryGrant.campaignTitle || primaryGrant.campaign_title || parsed.orgName || 'RonPay Bawm';
+            parsed.designation = `Sum Endiktu (Auditor) - ${campTitle}`;
+            if (!parsed.name || parsed.name.toLowerCase().includes('khualmi') || parsed.name.toLowerCase().includes('guest')) {
+              parsed.name = primaryGrant.auditorName || primaryGrant.auditor_name || parsed.name;
+            }
+            localStorage.setItem(CREATOR_PROFILE_KEY, JSON.stringify(parsed));
+          }
+        }
+
         // Ensure Auditors and standard Members cannot masquerade as approved QR Creators
         if (parsed.role === 'AUDITOR' || parsed.role === 'MEMBER') {
           parsed.isApproved = false;
@@ -1704,7 +1723,7 @@ export const getStoredCreatorProfile = (): CreatorProfile => {
           localStorage.setItem(CREATOR_PROFILE_KEY, JSON.stringify(parsed));
         }
 
-        // Explicitly non-admin profile check (e.g. TESTER, DEVELOPER, MEMBER, CREATOR, GUEST)
+        // Explicitly non-admin profile check (e.g. TESTER, DEVELOPER, MEMBER, CREATOR, AUDITOR, GUEST)
         const isNonAdminProfile = !parsed.isAdmin && parsed.role !== 'SUPER_ADMIN' && parsed.role !== 'ADMIN';
         if (isNonAdminProfile) {
           if (typeof window !== 'undefined') {
@@ -1737,7 +1756,7 @@ export const getStoredCreatorProfile = (): CreatorProfile => {
 
         // 2. Otherwise, check if user is a normal Guest
         const cleanName = (parsed.name || '').trim().toLowerCase();
-        const isGuestProfile = parsed.role === 'GUEST' || !parsed.phone || parsed.phone === '9999999999' || cleanName === 'khualmi' || cleanName === 'khualmi (guest user)' || cleanName === 'guest user';
+        const isGuestProfile = (parsed.role === 'GUEST' && getActiveAuditorGrantsForUser(parsed.phone || '').length === 0) || !parsed.phone || parsed.phone === '9999999999' || cleanName === 'khualmi' || cleanName === 'khualmi (guest user)' || cleanName === 'guest user';
         if (isGuestProfile) {
           parsed.isAdmin = false;
           parsed.role = 'GUEST';
@@ -1774,6 +1793,23 @@ export const logoutCreator = (): CreatorProfile => {
 export const loginCreator = (profile: CreatorProfile): void => {
   try {
     localStorage.setItem(CREATOR_PROFILE_KEY, JSON.stringify(profile));
+    // Clear any mismatched donor identity from ronpay_guest_activity_v1 so another user's name/phone never appears
+    if (typeof window !== 'undefined' && profile.phone && profile.phone !== '9999999999') {
+      try {
+        const rawGuestAct = localStorage.getItem('ronpay_guest_activity_v1');
+        if (rawGuestAct) {
+          const parsedAct = JSON.parse(rawGuestAct);
+          const cleanProfilePhone = profile.phone.replace(/\D/g, '').slice(-10);
+          const cleanDonorPhone = (parsedAct?.lastDonorPhone || '').replace(/\D/g, '').slice(-10);
+          if (cleanDonorPhone && cleanDonorPhone !== cleanProfilePhone) {
+            delete parsedAct.lastDonorPhone;
+            delete parsedAct.lastDonorName;
+            localStorage.setItem('ronpay_guest_activity_v1', JSON.stringify(parsedAct));
+            window.dispatchEvent(new CustomEvent('ronpay_guest_activity_updated', { detail: parsedAct }));
+          }
+        }
+      } catch {}
+    }
     if (profile.isAdmin || profile.role === 'SUPER_ADMIN' || profile.role === 'ADMIN') {
       sessionStorage.setItem('ronpay_admin_auth', 'true');
       localStorage.setItem(ADMIN_AUTH_LOCAL_KEY, 'true');

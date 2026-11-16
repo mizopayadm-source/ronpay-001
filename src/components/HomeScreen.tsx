@@ -243,10 +243,23 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   // Global Find Bawm / Campaign search query
   const [globalSearchQuery, setGlobalSearchQuery] = useState('');
 
-  // Check if current session is a Guest User (non-logged-in explorer or guest role)
+  // Check if current session is a Guest User (non-logged-in explorer or guest role without auditor permit)
   const isGuestUser = useMemo(() => {
     if (!creatorProfile) return true;
-    if (!creatorProfile.phone || creatorProfile.phone.trim() === '') return true;
+    const phone = (creatorProfile.phone || '').trim();
+    if (!phone || phone === '9999999999') return true;
+    if (
+      creatorProfile.isAdmin ||
+      creatorProfile.role === 'SUPER_ADMIN' ||
+      creatorProfile.role === 'ADMIN' ||
+      creatorProfile.role === 'MODERATOR' ||
+      creatorProfile.role === 'AUDITOR' ||
+      creatorProfile.role === 'MEMBER' ||
+      creatorProfile.role === 'CREATOR'
+    ) {
+      return false;
+    }
+    if (getActiveAuditorGrantsForUser(phone).length > 0) return false;
     if (creatorProfile.role === 'GUEST') return true;
     if (creatorProfile.name === 'Khualmi (Guest User)' || (creatorProfile.name && creatorProfile.name.toLowerCase().includes('guest'))) return true;
     return false;
@@ -827,11 +840,11 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-3 rounded-2xl border border-indigo-800/60 shadow-xs flex flex-col @2xl:flex-row @2xl:items-center justify-between gap-2.5 overflow-hidden">
           <div className="flex items-center gap-2.5 min-w-0 flex-1">
             <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold shadow-xs shrink-0 ${
-              creatorProfile.isApproved && creatorProfile.phone
+              !isGuestUser && creatorProfile.phone
                 ? 'bg-emerald-600/80 border border-emerald-400/40 text-emerald-100'
                 : 'bg-indigo-600/80 border border-indigo-400/40 text-amber-300'
             }`}>
-              {creatorProfile.isApproved && creatorProfile.phone ? (
+              {!isGuestUser && creatorProfile.phone ? (
                 <UserCheck className="w-4 h-4 text-emerald-200" />
               ) : (
                 <Lock className="w-4 h-4 text-amber-300" />
@@ -840,23 +853,23 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-1.5 flex-wrap">
                 <span className="font-black text-xs sm:text-sm text-white truncate max-w-full">
-                  {creatorProfile.isApproved && creatorProfile.phone
+                  {!isGuestUser && creatorProfile.phone
                     ? creatorProfile.name
                     : (language === 'mizo' ? 'Creator & Member Login' : 'Creator & Member Login')}
                 </span>
                 <span className={`text-[8.5px] font-black uppercase px-1.5 py-0.2 rounded-full border shrink-0 ${
-                  creatorProfile.isApproved && creatorProfile.phone
+                  !isGuestUser && creatorProfile.phone
                     ? 'bg-emerald-500/20 text-emerald-300 border-emerald-400/40'
                     : 'bg-amber-500/20 text-amber-300 border-amber-400/40'
                 }`}>
-                  {creatorProfile.isApproved && creatorProfile.phone
+                  {!isGuestUser && creatorProfile.phone
                     ? (creatorProfile.role || 'CREATOR')
                     : 'GUEST'}
                 </span>
               </div>
               <p className="text-[10px] text-slate-300 truncate mt-0.5">
-                {creatorProfile.isApproved && creatorProfile.phone
-                  ? `${creatorProfile.orgName || 'RonPay Registered'} • ${creatorProfile.phone}`
+                {!isGuestUser && creatorProfile.phone
+                  ? `${creatorProfile.designation || creatorProfile.orgName || 'RonPay Registered'} • ${creatorProfile.phone}`
                   : (language === 'mizo' ? 'Luhna leh Account inthlakna (Phone & MPIN)' : 'Login & Switch Account (Phone & MPIN)')}
               </p>
             </div>
@@ -902,13 +915,13 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               id="home-open-login-btn"
               onClick={onOpenLogin}
               className={`w-full @2xl:w-auto justify-center px-2 py-2 @2xl:px-3 @2xl:py-1.5 rounded-xl font-black text-[10.5px] transition cursor-pointer flex items-center gap-1 shadow-sm active:scale-95 whitespace-nowrap min-w-0 ${
-                creatorProfile.isApproved && creatorProfile.phone
+                !isGuestUser && creatorProfile.phone
                   ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950'
                   : 'bg-amber-400 hover:bg-amber-300 text-slate-950'
               }`}
             >
               <LogIn className="w-3.5 h-3.5 shrink-0" />
-              <span className="truncate">{creatorProfile.isApproved && creatorProfile.phone ? 'Switch / Login' : (language === 'mizo' ? 'Lut Rawh' : 'Login')}</span>
+              <span className="truncate">{!isGuestUser && creatorProfile.phone ? 'Switch / Login' : (language === 'mizo' ? 'Lut Rawh' : 'Login')}</span>
             </button>
           </div>
         </div>

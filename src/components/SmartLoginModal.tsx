@@ -664,12 +664,11 @@ export const SmartLoginModal: React.FC<SmartLoginModalProps> = ({
           `Auditor (${rawUser})`;
         const campTitle = primaryAuditorGrant.campaignTitle || primaryAuditorGrant.campaign_title || 'RonPay Bawm';
 
-        // 6a) Member ni sa a nih chuan Member nihna keng telin Auditor permit pek belh a ni
-        // 6b) Member la ni lo a nih chuan Guest user anga awmin Auditor permit pek a ni
-        const assignedRole: UserRole = matchedMember ? 'MEMBER' : 'GUEST';
+        // Appointed Auditor with an active time-bound permit always gets 'AUDITOR' role (never 'GUEST')
+        const assignedRole: UserRole = 'AUDITOR';
         const designationLabel = matchedMember
-          ? `Member (${matchedMember.id}) & Sum Endiktu Permit - ${campTitle}`
-          : `Khualmi (Guest) & Sum Endiktu Permit - ${campTitle}`;
+          ? `Sum Endiktu (Auditor) & Member (${matchedMember.id}) - ${campTitle}`
+          : `Sum Endiktu (Auditor) - ${campTitle}`;
 
         const profile: CreatorProfile = {
           id: matchedMember?.id,
