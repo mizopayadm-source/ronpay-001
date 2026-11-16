@@ -17,7 +17,8 @@ import {
   saveStoredAuditorGrants,
   getStoredDeletedAuditorGrantIds,
   saveStoredDeletedAuditorGrantIds,
-  reconcileWithAuthoritativeTransactions
+  reconcileWithAuthoritativeTransactions,
+  saveStoredExpenses
 } from '../utils/storage';
 import { broadcastStateChange } from './crossTabSync';
 
@@ -888,6 +889,13 @@ export async function fetchSupabaseCampaigns(): Promise<Campaign[]> {
       authorizedOfficers: meta.authorizedOfficers ?? row.authorizedOfficers,
       auditorGrants,
       auditChecklist: meta.auditChecklist ?? row.auditChecklist,
+      auditSignOffs: Array.isArray(meta.auditSignOffs) ? meta.auditSignOffs : (Array.isArray(row.auditSignOffs) ? row.auditSignOffs : undefined),
+      requireDualAuditorConsensus: meta.requireDualAuditorConsensus ?? row.requireDualAuditorConsensus,
+      auditScope: meta.auditScope ?? row.auditScope,
+      coAuditAlert: meta.coAuditAlert !== undefined ? meta.coAuditAlert : row.coAuditAlert,
+      appointedAuditPeriod: meta.appointedAuditPeriod ?? row.appointedAuditPeriod,
+      appointedAuditFromDate: meta.appointedAuditFromDate ?? row.appointedAuditFromDate,
+      appointedAuditToDate: meta.appointedAuditToDate ?? row.appointedAuditToDate,
       lastAuditedAt: meta.lastAuditedAt ?? row.lastAuditedAt,
       lastAuditedBy: meta.lastAuditedBy ?? row.lastAuditedBy,
       lastAuditPeriod: meta.lastAuditPeriod ?? row.lastAuditPeriod,
@@ -907,6 +915,15 @@ export async function upsertSupabaseCampaign(camp: Campaign): Promise<boolean> {
   const supabase = getSupabase();
   if (!supabase || !camp || !camp.id) return false;
 
+  const rawGrants = Array.isArray(camp.auditorGrants)
+    ? camp.auditorGrants
+    : (Array.isArray((camp as any).metadata?.auditorGrants) ? (camp as any).metadata.auditorGrants : undefined);
+  const delGrantIds = getStoredDeletedAuditorGrantIds();
+  const delGrantSet = new Set(delGrantIds.map(id => String(id).toLowerCase().trim()));
+  const cleanGrants = Array.isArray(rawGrants)
+    ? rawGrants.filter((g: any) => g && g.id && !delGrantSet.has(String(g.id).toLowerCase().trim()))
+    : undefined;
+
   const row = {
     id: camp.id,
     title: camp.title || 'RonPay Bawm',
@@ -923,6 +940,7 @@ export async function upsertSupabaseCampaign(camp: Campaign): Promise<boolean> {
     image_url: camp.imageUrl || null,
     is_approved: camp.isApproved ?? true,
     allow_public_group_deposits: camp.allowPublicGroupDeposits ?? true,
+    updated_at: new Date().toISOString(),
     metadata: {
       ...((camp as any).metadata || {}),
       subCategories: camp.subCategories,
@@ -955,13 +973,16 @@ export async function upsertSupabaseCampaign(camp: Campaign): Promise<boolean> {
       urgencyLevel: camp.urgencyLevel,
       officerPasscode: camp.officerPasscode,
       authorizedOfficers: camp.authorizedOfficers,
-      auditorGrants: Array.isArray(camp.auditorGrants)
-        ? camp.auditorGrants.filter(g => g && g.id && !getStoredDeletedAuditorGrantIds().includes(String(g.id).toLowerCase().trim()))
-        : [],
-      deletedAuditorGrantIds: getStoredDeletedAuditorGrantIds(),
+      ...(cleanGrants !== undefined ? { auditorGrants: cleanGrants } : {}),
+      deletedAuditorGrantIds: delGrantIds,
       auditChecklist: camp.auditChecklist,
       auditSignOffs: camp.auditSignOffs,
       requireDualAuditorConsensus: camp.requireDualAuditorConsensus,
+      auditScope: camp.auditScope ?? (camp as any).metadata?.auditScope,
+      coAuditAlert: camp.coAuditAlert !== undefined ? camp.coAuditAlert : ((camp as any).metadata?.coAuditAlert ?? null),
+      appointedAuditPeriod: (camp as any).appointedAuditPeriod ?? (camp as any).metadata?.appointedAuditPeriod,
+      appointedAuditFromDate: (camp as any).appointedAuditFromDate ?? (camp as any).metadata?.appointedAuditFromDate,
+      appointedAuditToDate: (camp as any).appointedAuditToDate ?? (camp as any).metadata?.appointedAuditToDate,
       lastAuditedAt: camp.lastAuditedAt,
       lastAuditedBy: camp.lastAuditedBy,
       lastAuditPeriod: camp.lastAuditPeriod,
@@ -1749,13 +1770,18 @@ export async function loadSupabaseInitialState(): Promise<{
   }
 
   try {
-    const [txns, camps, mems, users, pool] = await Promise.all([
+    const [txns, camps, mems, users, pool, exps] = await Promise.all([
       fetchSupabaseTransactions(),
       fetchSupabaseCampaigns(),
       fetchSupabaseMembers(),
       fetchSupabaseUsers(),
       fetchSupabaseFundPool(),
+      import('./SupabaseSync').then(({ fetchTableData }) => fetchTableData<any>('expenses', { forceAll: true, bypassCache: true })).catch(() => [])
     ]);
+
+    if (Array.isArray(exps) && exps.length > 0) {
+      saveStoredExpenses(exps, true);
+    }
 
     let finalTxns = Array.isArray(txns) && txns.length > 0 ? txns : [];
 
@@ -1793,7 +1819,7 @@ export async function loadSupabaseInitialState(): Promise<{
       restoreCacheToSupabase(finalTxns).catch(e => console.warn('Auto restore note:', e));
     }
 
-    // Update secondary cache and server SSOT
+    // Update local campaigns store without pushing stale local browser snapshots back to server
     if (camps && camps.length > 0) {
       const localCamps = getStoredCampaigns();
       const mergedCamps = [...camps];
@@ -1823,14 +1849,13 @@ export async function loadSupabaseInitialState(): Promise<{
                 expenseHeads: locHeads
               }
             };
-            upsertSupabaseCampaign(mergedCamps[remIdx]).catch(() => {});
           }
         } else {
           mergedCamps.push(loc);
           upsertSupabaseCampaign(loc).catch(() => {});
         }
       }
-      saveStoredCampaigns(mergedCamps, false);
+      saveStoredCampaigns(mergedCamps, true);
     }
     let finalMembers = mems && mems.length > 0 ? mems : getMembers();
     if (mems && mems.length > 0) {

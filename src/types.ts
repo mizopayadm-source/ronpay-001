@@ -169,6 +169,7 @@ export interface Campaign {
   auditSignOffs?: AuditorSignOffEntry[];
   requireDualAuditorConsensus?: boolean;
   auditScope?: 'both' | 'expenditure_only';
+  coAuditAlert?: CoAuditAlert | null;
   auditReconciliation?: {
     bankBalance?: number;
     cashInHand?: number;
@@ -181,6 +182,22 @@ export interface Campaign {
   definedAbcList?: string[];
   workspaceMode?: 'hybrid' | 'org_only';
   metadata?: Record<string, any>;
+}
+
+export interface CoAuditAlert {
+  id: string;
+  status: 'awaiting_co_auditor' | 'discrepancy_alert' | 'finalized';
+  triggeredByKey: string;
+  triggeredByName: string;
+  triggeredByPhone?: string;
+  targetAuditorKey?: string;
+  targetAuditorName?: string;
+  submittedAt: string;
+  discrepancyCount: number;
+  txDiffCount: number;
+  expDiffCount: number;
+  summaryMessage: string;
+  dismissedByKeys?: string[];
 }
 
 export interface AuditorVerificationEntry {

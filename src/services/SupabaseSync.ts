@@ -431,6 +431,7 @@ export const mapCampaignToSupabase = (camp: any) => {
       auditSignOffs: camp.auditSignOffs,
       requireDualAuditorConsensus: camp.requireDualAuditorConsensus,
       auditScope: camp.auditScope,
+      coAuditAlert: camp.coAuditAlert ?? null,
       lastAuditedAt: camp.lastAuditedAt,
       lastAuditedBy: camp.lastAuditedBy,
       lastAuditPeriod: camp.lastAuditPeriod,
@@ -525,6 +526,7 @@ export const normalizeCampaign = (row: any): Campaign => {
     auditSignOffs: Array.isArray(meta.auditSignOffs) ? meta.auditSignOffs : (Array.isArray(row.auditSignOffs) ? row.auditSignOffs : undefined),
     requireDualAuditorConsensus: meta.requireDualAuditorConsensus ?? row.requireDualAuditorConsensus,
     auditScope: meta.auditScope ?? row.auditScope,
+    coAuditAlert: meta.coAuditAlert ?? row.coAuditAlert ?? undefined,
     lastAuditedAt: meta.lastAuditedAt ?? row.lastAuditedAt,
     lastAuditedBy: meta.lastAuditedBy ?? row.lastAuditedBy,
     lastAuditPeriod: meta.lastAuditPeriod ?? row.lastAuditPeriod,
@@ -599,6 +601,7 @@ export interface FetchDataFilterOptions {
   userPaidIds?: string[];
   campaignId?: string;
   forceAll?: boolean;
+  bypassCache?: boolean;
 }
 
 const setTableCache = (key: string, data: any[]) => {
@@ -628,12 +631,12 @@ export const fetchTableData = async <T>(table: string, options?: FetchDataFilter
     }
   }
 
-  // 60-second memory cache to deduplicate rapid component queries and eliminate egress waste
+  // Memory cache to deduplicate rapid component queries (skip when bypassCache is true)
   const cacheKey = `${table}_${options?.campaignId || 'all'}`;
   const cached = tableCacheMap.get(cacheKey);
   const now = Date.now();
   const minInterval = options?.forceAll ? 15000 : 60000;
-  if (cached && (now - cached.timestamp < minInterval)) {
+  if (!options?.bypassCache && cached && (now - cached.timestamp < minInterval)) {
     return cached.data as unknown as T[];
   }
 

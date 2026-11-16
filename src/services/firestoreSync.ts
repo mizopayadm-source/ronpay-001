@@ -8,9 +8,9 @@ export const syncPricingConfigToFirestore = async (...args: any[]) => {};
 export const syncAnnouncementToFirestore = async (...args: any[]) => {};
 export const recalibratePublicPoolStatsFromFirestore = async (...args: any[]) => {};
 export const syncAllLocalExpensesToFirestore = async (...args: any[]) => {};
-export const fetchExpensesFromFirestore = async (...args: any[]): Promise<KumtluangExpense[]> => {
+export const fetchExpensesFromFirestore = async (force: boolean = false, ..._args: any[]): Promise<KumtluangExpense[]> => {
   try {
-    const fresh = await fetchTableData<KumtluangExpense>('expenses', { forceAll: true });
+    const fresh = await fetchTableData<KumtluangExpense>('expenses', { forceAll: true, bypassCache: Boolean(force) });
     if (Array.isArray(fresh) && fresh.length > 0) {
       saveStoredExpenses(fresh, true);
       return getStoredExpenses();

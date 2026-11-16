@@ -812,6 +812,9 @@ export const saveStoredCampaigns = (campaigns: Campaign[], skipServerPush: boole
         : (c.auditSignOffs ?? (c as any).metadata?.auditSignOffs);
       const effectiveLastAuditedAt = usePrevAuditState ? prevCamp.lastAuditedAt : c.lastAuditedAt;
       const effectiveLastAuditedBy = usePrevAuditState ? prevCamp.lastAuditedBy : c.lastAuditedBy;
+      const effectiveCoAuditAlert = usePrevAuditState
+        ? (prevCamp.coAuditAlert ?? prevCamp.metadata?.coAuditAlert)
+        : (c.coAuditAlert !== undefined ? c.coAuditAlert : (c as any).metadata?.coAuditAlert);
       const effectiveUpdatedAt = usePrevAuditState ? prevCamp.updatedAt : (c as any).updatedAt;
 
       return {
@@ -819,15 +822,17 @@ export const saveStoredCampaigns = (campaigns: Campaign[], skipServerPush: boole
         orgCode: code,
         ...(effectiveUpdatedAt !== undefined ? { updatedAt: effectiveUpdatedAt } : {}),
         ...(effectiveSignOffs !== undefined ? { auditSignOffs: effectiveSignOffs } : {}),
+        ...(effectiveCoAuditAlert !== undefined ? { coAuditAlert: effectiveCoAuditAlert } : {}),
         lastAuditedAt: effectiveLastAuditedAt,
         lastAuditedBy: effectiveLastAuditedBy,
         ...(cleanGrants !== undefined ? { auditorGrants: cleanGrants } : {}),
         ...(effectiveExpenseHeads !== undefined ? { expenseHeads: effectiveExpenseHeads } : {}),
-        ...(c.metadata || cleanGrants !== undefined || effectiveExpenseHeads !== undefined || effectiveSignOffs !== undefined
+        ...(c.metadata || cleanGrants !== undefined || effectiveExpenseHeads !== undefined || effectiveSignOffs !== undefined || effectiveCoAuditAlert !== undefined
           ? {
               metadata: {
                 ...(c.metadata || {}),
                 ...(effectiveSignOffs !== undefined ? { auditSignOffs: effectiveSignOffs } : {}),
+                ...(effectiveCoAuditAlert !== undefined ? { coAuditAlert: effectiveCoAuditAlert } : {}),
                 lastAuditedAt: effectiveLastAuditedAt || null,
                 lastAuditedBy: effectiveLastAuditedBy || null,
                 ...(cleanGrants !== undefined ? { auditorGrants: cleanGrants } : {}),
@@ -7102,18 +7107,36 @@ export const lockCampaignAuditPeriod = (
   const shouldWaitForCoAuditor = isDualMode && mergedSignOffs.length < 2 && !options?.forceFinalLock;
 
   if (shouldWaitForCoAuditor && targetCamp) {
+    const awaitingAlert = {
+      id: `ALERT_${Date.now()}`,
+      status: 'awaiting_co_auditor' as const,
+      triggeredByKey: aKey,
+      triggeredByName: auditorName,
+      triggeredByPhone: auditorPhone || '',
+      submittedAt: nowIso,
+      discrepancyCount: 0,
+      txDiffCount: 0,
+      expDiffCount: 0,
+      summaryMessage: `📤 ${auditorName}-in he period [${periodLabel}] audit a zo tawh a, Co-Auditor endik zawh & cross-check nghah mek a ni.`
+    };
     const partialCamp: Campaign = {
       ...targetCamp,
       auditSignOffs: mergedSignOffs,
+      coAuditAlert: awaitingAlert,
       lastAuditPeriod: periodLabel,
       lastAuditNotes: notes || targetCamp.lastAuditNotes,
       updatedAt: nowIso,
       metadata: {
         ...(targetCamp.metadata || {}),
-        auditSignOffs: mergedSignOffs
+        auditSignOffs: mergedSignOffs,
+        coAuditAlert: awaitingAlert
       }
     };
     saveCampaign(partialCamp);
+    import('../services/SupabaseSync').then(({ upsertCampaign, invalidateSupabaseTableCache }) => {
+      invalidateSupabaseTableCache('campaigns');
+      upsertCampaign(partialCamp).catch(() => {});
+    }).catch(() => {});
     safeApiFetch('/api/audit/sync-action', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -7122,7 +7145,7 @@ export const lockCampaignAuditPeriod = (
 
     recordAuditLog(
       'Co-Auditor First Sign-Off Recorded (1/2)',
-      `Auditor ${auditorName} (${auditorPhone || 'N/A'}) signed off period [${periodLabel}] in campaign ${campaignId}. Waiting for Co-Auditor sign-off to finalize lock.`,
+      `Auditor ${auditorName} (${auditorPhone || 'N/A'}) submitted period [${periodLabel}] in campaign ${campaignId}. Waiting for Co-Auditor cross-check to finalize.`,
       'campaign',
       campaignId,
       auditorName
@@ -7138,7 +7161,27 @@ export const lockCampaignAuditPeriod = (
     };
   }
 
-  const finalLockedByLabel = signedAuditorNames.length > 1 ? signedAuditorNames.join(' & ') : auditorName;
+  // Ensure in Dual Mode final lock all active appointed auditors who matched are represented in mergedSignOffs
+  if (isDualMode) {
+    for (const g of allGrants) {
+      const gPhone = g.auditorPhone || g.auditor_phone || '';
+      const gName = g.auditorName || g.auditor_name || 'Auditor';
+      const gKey = normalizeAuditorKey(gPhone, gName);
+      if (!signMap.has(gKey)) {
+        signMap.set(gKey, {
+          auditorKey: gKey,
+          auditorPhone: gPhone || 'N/A',
+          auditorName: gName,
+          auditPeriod: periodLabel,
+          signedAt: nowIso,
+          notes: notes || ''
+        });
+      }
+    }
+  }
+  const finalMergedSignOffs = Array.from(signMap.values());
+  const finalSignedAuditorNames = finalMergedSignOffs.map(s => s.auditorName);
+  const finalLockedByLabel = finalSignedAuditorNames.length > 1 ? finalSignedAuditorNames.join(' & ') : auditorName;
 
   // 1. Lock matching transactions
   try {
@@ -7270,12 +7313,27 @@ export const lockCampaignAuditPeriod = (
     console.error('Failed to lock expenses for audit:', e);
   }
 
-  // 3. Update campaign metadata with audit timestamp, sign-offs, and auditor info
+  // 3. Update campaign metadata with audit timestamp, sign-offs, finalized coAuditAlert, and auditor info
   try {
     if (targetCamp) {
+      const finalizedAlert = isDualMode
+        ? {
+            id: `FINAL_${Date.now()}`,
+            status: 'finalized' as const,
+            triggeredByKey: aKey,
+            triggeredByName: auditorName,
+            triggeredByPhone: auditorPhone || '',
+            submittedAt: nowIso,
+            discrepancyCount: 0,
+            txDiffCount: 0,
+            expDiffCount: 0,
+            summaryMessage: `✅ Auditor pahnih (${finalLockedByLabel}) audit a inmil thlap a, Joint Audit Certificate Final & Lock fel a ni e!`
+          }
+        : null;
       const updatedCamp: Campaign = {
         ...targetCamp,
-        auditSignOffs: mergedSignOffs,
+        auditSignOffs: finalMergedSignOffs,
+        coAuditAlert: finalizedAlert,
         lastAuditedAt: nowIso,
         lastAuditedBy: finalLockedByLabel,
         lastAuditPeriod: periodLabel,
@@ -7283,7 +7341,8 @@ export const lockCampaignAuditPeriod = (
         updatedAt: nowIso,
         metadata: {
           ...(targetCamp.metadata || {}),
-          auditSignOffs: mergedSignOffs,
+          auditSignOffs: finalMergedSignOffs,
+          coAuditAlert: finalizedAlert,
           lastAuditedAt: nowIso,
           lastAuditedBy: finalLockedByLabel,
           lastAuditPeriod: periodLabel,
@@ -7291,6 +7350,10 @@ export const lockCampaignAuditPeriod = (
         }
       };
       saveCampaign(updatedCamp);
+      import('../services/SupabaseSync').then(({ upsertCampaign, invalidateSupabaseTableCache }) => {
+        invalidateSupabaseTableCache('campaigns');
+        upsertCampaign(updatedCamp).catch(() => {});
+      }).catch(() => {});
       safeApiFetch('/api/audit/sync-action', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -7314,8 +7377,39 @@ export const lockCampaignAuditPeriod = (
     lockedExpensesCount: expCount,
     isAwaitingCoAuditor: false,
     requiredAuditors: totalAuditors,
-    signedAuditors: signedAuditorNames
+    signedAuditors: finalSignedAuditorNames
   };
+};
+
+export const sendCoAuditWorkflowAlert = (
+  campaignId: string,
+  alert: import('../types').CoAuditAlert | null
+): void => {
+  const nowIso = new Date().toISOString();
+  const cleanCampId = String(campaignId).toLowerCase().trim();
+  const camps = getStoredCampaigns();
+  const targetCamp = camps.find(c => String(c.id).toLowerCase().trim() === cleanCampId);
+  if (!targetCamp) return;
+
+  const updatedCamp: Campaign = {
+    ...targetCamp,
+    coAuditAlert: alert,
+    updatedAt: nowIso,
+    metadata: {
+      ...(targetCamp.metadata || {}),
+      coAuditAlert: alert
+    }
+  };
+  saveCampaign(updatedCamp);
+  import('../services/SupabaseSync').then(({ upsertCampaign, invalidateSupabaseTableCache }) => {
+    invalidateSupabaseTableCache('campaigns');
+    upsertCampaign(updatedCamp).catch(() => {});
+  }).catch(() => {});
+  safeApiFetch('/api/audit/sync-action', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ campaign: updatedCamp })
+  }).catch(() => {});
 };
 
 export const unlockSingleRecord = (

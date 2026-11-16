@@ -5030,6 +5030,21 @@ function mergeCollections<T extends Record<string, any>>(serverList: T[], client
       }
     }
 
+    // Merge coAuditAlert on Campaigns cleanly from newerObj
+    const alertA = olderObj?.coAuditAlert !== undefined ? olderObj.coAuditAlert : olderObj?.metadata?.coAuditAlert;
+    const alertB = newerObj?.coAuditAlert !== undefined ? newerObj.coAuditAlert : newerObj?.metadata?.coAuditAlert;
+    if (alertB !== undefined) {
+      baseMerged.coAuditAlert = alertB;
+      if (baseMerged.metadata && typeof baseMerged.metadata === 'object') {
+        baseMerged.metadata = { ...baseMerged.metadata, coAuditAlert: alertB };
+      }
+    } else if (alertA !== undefined) {
+      baseMerged.coAuditAlert = alertA;
+      if (baseMerged.metadata && typeof baseMerged.metadata === 'object') {
+        baseMerged.metadata = { ...baseMerged.metadata, coAuditAlert: alertA };
+      }
+    }
+
     // Merge and filter auditorGrants + deletedAuditorGrantIds on Campaigns so deleted grants never resurrect
     const delA = olderObj?.deletedAuditorGrantIds || olderObj?.metadata?.deletedAuditorGrantIds || [];
     const delB = newerObj?.deletedAuditorGrantIds || newerObj?.metadata?.deletedAuditorGrantIds || [];
@@ -5259,15 +5274,18 @@ let lastKnownSupaTxCount = -1;
 let lastKnownSupaLatestUpdatedAt = '';
 let lastKnownSupaExpCount = -1;
 let lastKnownSupaExpLatestUpdatedAt = '';
+let lastKnownSupaCampCount = -1;
+let lastKnownSupaCampLatestUpdatedAt = '';
 
 async function syncFromSupabase(db: DatabaseSchema, force: boolean = false): Promise<boolean> {
   try {
     const now = Date.now();
     if (now < serverSupabaseBlockedUntil) return false;
-    // Egress Protection: 5-second debounce for delta checks unless forced or empty
+    // Egress Protection: 2-second debounce for lightweight 120-byte delta probes unless forced or empty
     const hasTransactions = Array.isArray(db.transactions) && db.transactions.length > 0;
     const hasExpenses = Array.isArray(db.expenses) && db.expenses.length > 0;
-    if (!force && hasTransactions && hasExpenses && (now - lastServerSupabaseSync < 5 * 1000)) {
+    const hasCampaigns = Array.isArray(db.campaigns) && db.campaigns.length > 0;
+    if (!force && hasTransactions && hasExpenses && hasCampaigns && (now - lastServerSupabaseSync < 2 * 1000)) {
       return false;
     }
     const sbConfig = (db as any).supabaseConfig || {};
@@ -5275,12 +5293,13 @@ async function syncFromSupabase(db: DatabaseSchema, force: boolean = false): Pro
     const sbKey = sbConfig.anonKey || process.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable__zS5fiKvBI5u6HYgour64g_g_tJj5WL';
     if (!sbUrl || !sbKey) return false;
 
-    // 1. Ultra-lightweight 120-byte Delta Probe on transactions & expenses (checks exact count & latest updated_at)
+    // 1. Ultra-lightweight 120-byte Delta Probe on transactions, expenses, & campaigns (exact count & latest updated_at)
     let txChanged = !hasTransactions || force || lastKnownSupaTxCount < 0;
     let expChanged = !hasExpenses || force || lastKnownSupaExpCount < 0;
-    if (!txChanged || !expChanged) {
+    let campChanged = !hasCampaigns || force || lastKnownSupaCampCount < 0;
+    if (!txChanged || !expChanged || !campChanged) {
       try {
-        const [probeRes, expProbeRes] = await Promise.all([
+        const [probeRes, expProbeRes, campProbeRes] = await Promise.all([
           !txChanged
             ? fetch(
                 `${sbUrl}/rest/v1/transactions?select=id,updated_at&status=neq.deleted&order=updated_at.desc&limit=1`,
@@ -5297,6 +5316,19 @@ async function syncFromSupabase(db: DatabaseSchema, force: boolean = false): Pro
           !expChanged
             ? fetch(
                 `${sbUrl}/rest/v1/expenses?select=id,updated_at&order=updated_at.desc&limit=1`,
+                {
+                  headers: {
+                    'apikey': sbKey,
+                    'Authorization': `Bearer ${sbKey}`,
+                    'Prefer': 'count=exact'
+                  },
+                  signal: AbortSignal.timeout(6000)
+                }
+              )
+            : Promise.resolve(null),
+          !campChanged
+            ? fetch(
+                `${sbUrl}/rest/v1/campaigns?select=id,updated_at&order=updated_at.desc&limit=1`,
                 {
                   headers: {
                     'apikey': sbKey,
@@ -5328,10 +5360,20 @@ async function syncFromSupabase(db: DatabaseSchema, force: boolean = false): Pro
             expChanged = true;
           }
         }
+        if (campProbeRes && campProbeRes.ok) {
+          const contentRange = campProbeRes.headers.get('content-range') || '';
+          const totalMatch = contentRange.match(/\/(\d+)$/);
+          const remoteCampCount = totalMatch ? parseInt(totalMatch[1], 10) : -1;
+          const campProbeRows: any[] = await campProbeRes.json();
+          const remoteCampLatestUpd = Array.isArray(campProbeRows) && campProbeRows.length > 0 ? String(campProbeRows[0].updated_at || '') : '';
+          if (remoteCampCount !== lastKnownSupaCampCount || remoteCampLatestUpd !== lastKnownSupaCampLatestUpdatedAt) {
+            campChanged = true;
+          }
+        }
       } catch {}
     }
 
-    if (!txChanged && !expChanged && !force && (now - lastServerFullTablesSync < 10 * 60 * 1000)) {
+    if (!txChanged && !expChanged && !campChanged && !force && (now - lastServerFullTablesSync < 10 * 60 * 1000)) {
       lastServerSupabaseSync = now;
       return false;
     }
@@ -5520,10 +5562,10 @@ async function syncFromSupabase(db: DatabaseSchema, force: boolean = false): Pro
       } catch {}
     }
 
-    // 3. Fetch campaigns & members from Supabase only if forced or > 10 minutes since last full sync (saves large base64 image Egress)
+    // 3. Fetch campaigns & members from Supabase whenever campChanged, forced, or > 10 minutes since last full sync
     const shouldSyncHeavyTables = force || lastServerFullTablesSync === 0 || (now - lastServerFullTablesSync >= 10 * 60 * 1000);
-    if (shouldSyncHeavyTables) {
-      lastServerFullTablesSync = now;
+    if (shouldSyncHeavyTables || campChanged) {
+      if (shouldSyncHeavyTables) lastServerFullTablesSync = now;
     try {
       const campRes = await fetch(`${sbUrl}/rest/v1/campaigns?select=*&order=created_at.desc`, {
         headers: {
@@ -5599,6 +5641,8 @@ async function syncFromSupabase(db: DatabaseSchema, force: boolean = false): Pro
               auditChecklist: meta.auditChecklist || r.auditChecklist || undefined,
               auditSignOffs: Array.isArray(meta.auditSignOffs) ? meta.auditSignOffs : (Array.isArray(r.auditSignOffs) ? r.auditSignOffs : undefined),
               requireDualAuditorConsensus: meta.requireDualAuditorConsensus ?? r.requireDualAuditorConsensus,
+              auditScope: meta.auditScope ?? r.auditScope,
+              coAuditAlert: meta.coAuditAlert ?? r.coAuditAlert ?? undefined,
               lastAuditedAt: meta.lastAuditedAt || r.lastAuditedAt || undefined,
               lastAuditedBy: meta.lastAuditedBy || r.lastAuditedBy || undefined,
               lastAuditPeriod: meta.lastAuditPeriod || r.lastAuditPeriod || undefined,
@@ -5636,11 +5680,19 @@ async function syncFromSupabase(db: DatabaseSchema, force: boolean = false): Pro
           if (extractedGrants.length > 0) {
             db.auditorGrants = mergeCollections(db.auditorGrants || [], extractedGrants, 'id', delGrantsSet);
           }
+          lastKnownSupaCampCount = campRows.length;
+          let maxCampUpd = '';
+          for (const r of campRows) {
+            const u = String(r.updated_at || '');
+            if (u > maxCampUpd) maxCampUpd = u;
+          }
+          lastKnownSupaCampLatestUpdatedAt = maxCampUpd;
         }
       }
     } catch {}
 
     // 4. Fetch members from Supabase with Section / Bial synchronization
+    if (shouldSyncHeavyTables) {
     try {
       const memRes = await fetch(`${sbUrl}/rest/v1/members?select=*&order=created_at.desc`, {
         headers: {
@@ -5684,7 +5736,8 @@ async function syncFromSupabase(db: DatabaseSchema, force: boolean = false): Pro
         }
       }
     } catch {}
-    } // end shouldSyncHeavyTables
+    } // end shouldSyncHeavyTables for members
+    } // end campaigns/members sync block
 
     lastServerSupabaseSync = Date.now();
     saveDatabase(db);
@@ -6104,16 +6157,19 @@ app.post('/api/audit/sync-action', async (req: Request, res: Response) => {
           if (String(s.auditorKey || '').toLowerCase().trim() === aKey) return false;
           return true;
         });
-        if (filteredSignOffs.length === existingSignOffs.length && !c.lastAuditedAt) return c;
+        if (filteredSignOffs.length === existingSignOffs.length && !c.lastAuditedAt && c.coAuditAlert?.status !== 'finalized') return c;
+        const nextAlert = c.coAuditAlert?.status === 'finalized' ? null : (c.coAuditAlert ?? c.metadata?.coAuditAlert ?? null);
         const nextCamp = {
           ...c,
           auditSignOffs: filteredSignOffs,
+          coAuditAlert: nextAlert,
           lastAuditedAt: undefined,
           lastAuditedBy: undefined,
           updatedAt: nowIso,
           metadata: {
             ...(c.metadata || {}),
             auditSignOffs: filteredSignOffs,
+            coAuditAlert: nextAlert,
             lastAuditedAt: null,
             lastAuditedBy: null
           }

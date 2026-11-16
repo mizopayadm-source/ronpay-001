@@ -44,7 +44,8 @@ import {
   broadcastTabSync,
   safeApiFetch,
   SYSTEM_HARD_PURGE_TIMESTAMP,
-  reconcileRecordAuditorVerifications
+  reconcileRecordAuditorVerifications,
+  reconcileExpenses
 } from './storage';
 import {
   syncCampaignToFirestore,
@@ -140,6 +141,7 @@ export async function syncAllWithServer(forceAuthoritative: boolean = false): Pr
       const localCampaigns = getStoredCampaigns();
       const localMembers = getMembers();
       const localTransactions = getStoredTransactions();
+      const localExpenses = getStoredExpenses();
       const localCreators = getStoredCreatorsList();
       const localPricingConfig = getStoredPricingConfig();
       const localAnnouncement = getStoredAnnouncement();
@@ -197,47 +199,85 @@ export async function syncAllWithServer(forceAuthoritative: boolean = false): Pr
         }
       }
 
-      // Always merge live authoritative transactions directly from Supabase so static hosts (ronpay.app) and preview servers never lag behind
+      // Always merge live authoritative transactions, campaigns, and expenses directly from Supabase
+      // so static hosts (ronpay.app) and preview servers never lag behind
       try {
-        const { fetchSupabaseTransactions } = await import('../services/supabaseService');
-        const supaTxs = await fetchSupabaseTransactions();
-        if (Array.isArray(supaTxs) && supaTxs.length > 0) {
-          if (!serverData) {
-            serverData = {
-              campaigns: localCampaigns,
-              members: localMembers,
-              transactions: supaTxs,
-              creators: localCreators,
-              pricingConfig: localPricingConfig,
-              announcement: localAnnouncement,
-              auditLogs: localAuditLogs,
-              staffAccounts: localStaff,
-            };
-          } else {
-            const mergedMap = new Map<string, any>();
-            for (const st of (serverData.transactions || [])) {
-              if (st && st.id) mergedMap.set(String(st.id).toLowerCase().trim(), st);
-            }
-            for (const spt of supaTxs) {
-              if (spt && spt.id) {
-                const k = String(spt.id).toLowerCase().trim();
-                const prev = mergedMap.get(k);
-                if (!prev) {
-                  mergedMap.set(k, spt);
-                } else {
-                  const prevTime = new Date(prev.updatedAt || prev.audit_marked_at || prev.audit_date || prev.timestamp || 0).getTime();
-                  const supaTime = new Date(spt.updatedAt || spt.audit_marked_at || spt.audit_date || spt.timestamp || 0).getTime();
-                  const baseMerged = prevTime >= supaTime ? { ...spt, ...prev } : { ...prev, ...spt };
-                  mergedMap.set(k, reconcileRecordAuditorVerifications(
-                    prevTime >= supaTime ? spt : prev,
-                    prevTime >= supaTime ? prev : spt,
-                    baseMerged
-                  ));
-                }
+        const [{ fetchSupabaseTransactions, fetchSupabaseCampaigns }, { fetchTableData }] = await Promise.all([
+          import('../services/supabaseService'),
+          import('../services/SupabaseSync')
+        ]);
+        const [supaTxsRes, supaCampsRes, supaExpsRes] = await Promise.allSettled([
+          fetchSupabaseTransactions(),
+          fetchSupabaseCampaigns(),
+          fetchTableData<KumtluangExpense>('expenses', { forceAll: true, bypassCache: true })
+        ]);
+        const supaTxs = supaTxsRes.status === 'fulfilled' ? supaTxsRes.value : [];
+        const supaCamps = supaCampsRes.status === 'fulfilled' ? supaCampsRes.value : [];
+        const supaExps = supaExpsRes.status === 'fulfilled' ? supaExpsRes.value : [];
+
+        if (!serverData && ((supaTxs && supaTxs.length > 0) || (supaCamps && supaCamps.length > 0) || (supaExps && supaExps.length > 0))) {
+          serverData = {
+            campaigns: localCampaigns,
+            members: localMembers,
+            transactions: [],
+            expenses: localExpenses,
+            creators: localCreators,
+            pricingConfig: localPricingConfig,
+            announcement: localAnnouncement,
+            auditLogs: localAuditLogs,
+            staffAccounts: localStaff,
+          };
+        }
+
+        if (serverData && Array.isArray(supaTxs) && supaTxs.length > 0) {
+          const mergedMap = new Map<string, any>();
+          for (const st of (serverData.transactions || [])) {
+            if (st && st.id) mergedMap.set(String(st.id).toLowerCase().trim(), st);
+          }
+          for (const spt of supaTxs) {
+            if (spt && spt.id) {
+              const k = String(spt.id).toLowerCase().trim();
+              const prev = mergedMap.get(k);
+              if (!prev) {
+                mergedMap.set(k, spt);
+              } else {
+                const prevTime = new Date(prev.updatedAt || prev.audit_marked_at || prev.audit_date || prev.timestamp || 0).getTime();
+                const supaTime = new Date(spt.updatedAt || spt.audit_marked_at || spt.audit_date || spt.timestamp || 0).getTime();
+                const baseMerged = prevTime >= supaTime ? { ...spt, ...prev } : { ...prev, ...spt };
+                mergedMap.set(k, reconcileRecordAuditorVerifications(
+                  prevTime >= supaTime ? spt : prev,
+                  prevTime >= supaTime ? prev : spt,
+                  baseMerged
+                ));
               }
             }
-            serverData.transactions = Array.from(mergedMap.values());
           }
+          serverData.transactions = Array.from(mergedMap.values());
+        }
+
+        if (serverData && Array.isArray(supaCamps) && supaCamps.length > 0) {
+          const campMap = new Map<string, any>();
+          for (const sc of (serverData.campaigns || [])) {
+            if (sc && sc.id) campMap.set(String(sc.id).toLowerCase().trim(), sc);
+          }
+          for (const spc of supaCamps) {
+            if (spc && spc.id) {
+              const k = String(spc.id).toLowerCase().trim();
+              const prev = campMap.get(k);
+              if (!prev) {
+                campMap.set(k, spc);
+              } else {
+                const prevTime = new Date(prev.updatedAt || (prev as any).updated_at || 0).getTime();
+                const supaTime = new Date(spc.updatedAt || (spc as any).updated_at || 0).getTime();
+                campMap.set(k, supaTime >= prevTime ? { ...prev, ...spc } : { ...spc, ...prev });
+              }
+            }
+          }
+          serverData.campaigns = Array.from(campMap.values());
+        }
+
+        if (serverData && Array.isArray(supaExps) && supaExps.length > 0) {
+          serverData.expenses = reconcileExpenses(serverData.expenses || [], supaExps);
         }
       } catch {}
 
@@ -1045,206 +1085,304 @@ export async function pullLatestServerState(): Promise<SyncDataState | null> {
     const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
     const timeoutId = controller ? setTimeout(() => controller.abort(), 6000) : null;
 
-    const response = await fetch(resolveApiUrl('/api/data/state'), {
-      method: 'GET',
-      headers: { 'Accept': 'application/json' },
-      signal: controller ? controller.signal : undefined
-    });
-    if (timeoutId) clearTimeout(timeoutId);
+    let serverData: any = null;
+    try {
+      const response = await fetch(resolveApiUrl('/api/data/state'), {
+        method: 'GET',
+        headers: { 'Accept': 'application/json' },
+        signal: controller ? controller.signal : undefined
+      });
+      if (timeoutId) clearTimeout(timeoutId);
+      if (response.ok) {
+        const res = await response.json();
+        if (res && res.success && res.data) {
+          serverData = res.data;
+        }
+      }
+    } catch {
+      if (timeoutId) clearTimeout(timeoutId);
+    }
 
-    if (response.ok) {
-      const res = await response.json();
-      if (res && res.success && res.data) {
-        const serverData = res.data;
+    // Fetch live authoritative Supabase delta/rows in parallel so SSE updates & static hosts always converge
+    try {
+      const [{ fetchSupabaseTransactions, fetchSupabaseCampaigns }, { fetchTableData, invalidateSupabaseTableCache }] = await Promise.all([
+        import('../services/supabaseService'),
+        import('../services/SupabaseSync')
+      ]);
+      invalidateSupabaseTableCache();
+      const [supaTxsRes, supaCampsRes, supaExpsRes] = await Promise.allSettled([
+        fetchSupabaseTransactions(),
+        fetchSupabaseCampaigns(),
+        fetchTableData<KumtluangExpense>('expenses', { forceAll: true, bypassCache: true })
+      ]);
+      const supaTxs = supaTxsRes.status === 'fulfilled' ? supaTxsRes.value : [];
+      const supaCamps = supaCampsRes.status === 'fulfilled' ? supaCampsRes.value : [];
+      const supaExps = supaExpsRes.status === 'fulfilled' ? supaExpsRes.value : [];
 
-        // 1. Process server deletions first
-        if (Array.isArray(serverData.deletedTransactionIds)) {
-          for (const tId of serverData.deletedTransactionIds) {
-            markTransactionAsDeleted(tId);
+      if (!serverData && ((supaTxs && supaTxs.length > 0) || (supaCamps && supaCamps.length > 0) || (supaExps && supaExps.length > 0))) {
+        serverData = { ...getLocalFallbackState(), expenses: getStoredExpenses() };
+      }
+
+      if (serverData && Array.isArray(supaCamps) && supaCamps.length > 0) {
+        const campMap = new Map<string, any>();
+        for (const sc of (serverData.campaigns || [])) {
+          if (sc && sc.id) campMap.set(String(sc.id).toLowerCase().trim(), sc);
+        }
+        for (const spc of supaCamps) {
+          if (spc && spc.id) {
+            const k = String(spc.id).toLowerCase().trim();
+            const prev = campMap.get(k);
+            if (!prev) {
+              campMap.set(k, spc);
+            } else {
+              const prevTime = new Date(prev.updatedAt || (prev as any).updated_at || 0).getTime();
+              const supaTime = new Date(spc.updatedAt || (spc as any).updated_at || 0).getTime();
+              campMap.set(k, supaTime >= prevTime ? { ...prev, ...spc } : { ...spc, ...prev });
+            }
           }
         }
-        if (Array.isArray(serverData.deletedCampaignIds)) {
-          for (const dId of serverData.deletedCampaignIds) {
-            recordDeletedCampaignId(dId);
+        serverData.campaigns = Array.from(campMap.values());
+      }
+
+      if (serverData && Array.isArray(supaTxs) && supaTxs.length > 0) {
+        const mergedMap = new Map<string, any>();
+        for (const st of (serverData.transactions || [])) {
+          if (st && st.id) mergedMap.set(String(st.id).toLowerCase().trim(), st);
+        }
+        for (const spt of supaTxs) {
+          if (spt && spt.id) {
+            const k = String(spt.id).toLowerCase().trim();
+            const prev = mergedMap.get(k);
+            if (!prev) {
+              mergedMap.set(k, spt);
+            } else {
+              const prevTime = new Date(prev.updatedAt || prev.audit_marked_at || prev.audit_date || prev.timestamp || 0).getTime();
+              const supaTime = new Date(spt.updatedAt || spt.audit_marked_at || spt.audit_date || spt.timestamp || 0).getTime();
+              const baseMerged = prevTime >= supaTime ? { ...spt, ...prev } : { ...prev, ...spt };
+              mergedMap.set(k, reconcileRecordAuditorVerifications(
+                prevTime >= supaTime ? spt : prev,
+                prevTime >= supaTime ? prev : spt,
+                baseMerged
+              ));
+            }
           }
         }
-        if (Array.isArray(serverData.deletedMemberIds)) {
-          for (const mId of serverData.deletedMemberIds) {
-            markMemberAsDeleted(mId);
+        serverData.transactions = Array.from(mergedMap.values());
+      }
+
+      if (serverData && Array.isArray(supaExps) && supaExps.length > 0) {
+        serverData.expenses = reconcileExpenses(serverData.expenses || [], supaExps);
+      }
+    } catch {}
+
+    if (serverData) {
+      // 1. Process server deletions first
+      if (Array.isArray(serverData.deletedTransactionIds)) {
+        for (const tId of serverData.deletedTransactionIds) {
+          markTransactionAsDeleted(tId);
+        }
+      }
+      if (Array.isArray(serverData.deletedCampaignIds)) {
+        for (const dId of serverData.deletedCampaignIds) {
+          recordDeletedCampaignId(dId);
+        }
+      }
+      if (Array.isArray(serverData.deletedMemberIds)) {
+        for (const mId of serverData.deletedMemberIds) {
+          markMemberAsDeleted(mId);
+        }
+      }
+      if (Array.isArray(serverData.deletedExpenseIds)) {
+        for (const eId of serverData.deletedExpenseIds) {
+          markExpenseAsDeleted(eId);
+        }
+      }
+      if (Array.isArray(serverData.deletedAuditorGrantIds) && serverData.deletedAuditorGrantIds.length > 0) {
+        saveStoredDeletedAuditorGrantIds([
+          ...getStoredDeletedAuditorGrantIds(),
+          ...serverData.deletedAuditorGrantIds
+        ]);
+      }
+
+      // 2. Campaigns (reconcile timestamps before saving)
+      if (Array.isArray(serverData.campaigns)) {
+        const delCampIds = getDeletedCampaignIds();
+        const localCamps = getStoredCampaigns();
+        const localMap = new Map(localCamps.map(c => [String(c.id).toLowerCase().trim(), c]));
+        const mergedCamps = serverData.campaigns
+          .filter((sc: any) => sc && sc.id && !delCampIds.has(String(sc.id).toLowerCase().trim()))
+          .map((sc: any) => {
+            const loc = localMap.get(String(sc.id).toLowerCase().trim());
+            if (!loc) return sc;
+            const locTime = new Date(loc.updatedAt || (loc as any).updated_at || 0).getTime();
+            const srvTime = new Date(sc.updatedAt || (sc as any).updated_at || 0).getTime();
+            return locTime > srvTime ? { ...sc, ...loc } : { ...loc, ...sc };
+          });
+        saveStoredCampaigns(mergedCamps, true);
+        serverData.campaigns = mergedCamps;
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('ronpay_campaigns_updated', { detail: mergedCamps }));
+          window.dispatchEvent(new CustomEvent('ronpay-campaigns-updated', { detail: mergedCamps }));
+          broadcastTabSync('campaigns');
+        }
+      }
+
+      // 3. Members
+      if (Array.isArray(serverData.members)) {
+        saveMembers(serverData.members, true);
+      }
+
+      // 4. Transactions
+      if (Array.isArray(serverData.transactions)) {
+        if (Array.isArray(serverData.deletedTransactionIds) && serverData.deletedTransactionIds.length > 0) {
+          saveDeletedTransactionIds(serverData.deletedTransactionIds);
+        }
+        const currentTxs = getStoredTransactions();
+        const deletedIds = getDeletedTransactionIds();
+        const txMap = new Map<string, Transaction>();
+
+        for (const st of serverData.transactions) {
+          if (st && st.id) {
+            const k = String(st.id).toLowerCase().trim();
+            if (deletedIds.has(k) || PERMANENTLY_PURGED_TX_IDS.has(k)) continue;
+            txMap.set(k, { ...st, isSynced: true });
           }
         }
-        if (Array.isArray(serverData.deletedAuditorGrantIds) && serverData.deletedAuditorGrantIds.length > 0) {
-          saveStoredDeletedAuditorGrantIds([
-            ...getStoredDeletedAuditorGrantIds(),
-            ...serverData.deletedAuditorGrantIds
-          ]);
+
+        const unpushedFreshOfflineTxs: Transaction[] = [];
+        for (const lt of currentTxs) {
+          if (lt && lt.id) {
+            const k = String(lt.id).toLowerCase().trim();
+            if (deletedIds.has(k) || PERMANENTLY_PURGED_TX_IDS.has(k)) {
+              txMap.delete(k);
+              continue;
+            }
+            const amt = Number(lt.amount);
+            if (!isFinite(amt) || isNaN(amt) || amt <= 0) continue;
+
+            if (txMap.has(k)) {
+              const existing = txMap.get(k)!;
+              const existingStatus = (existing.status || '').toLowerCase().trim();
+              const localStatus = (lt.status || '').toLowerCase().trim();
+              const localTime = new Date(lt.updatedAt || lt.audit_marked_at || lt.audit_date || lt.timestamp || 0).getTime();
+              const serverTime = new Date(existing.updatedAt || existing.audit_marked_at || existing.audit_date || existing.timestamp || 0).getTime();
+
+              const baseMerged = localStatus === 'completed' && existingStatus === 'pending'
+                ? { ...existing, ...lt, status: 'completed' as const, isSynced: true }
+                : (localTime >= serverTime ? { ...existing, ...lt, isSynced: true } : { ...lt, ...existing, isSynced: true });
+
+              const reconciled = reconcileRecordAuditorVerifications(
+                localTime >= serverTime ? existing : lt,
+                localTime >= serverTime ? lt : existing,
+                baseMerged
+              );
+              txMap.set(k, reconciled);
+            } else {
+              txMap.set(k, lt);
+              unpushedFreshOfflineTxs.push(lt);
+            }
+          }
         }
 
-        // 2. Campaigns
-        if (Array.isArray(serverData.campaigns)) {
-          saveStoredCampaigns(serverData.campaigns, true);
+        if (unpushedFreshOfflineTxs.length > 0) {
+          import('../services/supabaseService').then(({ insertSupabaseTransaction }) => {
+            unpushedFreshOfflineTxs.forEach(t => {
+              insertSupabaseTransaction(t).catch(() => {});
+              safeApiFetch('/api/transactions', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(t)
+              }).catch(() => {});
+            });
+          }).catch(() => {});
         }
 
-        // 3. Members
-        if (Array.isArray(serverData.members)) {
-          saveMembers(serverData.members, true);
-        }
+        const cleanTxs = Array.from(txMap.values());
+        cleanTxs.sort((a, b) => {
+          const timeA = new Date(a.updatedAt || a.createdAt || a.timestamp || 0).getTime();
+          const timeB = new Date(b.updatedAt || b.createdAt || b.timestamp || 0).getTime();
+          return timeB - timeA;
+        });
 
-        // 4. Transactions - merge authoritative server & Supabase data with genuine offline creations
+        saveStoredTransactions(cleanTxs, true);
+        serverData.transactions = cleanTxs;
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('ronpay_transactions_updated', { detail: cleanTxs }));
+          broadcastTabSync('transactions');
+        }
+      }
+
+      // 4b. Expenses (reconcile per-auditor verifications & audit locks across server + Supabase + local)
+      if (Array.isArray(serverData.expenses)) {
+        const delExpSet = getDeletedExpenseIds();
+        const cleanServerExpenses = serverData.expenses.filter((e: any) => e && e.id && !delExpSet.has(String(e.id).toLowerCase().trim()));
+        const localExpenses = getStoredExpenses().filter(e => e && e.id && !delExpSet.has(String(e.id).toLowerCase().trim()));
+        const finalExpenses = reconcileExpenses(localExpenses, cleanServerExpenses);
+        saveStoredExpenses(finalExpenses, true);
+        serverData.expenses = finalExpenses;
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('ronpay_expenses_updated', { detail: finalExpenses }));
+          broadcastTabSync('expenses');
+        }
+      }
+
+      // 5. Creators
+      if (Array.isArray(serverData.creators)) {
+        saveStoredCreatorsList(serverData.creators, true);
+      }
+
+      // 6. Pricing & Announcements
+      if (serverData.pricingConfig) {
+        saveStoredPricingConfig(serverData.pricingConfig, true);
+      }
+      if (serverData.announcement) {
+        saveStoredAnnouncement(serverData.announcement, true);
+      }
+
+      // 7. Auditor Grants & Modification Requests
+      const hasServerGrants = Array.isArray(serverData.auditorGrants) || Array.isArray(serverData.grants);
+      const serverGrants = Array.isArray(serverData.auditorGrants)
+        ? serverData.auditorGrants
+        : Array.isArray(serverData.grants)
+        ? serverData.grants
+        : [];
+      const extractedCampGrants: any[] = [];
+      if (Array.isArray(serverData.campaigns)) {
+        for (const c of serverData.campaigns) {
+          const cg = c?.auditorGrants || (c as any)?.metadata?.auditorGrants;
+          if (Array.isArray(cg)) extractedCampGrants.push(...cg);
+        }
+      }
+      if (hasServerGrants || extractedCampGrants.length > 0) {
+        const delSet = new Set(getStoredDeletedAuditorGrantIds());
+        const combinedGrantsMap = new Map<string, any>();
+        for (const g of [...serverGrants, ...extractedCampGrants]) {
+          if (g && g.id && !delSet.has(String(g.id).toLowerCase().trim())) {
+            const k = String(g.id).trim();
+            const prev = combinedGrantsMap.get(k);
+            if (!prev) combinedGrantsMap.set(k, g);
+            else {
+              const tPrev = new Date(prev.updatedAt || prev.updated_at || 0).getTime();
+              const tCurr = new Date(g.updatedAt || g.updated_at || 0).getTime();
+              combinedGrantsMap.set(k, tCurr >= tPrev ? { ...prev, ...g } : { ...g, ...prev });
+            }
+          }
+        }
+        saveStoredAuditorGrants(Array.from(combinedGrantsMap.values()), true, hasServerGrants);
+      }
+      if (Array.isArray(serverData.modificationRequests)) {
         try {
-          const { fetchSupabaseTransactions } = await import('../services/supabaseService');
-          const supaTxs = await fetchSupabaseTransactions();
-          if (Array.isArray(supaTxs) && supaTxs.length > 0) {
-            const mergedMap = new Map<string, any>();
-            for (const st of (serverData.transactions || [])) {
-              if (st && st.id) mergedMap.set(String(st.id).toLowerCase().trim(), st);
-            }
-            for (const spt of supaTxs) {
-              if (spt && spt.id) {
-                const k = String(spt.id).toLowerCase().trim();
-                const prev = mergedMap.get(k);
-                if (!prev) {
-                  mergedMap.set(k, spt);
-                } else {
-                  const prevTime = new Date(prev.updatedAt || prev.audit_marked_at || prev.audit_date || prev.timestamp || 0).getTime();
-                  const supaTime = new Date(spt.updatedAt || spt.audit_marked_at || spt.audit_date || spt.timestamp || 0).getTime();
-                  const baseMerged = prevTime >= supaTime ? { ...spt, ...prev } : { ...prev, ...spt };
-                  mergedMap.set(k, reconcileRecordAuditorVerifications(
-                    prevTime >= supaTime ? spt : prev,
-                    prevTime >= supaTime ? prev : spt,
-                    baseMerged
-                  ));
-                }
-              }
-            }
-            serverData.transactions = Array.from(mergedMap.values());
+          localStorage.setItem(MODIFICATION_REQUESTS_KEY, JSON.stringify(serverData.modificationRequests));
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('ronpay_modification_requests_updated', { detail: serverData.modificationRequests }));
           }
         } catch {}
-
-        if (Array.isArray(serverData.transactions)) {
-          if (Array.isArray(serverData.deletedTransactionIds) && serverData.deletedTransactionIds.length > 0) {
-            saveDeletedTransactionIds(serverData.deletedTransactionIds);
-          }
-          const currentTxs = getStoredTransactions();
-          const deletedIds = getDeletedTransactionIds();
-          const txMap = new Map<string, Transaction>();
-
-          // 1. Authoritative server transactions
-          for (const st of serverData.transactions) {
-            if (st && st.id) {
-              const k = String(st.id).toLowerCase().trim();
-              if (deletedIds.has(k) || PERMANENTLY_PURGED_TX_IDS.has(k)) continue;
-              txMap.set(k, { ...st, isSynced: true });
-            }
-          }
-
-          // 2. Check local transactions: reconcile updates or detect fresh offline creations
-          const unpushedFreshOfflineTxs: Transaction[] = [];
-          for (const lt of currentTxs) {
-            if (lt && lt.id) {
-              const k = String(lt.id).toLowerCase().trim();
-              if (deletedIds.has(k) || PERMANENTLY_PURGED_TX_IDS.has(k)) {
-                txMap.delete(k);
-                continue;
-              }
-              const amt = Number(lt.amount);
-              if (!isFinite(amt) || isNaN(amt) || amt <= 0) continue;
-
-              if (txMap.has(k)) {
-                const existing = txMap.get(k)!;
-                const existingStatus = (existing.status || '').toLowerCase().trim();
-                const localStatus = (lt.status || '').toLowerCase().trim();
-                const localTime = new Date(lt.updatedAt || lt.audit_marked_at || lt.audit_date || lt.timestamp || 0).getTime();
-                const serverTime = new Date(existing.updatedAt || existing.audit_marked_at || existing.audit_date || existing.timestamp || 0).getTime();
-
-                const baseMerged = localStatus === 'completed' && existingStatus === 'pending'
-                  ? { ...existing, ...lt, status: 'completed' as const, isSynced: true }
-                  : (localTime >= serverTime ? { ...existing, ...lt, isSynced: true } : { ...lt, ...existing, isSynced: true });
-
-                const reconciled = reconcileRecordAuditorVerifications(
-                  localTime >= serverTime ? existing : lt,
-                  localTime >= serverTime ? lt : existing,
-                  baseMerged
-                );
-                txMap.set(k, reconciled);
-              } else {
-                // Valid local transaction not yet on server/Supabase — retain and push UP to Supabase/server!
-                txMap.set(k, lt);
-                unpushedFreshOfflineTxs.push(lt);
-              }
-            }
-          }
-
-          if (unpushedFreshOfflineTxs.length > 0) {
-            import('../services/supabaseService').then(({ insertSupabaseTransaction }) => {
-              unpushedFreshOfflineTxs.forEach(t => {
-                insertSupabaseTransaction(t).catch(() => {});
-                safeApiFetch('/api/transactions', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify(t)
-                }).catch(() => {});
-              });
-            }).catch(() => {});
-          }
-
-          const cleanTxs = Array.from(txMap.values());
-          cleanTxs.sort((a, b) => {
-            const timeA = new Date(a.updatedAt || a.createdAt || a.timestamp || 0).getTime();
-            const timeB = new Date(b.updatedAt || b.createdAt || b.timestamp || 0).getTime();
-            return timeB - timeA;
-          });
-
-          saveStoredTransactions(cleanTxs, true);
-          serverData.transactions = cleanTxs;
-          if (typeof window !== 'undefined') {
-            window.dispatchEvent(new CustomEvent('ronpay_transactions_updated', { detail: cleanTxs }));
-            broadcastTabSync('transactions');
-          }
-        }
-
-        // 5. Creators
-        if (Array.isArray(serverData.creators)) {
-          saveStoredCreatorsList(serverData.creators, true);
-        }
-
-        // 6. Pricing & Announcements
-        if (serverData.pricingConfig) {
-          saveStoredPricingConfig(serverData.pricingConfig, true);
-        }
-        if (serverData.announcement) {
-          saveStoredAnnouncement(serverData.announcement, true);
-        }
-
-        // 7. Auditor Grants & Modification Requests (authoritative replacement so deleted grants are removed everywhere)
-        const hasServerGrants = Array.isArray(serverData.auditorGrants) || Array.isArray(serverData.grants);
-        const serverGrants = Array.isArray(serverData.auditorGrants)
-          ? serverData.auditorGrants
-          : Array.isArray(serverData.grants)
-          ? serverData.grants
-          : [];
-        if (hasServerGrants) {
-          const delSet = new Set(getStoredDeletedAuditorGrantIds());
-          saveStoredAuditorGrants(
-            serverGrants.filter((g: any) => g && g.id && !delSet.has(String(g.id).toLowerCase().trim())),
-            true,
-            true
-          );
-        }
-        if (Array.isArray(serverData.modificationRequests)) {
-          try {
-            localStorage.setItem(MODIFICATION_REQUESTS_KEY, JSON.stringify(serverData.modificationRequests));
-            if (typeof window !== 'undefined') {
-              window.dispatchEvent(new CustomEvent('ronpay_modification_requests_updated', { detail: serverData.modificationRequests }));
-            }
-          } catch {}
-        }
-
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent(RONPAY_SYNC_EVENT, { detail: serverData }));
-        }
-        return serverData;
       }
+
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent(RONPAY_SYNC_EVENT, { detail: serverData }));
+      }
+      return serverData;
     }
   } catch (err) {
     // Silently fall back to cached state
@@ -1277,6 +1415,12 @@ export function subscribeServerEvents(onChanged: () => void): () => void {
         if (!isCleanedUp) onChanged();
       });
       eventSource.addEventListener('transactions_updated', () => {
+        if (!isCleanedUp) onChanged();
+      });
+      eventSource.addEventListener('state_updated', () => {
+        if (!isCleanedUp) onChanged();
+      });
+      eventSource.addEventListener('audit_action_synced', () => {
         if (!isCleanedUp) onChanged();
       });
       eventSource.addEventListener('auditor_grants_updated', () => {

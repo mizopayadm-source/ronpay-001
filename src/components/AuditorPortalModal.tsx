@@ -27,7 +27,7 @@ import {
   UserPlus,
   FolderTree
 } from 'lucide-react';
-import { Campaign, CreatorProfile, KumtluangExpense, AuditorAccessGrant } from '../types';
+import { Campaign, CreatorProfile, KumtluangExpense, AuditorAccessGrant, CoAuditAlert } from '../types';
 import { 
   getStoredCampaigns,
   getStoredTransactions, 
@@ -36,11 +36,13 @@ import {
   saveAuditorGrant,
   permanentlyDeleteAuditorGrant,
   normalizeAuditorKey,
-  lockCampaignAuditPeriod, 
+  lockCampaignAuditPeriod,
+  sendCoAuditWorkflowAlert,
   checkAuditorAccessForCampaign,
   getActiveAuditorGrantsForUser,
   isSuperAdminOrAdminProfile,
   isCampaignCreator,
+  isCampaignManagerOrOfficer,
   saveCampaign,
   markRecordAuditVerification,
   markBatchRecordsAuditVerification,
@@ -53,8 +55,8 @@ import {
   isTransactionForCampaign,
   isConfirmedTransaction
 } from '../utils/storage';
-import { syncAllWithServer, RONPAY_SYNC_EVENT } from '../utils/syncEngine';
-import { fetchOpeningBalanceFromSupabase } from '../services/SupabaseSync';
+import { syncAllWithServer, pullLatestServerState, RONPAY_SYNC_EVENT } from '../utils/syncEngine';
+import { fetchOpeningBalanceFromSupabase, invalidateSupabaseTableCache } from '../services/SupabaseSync';
 import { fetchExpensesFromFirestore } from '../services/firestoreSync';
 import { formatDateDDMMYYYY } from '../utils/date';
 import { printHtmlSafely, getTransactionHead, getTransactionMonthYear, getHeadSortPriority } from '../utils/export';
@@ -113,8 +115,10 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
     const notifyParent = typeof notifyOrEvent === 'boolean' ? notifyOrEvent : true;
     setIsSyncingPortal(true);
     try {
+      invalidateSupabaseTableCache();
       await Promise.allSettled([
         syncAuditorGrantsAcrossCloud(),
+        pullLatestServerState(),
         syncAllWithServer(true),
         campaign?.id
           ? fetchOpeningBalanceFromSupabase(campaign.id).then(val => {
@@ -141,17 +145,26 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
     handleSyncPortalData(false);
 
     const onSyncEvent = () => setTick(t => t + 1);
+    const onStorageEvent = (e: StorageEvent) => {
+      if (!e.key || e.key.startsWith('ronpay_')) {
+        setTick(t => t + 1);
+      }
+    };
     window.addEventListener(RONPAY_SYNC_EVENT, onSyncEvent);
     window.addEventListener('ronpay_transactions_updated', onSyncEvent);
     window.addEventListener('ronpay_expenses_updated', onSyncEvent);
     window.addEventListener('ronpay_campaigns_updated', onSyncEvent);
+    window.addEventListener('ronpay-campaigns-updated', onSyncEvent);
     window.addEventListener('ronpay_auditor_grants_updated', onSyncEvent);
+    window.addEventListener('storage', onStorageEvent);
     return () => {
       window.removeEventListener(RONPAY_SYNC_EVENT, onSyncEvent);
       window.removeEventListener('ronpay_transactions_updated', onSyncEvent);
       window.removeEventListener('ronpay_expenses_updated', onSyncEvent);
       window.removeEventListener('ronpay_campaigns_updated', onSyncEvent);
+      window.removeEventListener('ronpay-campaigns-updated', onSyncEvent);
       window.removeEventListener('ronpay_auditor_grants_updated', onSyncEvent);
+      window.removeEventListener('storage', onStorageEvent);
     };
   }, [isOpen, campaign?.id]);
 
@@ -169,6 +182,12 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
   const isCreator = useMemo(() => {
     return campaign ? isCampaignCreator(campaign, creatorProfile || null) : false;
   }, [campaign, creatorProfile]);
+
+  const isManagerOrOfficer = useMemo(() => {
+    return campaign ? isCampaignManagerOrOfficer(campaign, creatorProfile || null) : false;
+  }, [campaign, creatorProfile]);
+
+  const canConfigureAuditScope = isAdmin || isCreator || isManagerOrOfficer;
 
   const canAudit = useMemo(() => {
     const phone = creatorProfile?.phone || creatorProfile?.phoneNumber || '';
@@ -292,7 +311,7 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
       ? `${formatDateDDMMYYYY(appointedFromDate)} – ${formatDateDDMMYYYY(appointedToDate)}`
       : '');
 
-  // Whenever Creator has set a Custom Date Range / Specific Period for the appointed Auditor(s), lock the date range so Auditors cannot alter it
+  // Whenever Creator has set a Specific Period/Date Range OR the viewer is an Auditor (not Creator/Secretary/Accountant/Admin), lock the period so Auditors cannot alter it
   const hasCreatorAppointedDates = useMemo(() => {
     return Boolean(
       appointedFromDate ||
@@ -302,13 +321,27 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
   }, [appointedFromDate, appointedToDate, appointedPeriodLabel]);
 
   const isRestrictedAuditor = useMemo(() => {
-    return hasCreatorAppointedDates;
-  }, [hasCreatorAppointedDates]);
+    return !canConfigureAuditScope || hasCreatorAppointedDates;
+  }, [canConfigureAuditScope, hasCreatorAppointedDates]);
+
+  const freshCampObj = useMemo(() => {
+    if (!campaign?.id) return campaign;
+    return getStoredCampaigns().find(c => String(c.id).toLowerCase().trim() === String(campaign.id).toLowerCase().trim()) || campaign;
+  }, [campaign, tick]);
+
+  const activeCoAuditAlert: CoAuditAlert | null = useMemo(() => {
+    return freshCampObj?.coAuditAlert || (freshCampObj as any)?.metadata?.coAuditAlert || null;
+  }, [freshCampObj]);
 
   // Sign & Lock inputs
   const [auditPeriod, setAuditPeriod] = useState<string>(() => {
     return appointedPeriodLabel || `FY ${new Date().getFullYear() - 1}-${new Date().getFullYear()}`;
   });
+  useEffect(() => {
+    if (appointedPeriodLabel) {
+      setAuditPeriod(appointedPeriodLabel);
+    }
+  }, [appointedPeriodLabel]);
   const [auditorName, setAuditorName] = useState<string>(creatorProfile?.name || 'Auditor');
   const [auditorPhone, setAuditorPhone] = useState<string>(creatorProfile?.phone || creatorProfile?.phoneNumber || '');
   const [auditNotes, setAuditNotes] = useState<string>('Accounts and vouchers verified with bank statements and receipts.');
@@ -637,25 +670,27 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
   const checkedCount = useMemo(() => Object.values(checklist).filter(Boolean).length, [checklist]);
   const checklistPercent = useMemo(() => Math.round((checkedCount / 5) * 100), [checkedCount]);
 
-  // Effective Opening Balance (from live Supabase fetch or campaign object)
+  // Effective Opening Balance (from live Supabase fetch or latest synced campaign object)
   const effectiveOpeningBalance = useMemo(() => {
     if (liveOpeningBalance !== null && !isNaN(liveOpeningBalance)) {
       return liveOpeningBalance;
     }
-    return Number(campaign?.openingBalance) || 0;
-  }, [liveOpeningBalance, campaign?.openingBalance]);
+    return Number((freshCampObj || campaign)?.openingBalance) || 0;
+  }, [liveOpeningBalance, freshCampObj, campaign?.openingBalance]);
 
   // Load transactions using isTransactionForCampaign & isConfirmedTransaction so 100% of Bawm records match HomeScreen/ReportsScreen/CashBook
   const allTransactions = useMemo(() => {
-    if (!campaign) return [];
+    const activeCamp = freshCampObj || campaign;
+    if (!activeCamp) return [];
     const all = getStoredTransactions();
-    return all.filter(t => t && isTransactionForCampaign(t, campaign) && isConfirmedTransaction(t));
-  }, [campaign, tick]);
+    return all.filter(t => t && isTransactionForCampaign(t, activeCamp) && isConfirmedTransaction(t));
+  }, [freshCampObj, campaign, tick]);
 
   const allExpenses = useMemo(() => {
-    if (!campaign) return [];
-    return getStoredExpenses(campaign.id);
-  }, [campaign, tick]);
+    const activeCamp = freshCampObj || campaign;
+    if (!activeCamp) return [];
+    return getStoredExpenses(activeCamp.id);
+  }, [freshCampObj, campaign, tick]);
 
   // Statistics with explicit Counts & Rupee Amounts for Total, Verified, Flagged, Unchecked, Locked
   const stats = useMemo(() => {
@@ -746,13 +781,13 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
     const cashOutflowAmount = cashOutflowList.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
     const onlineOutflowAmount = onlineOutflowList.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
 
-    const openingBalance = Number(campaign?.openingBalance || 0);
+    const openingBalance = effectiveOpeningBalance;
     const expectedClosingBalance = openingBalance + stats.totalInflow - stats.totalOutflow;
     const expectedBankBalance = openingBalance + onlineInflowAmount - onlineOutflowAmount;
     const expectedCashInHand = cashInflowAmount - cashOutflowAmount;
 
     // Member Roll vs Ledger Cross-Check
-    const campaignMembers = campaign ? getMembers(campaign.id) : [];
+    const campaignMembers = (freshCampObj || campaign) ? getMembers((freshCampObj || campaign)!.id) : [];
     const memberTxList = validTx.filter(t => Boolean(t.memberId || t.donorType === 'member'));
     const publicTxList = validTx.filter(t => !t.memberId && t.donorType !== 'member');
     const memberGivingAmount = memberTxList.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
@@ -868,7 +903,7 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
       collectorBreakdown,
       anomalies
     };
-  }, [allTransactions, allExpenses, campaign, stats.totalInflow, stats.totalOutflow]);
+  }, [allTransactions, allExpenses, freshCampObj, campaign, effectiveOpeningBalance, stats.totalInflow, stats.totalOutflow]);
 
   const handleSaveReconciliation = () => {
     if (!campaign || !canAudit) return;
@@ -1591,21 +1626,28 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
         st.flaggedCount === 0 &&
         st.expVerifiedCount >= totalRequiredExps &&
         (isExpenditureOnlyAudit || st.txVerifiedCount >= totalRequiredTxs);
+      const rawSignedOff = Boolean(st.hasSignedOff);
       return {
         ...st,
+        rawSignedOff,
         individualComplete: hasVerifiedAllRequired,
-        // 'Signed & Verified' is only granted when the auditor has verified all required items AND there are zero Co-Auditor discrepancies/queries
-        hasSignedOff: Boolean((st.hasSignedOff || hasVerifiedAllRequired) && hasVerifiedAllRequired && !hasDiscrepancies)
+        // 'Signed & Verified' is only finalized when the auditor has verified all required items AND there are zero Co-Auditor discrepancies/queries
+        hasSignedOff: Boolean((rawSignedOff || hasVerifiedAllRequired) && hasVerifiedAllRequired && !hasDiscrepancies)
       };
     });
     const signedCount = auditorsList.filter(a => a.hasSignedOff).length;
+    const rawSubmittedCount = auditorsList.filter(a => a.rawSignedOff).length;
+    const allIndividuallyComplete = auditorsList.length >= 2 && auditorsList.every(a => a.individualComplete);
 
     return {
       auditorsList,
       signOffs,
       signedCount,
+      rawSubmittedCount,
+      allIndividuallyComplete,
       totalRequiredTxs,
       totalRequiredExps,
+      totalRequiredRecords,
       consensusVerifiedCount,
       partialVerifiedCount,
       consensusExpCount,
@@ -1615,7 +1657,7 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
       txDiscrepancyItems,
       hasDiscrepancies,
       isJointFinalized: isDualAuditMode
-        ? signedCount >= 2 && !hasDiscrepancies
+        ? Boolean(!hasDiscrepancies && allIndividuallyComplete && (Boolean(freshCamp?.lastAuditedAt) || rawSubmittedCount >= 2))
         : Boolean(
             !hasDiscrepancies &&
               (freshCamp?.lastAuditedAt ||
@@ -1629,13 +1671,15 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
   // Verify all unaudited Receipts & Payments within the currently selected Cash Book date range
   const handleVerifySelectedRange = () => {
     if (!canAudit) return;
-    const effPhone = auditorPhone || creatorProfile?.phone || '';
+    const effPhone = effectiveAuditorPhone || auditorPhone || creatorProfile?.phone || '';
     const effName = auditorName || creatorProfile?.name || 'Auditor';
-    const txIds = cashBookAuditData.inRangeTxs
-      .filter(t => t.audit_mark !== 'verified')
-      .map(t => t.id);
+    const txIds = isExpenditureOnlyAudit
+      ? []
+      : cashBookAuditData.inRangeTxs
+          .filter(t => getRecordAuditCategory(t, 'transaction') !== 'audited')
+          .map(t => t.id);
     const expIds = cashBookAuditData.inRangeExps
-      .filter(e => e.audit_mark !== 'verified')
+      .filter(e => getRecordAuditCategory(e, 'expense') !== 'audited')
       .map(e => e.id);
     const txCnt = markBatchRecordsAuditVerification(txIds, 'transaction', 'verified', effName, '', true, effPhone);
     const expCnt = markBatchRecordsAuditVerification(expIds, 'expense', 'verified', effName, '', true, effPhone);
@@ -1654,39 +1698,45 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
   // Sign & Lock all Receipts & Payments within the currently selected Cash Book date range
   const handleLockSelectedRange = () => {
     if (!canAudit || !campaign) return;
-    if (isDualAuditMode && dualAuditSummary.hasDiscrepancies) {
-      setShowDiscrepancyDrawer(true);
-      setLockToast(`⚠️ Auditor pahnih chhinchhiah inmil lo / Query (${dualAuditSummary.discrepancyItems.length}) a awm! Lock hmain enfiah phawt rawh u.`);
-      setTimeout(() => setLockToast(null), 5000);
+    if (isDualAuditMode && dualAuditSummary.auditorsList.length >= 2) {
+      handleDualAuditorSubmitOrAlert();
       return;
     }
 
-    const periodStr = cashBookAuditData.effFrom || cashBookAuditData.effTo
-      ? cashBookAuditData.rangeLabel
-      : auditPeriod;
-    setAuditPeriod(periodStr);
+    const periodStr = (isRestrictedAuditor && appointedPeriodLabel)
+      ? appointedPeriodLabel
+      : (cashBookAuditData.effFrom || cashBookAuditData.effTo
+          ? cashBookAuditData.rangeLabel
+          : auditPeriod);
+    if (!isRestrictedAuditor) {
+      setAuditPeriod(periodStr);
+    }
 
-    // Ensure all items in range are marked verified by the current auditor first
-    const effPhone = auditorPhone.trim() || creatorProfile?.phone || '';
+    // Ensure all items in range are marked verified by the current auditor first (Single Auditor mode)
+    const effPhone = effectiveAuditorPhone || auditorPhone.trim() || creatorProfile?.phone || '';
     const effName = auditorName.trim() || creatorProfile?.name || 'Auditor';
-    markBatchRecordsAuditVerification(
-      cashBookAuditData.inRangeTxs.map(t => t.id),
-      'transaction',
-      'verified',
-      effName,
-      '',
-      true,
-      effPhone
-    );
-    markBatchRecordsAuditVerification(
-      cashBookAuditData.inRangeExps.map(e => e.id),
-      'expense',
-      'verified',
-      effName,
-      '',
-      true,
-      effPhone
-    );
+    if (!isExpenditureOnlyAudit && cashBookAuditData.inRangeTxs.length > 0) {
+      markBatchRecordsAuditVerification(
+        cashBookAuditData.inRangeTxs.map(t => t.id),
+        'transaction',
+        'verified',
+        effName,
+        '',
+        true,
+        effPhone
+      );
+    }
+    if (cashBookAuditData.inRangeExps.length > 0) {
+      markBatchRecordsAuditVerification(
+        cashBookAuditData.inRangeExps.map(e => e.id),
+        'expense',
+        'verified',
+        effName,
+        '',
+        true,
+        effPhone
+      );
+    }
 
     const result = lockCampaignAuditPeriod(
       campaign.id,
@@ -1696,11 +1746,7 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
     );
 
     setTick(t => t + 1);
-    if (result.isAwaitingCoAuditor) {
-      setLockToast(`✍️ Co-Auditor Sign-Off (1/${result.requiredAuditors}) chhinchhiah & Server-ah sync a ni e! Auditor 2-na in a Sign veleh Final Audited Report & Lock a tlang nghal ang.`);
-    } else {
-      setLockToast(`🔒 Cash Book Range (${periodStr}) chhunga Receipts leh Payments zawng zawng Audit & Lock fel vek a ni e!`);
-    }
+    setLockToast(`🔒 Cash Book Range (${periodStr}) chhunga Record ${result.lockedTransactionsCount + result.lockedExpensesCount} Audit & Lock fel vek a ni e!`);
     if (onRecordsUpdated) onRecordsUpdated();
     setTimeout(() => setLockToast(null), 5000);
   };
@@ -1877,14 +1923,107 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
 
   if (!isOpen || !campaign) return null;
 
-  // Handle Sign & Lock Action
+  // Co-Auditor Smart Submit / Cross-Check Alert / Final Joint Lock Handler (Dual Auditor Mode Only)
+  const handleDualAuditorSubmitOrAlert = () => {
+    if (!campaign || !canAudit) return;
+    if (!isDualAuditMode || dualAuditSummary.auditorsList.length < 2) {
+      handleExecuteLock();
+      return;
+    }
+
+    const effName = auditorName.trim() || creatorProfile?.name || 'Auditor';
+    const effPhone = effectiveAuditorPhone || auditorPhone.trim() || creatorProfile?.phone || '';
+    const periodStr = (isRestrictedAuditor && appointedPeriodLabel)
+      ? appointedPeriodLabel
+      : (cashBookAuditData.effFrom || cashBookAuditData.effTo ? cashBookAuditData.rangeLabel : auditPeriod.trim());
+    const notesStr = auditNotes.trim() || 'Accounts and vouchers verified cleanly.';
+
+    const myAud = dualAuditSummary.auditorsList.find(a => a.auditorKey === currentAuditorKey);
+    const otherAud = dualAuditSummary.auditorsList.find(a => a.auditorKey !== currentAuditorKey);
+    const myPendingTxs = isExpenditureOnlyAudit ? 0 : Math.max(0, dualAuditSummary.totalRequiredTxs - (myAud?.txVerifiedCount || 0));
+    const myPendingExps = Math.max(0, dualAuditSummary.totalRequiredExps - (myAud?.expVerifiedCount || 0));
+    const myPendingTotal = myPendingTxs + myPendingExps;
+
+    const coHasFinishedOrSubmitted = Boolean(otherAud && (otherAud.rawSignedOff || otherAud.individualComplete || otherAud.flaggedCount > 0));
+
+    // Case A: First Auditor submitting before Co-Auditor has finished
+    if (!coHasFinishedOrSubmitted) {
+      if (myPendingTotal > 0 && (myAud?.flaggedCount || 0) === 0) {
+        setLockToast(`⏳ Record ${myPendingTotal} (Lut: ${myPendingTxs}, Senso: ${myPendingExps}) i la endik loh a awm — a zavaia i check zawh hnuah Co-Auditor nghah turin submit rawh.`);
+        setTimeout(() => setLockToast(null), 5000);
+        return;
+      }
+
+      const res = lockCampaignAuditPeriod(
+        campaign.id,
+        { name: effName, phone: effPhone },
+        periodStr,
+        notesStr,
+        { isDualAuditMode: true, totalActiveAuditors: dualAuditSummary.auditorsList.length }
+      );
+      setTick(t => t + 1);
+      if (res.isAwaitingCoAuditor) {
+        setLockToast(`📤 I audit zo ta (${effName})! Server-ah thawn fel a ni a, Co-Auditor (${otherAud?.auditorName || 'Auditor 2'}) endik zawh & cross-check nghah mek a ni.`);
+      }
+      if (onRecordsUpdated) onRecordsUpdated();
+      setTimeout(() => setLockToast(null), 6000);
+      return;
+    }
+
+    // Case B: Co-Auditor already finished/submitted, AND there are Mismatches or Queries -> Alert the First Auditor!
+    if (dualAuditSummary.hasDiscrepancies) {
+      const nowIso = new Date().toISOString();
+      const alertObj: CoAuditAlert = {
+        id: `ALERT_${Date.now()}`,
+        status: 'discrepancy_alert',
+        triggeredByKey: currentAuditorKey,
+        triggeredByName: effName,
+        triggeredByPhone: effPhone,
+        targetAuditorKey: otherAud?.auditorKey,
+        targetAuditorName: otherAud?.auditorName,
+        submittedAt: nowIso,
+        discrepancyCount: dualAuditSummary.discrepancyItems.length,
+        txDiffCount: dualAuditSummary.txDiscrepancyItems.length,
+        expDiffCount: dualAuditSummary.expDiscrepancyItems.length,
+        summaryMessage: `⚠️ ${effName}-in Cross-Check a nei a, item ${dualAuditSummary.discrepancyItems.length} (Senso: ${dualAuditSummary.expDiscrepancyItems.length}, Sum Lut: ${dualAuditSummary.txDiscrepancyItems.length})-ah result a inmil lo! Khawngaihin enfiah leh rawh.`
+      };
+      sendCoAuditWorkflowAlert(campaign.id, alertObj);
+      setShowDiscrepancyDrawer(true);
+      setTick(t => t + 1);
+      setLockToast(`🔔 ${otherAud?.auditorName || 'Co-Auditor'} hnenah inmil lohna Alert (${dualAuditSummary.discrepancyItems.length} items) thawn fel a ni e! Audit Certificate hi inmil hma chu On-Hold a ni ang.`);
+      if (onRecordsUpdated) onRecordsUpdated();
+      setTimeout(() => setLockToast(null), 6000);
+      return;
+    }
+
+    // Case C: 100% Match across both Auditors! Finalize & Lock Joint Certificate!
+    setIsLocking(true);
+    try {
+      const result = lockCampaignAuditPeriod(
+        campaign.id,
+        { name: effName, phone: effPhone },
+        periodStr,
+        notesStr,
+        { isDualAuditMode: true, totalActiveAuditors: dualAuditSummary.auditorsList.length, forceFinalLock: true }
+      );
+      setTick(t => t + 1);
+      setIsConfirmingLock(false);
+      setLockToast(`✅ 100% Inmil Thlap! Joint Audit Certificate Final & Record ${result.lockedTransactionsCount + result.lockedExpensesCount} Lock nghal a ni ta!`);
+      setActiveTab('certificate');
+      if (onRecordsUpdated) onRecordsUpdated();
+      setTimeout(() => setLockToast(null), 6000);
+    } catch (err: any) {
+      setLockToast(`⚠️ ${err?.message || 'Final submission failed'}`);
+    } finally {
+      setIsLocking(false);
+    }
+  };
+
+  // Handle Sign & Lock Action (Single Auditor standard flow OR delegates to Dual flow)
   const handleExecuteLock = () => {
     if (!campaign || !canAudit) return;
-    if (isDualAuditMode && dualAuditSummary.hasDiscrepancies) {
-      setIsConfirmingLock(false);
-      setShowDiscrepancyDrawer(true);
-      setLockToast(`⚠️ Auditor pahnih chhinchhiah inmil lo / Query (${dualAuditSummary.discrepancyItems.length}) a awm! Lock hmain enfiah phawt rawh u.`);
-      setTimeout(() => setLockToast(null), 5000);
+    if (isDualAuditMode && dualAuditSummary.auditorsList.length >= 2) {
+      handleDualAuditorSubmitOrAlert();
       return;
     }
     setIsLocking(true);
@@ -1892,17 +2031,13 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
       const result = lockCampaignAuditPeriod(
         campaign.id,
         { name: auditorName.trim(), phone: auditorPhone.trim() },
-        auditPeriod.trim(),
+        (isRestrictedAuditor && appointedPeriodLabel) ? appointedPeriodLabel : auditPeriod.trim(),
         auditNotes.trim()
       );
 
       setTick(t => t + 1);
       setIsConfirmingLock(false);
-      if (result.isAwaitingCoAuditor) {
-        setLockToast(`✍️ Co-Auditor Sign-Off (1/${result.requiredAuditors}) chhinchhiah & Server-ah sync a ni e! Auditor 2-na in a Sign veleh Final Audited Report & Lock a tlang nghal ang.`);
-      } else {
-        setLockToast(`✅ Audit nemngheh fel a ni e! Record ${result.lockedTransactionsCount + result.lockedExpensesCount} Lock nghal a ni.`);
-      }
+      setLockToast(`✅ Audit nemngheh fel a ni e! Record ${result.lockedTransactionsCount + result.lockedExpensesCount} Lock nghal a ni.`);
       if (onRecordsUpdated) onRecordsUpdated();
       setTimeout(() => setLockToast(null), 5000);
     } catch (err: any) {
@@ -1912,17 +2047,40 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
     }
   };
 
-  // Generate & Print Official Audit Certificate
+  // Generate & Print Official Audit Certificate (Single-Page Joint Layout for Dual Auditors)
   const handlePrintCertificate = () => {
-    const certSignaturesHtml = dualAuditSummary.auditorsList.length >= 2
-      ? dualAuditSummary.auditorsList.map((aud, idx) => `
-          <div class="sig-box">
-            <div style="font-weight: 700; color: #0f172a;">${aud.auditorName}</div>
-            <div style="color: #64748b;">Sum Endiktu (Auditor ${idx + 1})</div>
-            <div style="color: #64748b; font-size: 11px;">Phone: ${aud.auditorPhone || 'N/A'}</div>
-            <div style="color: ${aud.hasSignedOff ? '#047857' : '#b45309'}; font-size: 10px; font-weight: 700; margin-top: 4px;">${aud.hasSignedOff ? '✓ Signed & Verified' : '⏳ Pending Sign-off'}</div>
-          </div>
-        `).join('')
+    const isDualCert = isDualAuditMode && dualAuditSummary.auditorsList.length >= 2;
+    const effPeriodText = (isRestrictedAuditor && appointedPeriodLabel) ? appointedPeriodLabel : auditPeriod;
+
+    const certSignaturesHtml = isDualCert
+      ? dualAuditSummary.auditorsList.map((aud, idx) => {
+          const audStatusText = dualAuditSummary.isJointFinalized || aud.hasSignedOff
+            ? '✓ VERIFIED &amp; SIGNED'
+            : aud.rawSignedOff && !dualAuditSummary.hasDiscrepancies
+            ? '✓ SUBMITTED (1/2)'
+            : dualAuditSummary.hasDiscrepancies
+            ? '⚠️ INMIL LO — HOLD'
+            : '⏳ PENDING AUDIT';
+          const audStatusColor = (dualAuditSummary.isJointFinalized || aud.hasSignedOff)
+            ? '#047857'
+            : (aud.rawSignedOff && !dualAuditSummary.hasDiscrepancies)
+            ? '#4338ca'
+            : '#b45309';
+          const signedDateStr = aud.signedAt ? formatDateDDMMYYYY(aud.signedAt) : formatDateDDMMYYYY(new Date().toISOString());
+
+          return `
+            <div class="joint-auditor-card">
+              <div class="aud-role">AUDITOR ${idx + 1} (${idx === 0 ? 'SUM ENDIKTU' : 'CO-AUDITOR'})</div>
+              <div class="aud-name">${aud.auditorName}</div>
+              <div class="aud-meta">Phone: ${aud.auditorPhone || 'N/A'}</div>
+              <div class="aud-meta" style="margin-top:3px;">
+                ${isExpenditureOnlyAudit ? 'Lut: ✓ Pawm Sa' : `Lut: ✓${aud.txVerifiedCount}`} • Senso: ✓${aud.expVerifiedCount}
+              </div>
+              <div class="aud-stamp" style="color:${audStatusColor};border-color:${audStatusColor};">${audStatusText}</div>
+              <div style="font-size:9px;color:#64748b;margin-top:4px;">Date: ${signedDateStr}</div>
+            </div>
+          `;
+        }).join('')
       : `
           <div class="sig-box">
             <div style="font-weight: 700; color: #0f172a;">${auditorName}</div>
@@ -1932,7 +2090,102 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
           </div>
         `;
 
-    const certHtml = `
+    const certHtml = isDualCert
+      ? `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <title>Joint Audit Certificate - ${campaign.title}</title>
+        <style>
+          @page { size: A4; margin: 12mm; }
+          * { box-sizing: border-box; }
+          body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #0f172a; margin: 0; padding: 10px; line-height: 1.4; }
+          .sheet { border: 2px solid #0f172a; border-radius: 14px; padding: 18px 20px; background: #fff; page-break-inside: avoid; break-inside: avoid; }
+          .header-box { border-bottom: 2px solid #0f172a; padding-bottom: 10px; margin-bottom: 14px; text-align: center; }
+          .badge { display: inline-block; background: ${dualAuditSummary.isJointFinalized ? '#047857' : '#b45309'}; color: #fff; padding: 3px 12px; border-radius: 999px; font-size: 10px; font-weight: 900; letter-spacing: 0.8px; text-transform: uppercase; margin-bottom: 6px; }
+          .title { font-size: 20px; font-weight: 900; color: #0f172a; margin: 0 0 3px 0; }
+          .subtitle { font-size: 11.5px; color: #475569; margin: 0; font-weight: 600; }
+          .grid { display: flex; justify-content: space-between; gap: 10px; margin-bottom: 14px; }
+          .stat-box { flex: 1; border: 1px solid #cbd5e1; border-radius: 10px; padding: 9px 10px; background: #f8fafc; text-align: center; }
+          .stat-label { font-size: 9.5px; color: #64748b; font-weight: 800; text-transform: uppercase; }
+          .stat-val { font-size: 15px; font-weight: 900; color: #0f172a; margin-top: 2px; }
+          .stat-val.green { color: #059669; }
+          .stat-val.red { color: #dc2626; }
+          .stat-val.blue { color: #1d4ed8; }
+          .cert-statement { border: 1.5px dashed #94a3b8; border-radius: 10px; padding: 12px 14px; background: #fcfcfd; margin-bottom: 14px; }
+          .cert-title { font-size: 11.5px; font-weight: 900; text-transform: uppercase; color: #0f172a; margin-bottom: 6px; }
+          .cert-body { font-size: 11.5px; color: #334155; line-height: 1.55; }
+          .joint-panel-title { font-size: 10.5px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.6px; color: #0f172a; margin-bottom: 8px; text-align: center; }
+          .joint-grid { display: flex; gap: 12px; justify-content: space-between; margin-bottom: 14px; }
+          .joint-auditor-card { flex: 1; border: 1.5px solid #cbd5e1; border-radius: 10px; padding: 10px 12px; background: #f8fafc; text-align: center; }
+          .aud-role { font-size: 9px; font-weight: 900; color: #64748b; letter-spacing: 0.6px; }
+          .aud-name { font-size: 14px; font-weight: 900; color: #0f172a; margin-top: 3px; }
+          .aud-meta { font-size: 10px; color: #475569; font-weight: 600; }
+          .aud-stamp { display: inline-block; margin-top: 6px; padding: 2px 10px; border: 1.5px solid; border-radius: 999px; font-size: 9.5px; font-weight: 900; }
+          .footer-row { display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #e2e8f0; padding-top: 10px; }
+          .seal-box { border: 2px solid #059669; border-radius: 50%; width: 72px; height: 72px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; color: #059669; font-size: 8px; font-weight: 900; transform: rotate(-8deg); }
+        </style>
+      </head>
+      <body>
+        <div class="sheet">
+          <div class="header-box">
+            <div class="badge">${dualAuditSummary.isJointFinalized ? '✓✓ JOINT FINANCIAL AUDIT CERTIFICATE (FINAL VERIFIED)' : 'OFFICIAL JOINT AUDIT CERTIFICATE'}</div>
+            <h1 class="title">${campaign.title}</h1>
+            <p class="subtitle">Period: <strong>${effPeriodText}</strong> • Category: ${campaign.category.toUpperCase()} • ID: ${campaign.id}</p>
+          </div>
+
+          <div class="grid">
+            <div class="stat-box">
+              <div class="stat-label">Opening (B/F)</div>
+              <div class="stat-val">₹${cashBookAuditData.openingBalance.toLocaleString('en-IN')}</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-label">Total Receipts (Lut)</div>
+              <div class="stat-val green">+₹${cashBookAuditData.periodReceiptsTotal.toLocaleString('en-IN')}</div>
+              <div style="font-size:9px;color:#64748b;">${cashBookAuditData.inRangeTxs.length} entries</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-label">Total Payments (Senso)</div>
+              <div class="stat-val red">-₹${cashBookAuditData.periodPaymentsTotal.toLocaleString('en-IN')}</div>
+              <div style="font-size:9px;color:#64748b;">${cashBookAuditData.inRangeExps.length} vouchers</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-label">Closing Balance (C/D)</div>
+              <div class="stat-val blue">₹${cashBookAuditData.closingBalance.toLocaleString('en-IN')}</div>
+            </div>
+          </div>
+
+          <div class="cert-statement">
+            <div class="cert-title">⚖️ Joint Auditor Verification &amp; Compliance Statement</div>
+            <div class="cert-body">
+              He lehkha hmang hian <strong>${campaign.title}</strong> accounts chu Creator ruatsa hun bi <strong>(${effPeriodText})</strong> chhung atan Auditor pahnihten uluk taka kan endik hnuah a inmil thlap a, a dik tawk a ni tih kan nemnghet e. (${isExpenditureOnlyAudit ? 'Expenditure / Sum Chhuak Audit Mode — Income chu Treasurer thun sa pawm a ni.' : 'Sum Lut leh Sum Chhuak Pahnih Audit Mode.'})
+              <br/>
+              <strong>Observations / Notes:</strong> <em>${auditNotes || 'Records and balances verified in order.'}</em>
+            </div>
+          </div>
+
+          <div class="joint-panel-title">Verified Joint Auditors (Phek Khat — Dual Audit Sign-Off)</div>
+          <div class="joint-grid">
+            ${certSignaturesHtml}
+          </div>
+
+          <div class="footer-row">
+            <div style="font-size:10px;color:#475569;">
+              <div><strong>Issued Date:</strong> ${formatDateDDMMYYYY(new Date().toISOString())}</div>
+              <div><strong>Audit Consensus:</strong> ${dualAuditSummary.consensusVerifiedCount} records matched • Tamper-Proof Financial Lock</div>
+            </div>
+            <div class="seal-box">
+              <div>RONPAY</div>
+              <div style="font-size:10px;">★ ★ ★</div>
+              <div>JOINT AUDIT</div>
+            </div>
+          </div>
+        </div>
+      </body>
+      </html>
+      `
+      : `
       <!DOCTYPE html>
       <html>
       <head>
@@ -1988,7 +2241,7 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
         <div class="cert-statement">
           <div class="cert-title">⚖️ Auditor's Verification & Compliance Report</div>
           <div class="cert-body">
-            He lehkha hmang hian <strong>${campaign.title}</strong> accounts hi <strong>${auditPeriod}</strong> chhung a tan enfiah a, audit fel a ni tih ${dualAuditSummary.auditorsList.length >= 2 ? 'kan' : 'ka'} nemnghet e. 
+            He lehkha hmang hian <strong>${campaign.title}</strong> accounts hi <strong>${effPeriodText}</strong> chhung a tan enfiah a, audit fel a ni tih ka nemnghet e. 
             Receipt, voucher leh financial transaction zawng zawngte hi uluk taka endik a ni a, accounts record te hi a dik tawk a ni tih hriatpui a ni.
             <br><br>
             <strong>Auditor Observations / Notes:</strong><br>
@@ -2351,7 +2604,7 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                   </span>
                 )}
 
-                {(isAdmin || isCreator) ? (
+                {canConfigureAuditScope ? (
                   <div className="inline-flex rounded-xl bg-slate-950/90 p-0.5 border border-slate-700 items-center">
                     <button
                       type="button"
@@ -2429,14 +2682,22 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                         Senso: ✓{aud.expVerifiedCount} (₹{aud.expVerifiedAmount.toLocaleString('en-IN')})
                       </span>
                       {aud.flaggedCount > 0 && <span className="text-rose-400 font-bold">⚠️{aud.flaggedCount}</span>}
-                      {aud.hasSignedOff ? (
+                      {dualAuditSummary.isJointFinalized || (!isDualAuditMode && aud.hasSignedOff) ? (
                         <span className="px-1.5 py-0.2 rounded bg-emerald-500/30 text-emerald-200 font-black text-[9px]">
                           SIGNED ✓
+                        </span>
+                      ) : aud.rawSignedOff && dualAuditSummary.hasDiscrepancies ? (
+                        <span className="px-1.5 py-0.2 rounded bg-rose-500/30 text-rose-200 font-black text-[9px]">
+                          ⚠️ En Nawn Ngai
+                        </span>
+                      ) : aud.rawSignedOff && aud.individualComplete ? (
+                        <span className="px-1.5 py-0.2 rounded bg-indigo-500/40 text-indigo-100 font-black text-[9px]">
+                          ✓ Submitted (1/2)
                         </span>
                       ) : (
                         <span className="text-[9.5px] text-slate-400">⏳ Auditing</span>
                       )}
-                      {(isAdmin || isCreator) && aud.grantId && (
+                      {canConfigureAuditScope && aud.grantId && (
                         <button
                           type="button"
                           onClick={async (e) => {
@@ -2499,6 +2760,52 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                   </span>
                 ) : null}
 
+                {isDualAuditMode && dualAuditSummary.auditorsList.length >= 2 && canAudit && !dualAuditSummary.isJointFinalized && (() => {
+                  const myAud = dualAuditSummary.auditorsList.find(a => a.auditorKey === currentAuditorKey);
+                  const otherAud = dualAuditSummary.auditorsList.find(a => a.auditorKey !== currentAuditorKey);
+                  const coFinishedOrSubmitted = Boolean(otherAud && (otherAud.rawSignedOff || otherAud.individualComplete || otherAud.flaggedCount > 0));
+                  const canFinalConsensus = !dualAuditSummary.hasDiscrepancies && dualAuditSummary.allIndividuallyComplete;
+
+                  if (canFinalConsensus) {
+                    return (
+                      <button
+                        type="button"
+                        onClick={handleDualAuditorSubmitOrAlert}
+                        className="px-3 py-0.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-[10px] flex items-center gap-1 cursor-pointer shadow-sm animate-pulse"
+                      >
+                        <ShieldCheck className="w-3.5 h-3.5" />
+                        <span>✅ Inmil Thlap! Joint Certificate Final &amp; Lock Rawh (2/2)</span>
+                      </button>
+                    );
+                  }
+                  if (coFinishedOrSubmitted && dualAuditSummary.hasDiscrepancies) {
+                    return (
+                      <button
+                        type="button"
+                        onClick={handleDualAuditorSubmitOrAlert}
+                        className="px-2.5 py-0.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-[10px] flex items-center gap-1 cursor-pointer shadow-xs"
+                      >
+                        <AlertCircle className="w-3 h-3" />
+                        <span>🔔 Inmil Lohna Alert Thawn Rawh ({dualAuditSummary.discrepancyItems.length})</span>
+                      </button>
+                    );
+                  }
+                  return (
+                    <button
+                      type="button"
+                      onClick={handleDualAuditorSubmitOrAlert}
+                      className="px-2.5 py-0.5 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-[10px] flex items-center gap-1 cursor-pointer shadow-xs"
+                    >
+                      <CheckCircle2 className="w-3 h-3" />
+                      <span>
+                        {myAud?.rawSignedOff
+                          ? `✓ Submitted (Co-Auditor ${otherAud?.auditorName || ''} Nghah Mek)`
+                          : '📤 Co-Auditor Cross-Check Tur In Submit Rawh (1/2)'}
+                      </span>
+                    </button>
+                  );
+                })()}
+
                 {isDualAuditMode && dualAuditSummary.auditorsList.length >= 2 && (
                   <button
                     type="button"
@@ -2512,6 +2819,51 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                 )}
               </div>
             </div>
+
+            {/* Co-Auditor Real-Time Workflow Alert Banner (Dual Mode Only) */}
+            {isDualAuditMode && dualAuditSummary.auditorsList.length >= 2 && activeCoAuditAlert && !dualAuditSummary.isJointFinalized && (
+              activeCoAuditAlert.status === 'discrepancy_alert' ? (
+                <div className="bg-rose-900/90 border border-rose-400 rounded-xl px-3 py-2 flex items-center justify-between gap-2 flex-wrap shadow-sm">
+                  <div className="flex items-center gap-2 text-[11px] text-white">
+                    <AlertCircle className="w-4 h-4 text-amber-300 shrink-0 animate-pulse" />
+                    <span>
+                      <strong className="text-amber-300">🔔 CO-AUDITOR CROSS-CHECK ALERT:</strong> {activeCoAuditAlert.summaryMessage}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setShowDiscrepancyDrawer(true)}
+                      className="px-2.5 py-1 rounded-lg bg-white text-rose-950 font-black text-[10px] hover:bg-rose-100 cursor-pointer"
+                    >
+                      🔍 Inmil Lohna En &amp; Siamrem Rawh
+                    </button>
+                    {!dualAuditSummary.hasDiscrepancies && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!campaign) return;
+                          sendCoAuditWorkflowAlert(campaign.id, null);
+                          setTick(t => t + 1);
+                        }}
+                        className="px-2 py-1 rounded-lg bg-emerald-500 text-slate-950 font-black text-[10px] cursor-pointer"
+                      >
+                        ✓ A Inmil Ta
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ) : activeCoAuditAlert.status === 'awaiting_co_auditor' ? (
+                <div className="bg-indigo-950/90 border border-indigo-400/50 rounded-xl px-3 py-2 flex items-center justify-between gap-2 flex-wrap">
+                  <div className="flex items-center gap-2 text-[11px] text-indigo-100">
+                    <Clock className="w-4 h-4 text-amber-300 shrink-0" />
+                    <span>
+                      <strong className="text-amber-300">📤 CO-AUDITOR NGHAH MEK (1/2):</strong> {activeCoAuditAlert.summaryMessage} (Certificate hi Co-Auditor-in a endik zawha a inmil hma chu a la Final lo.)
+                    </span>
+                  </div>
+                </div>
+              ) : null
+            )}
 
             {/* Collapsible Discrepancy / Mismatch Drawer when Auditors disagree, have 1/2 partial checks, or raise queries */}
             {showDiscrepancyDrawer && dualAuditSummary.hasDiscrepancies && (
@@ -5881,7 +6233,43 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                   />
                 </div>
 
-                {isConfirmingLock ? (
+                {isDualAuditMode && dualAuditSummary.auditorsList.length >= 2 ? (
+                  <div className="space-y-3">
+                    <div className="p-3.5 rounded-2xl bg-indigo-50 border border-indigo-200 text-xs text-indigo-950 space-y-1.5">
+                      <div className="font-black flex items-center gap-1.5">
+                        <Users className="w-4 h-4 text-indigo-600" />
+                        <span>Co-Auditor Joint Verification Workflow (Mi 2):</span>
+                      </div>
+                      <p className="text-[11px] leading-relaxed text-indigo-900">
+                        • <strong>Audit hmasa zawk:</strong> A endik zawhah Certificate a Final mai lovin <em>Co-Auditor Cross-Check</em> turin a submit ang.<br />
+                        • <strong>Audit hnuhnung zawk / Cross-Check:</strong> A inmil thlap chuan <strong>Joint Audit Certificate</strong> a Final &amp; Lock nghal ang; a inmil lo a awm chuan Audit hmasa zawk hnenah Alert thawn nghal a ni ang.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={!canAudit || !auditorName.trim() || isLocking}
+                      onClick={handleDualAuditorSubmitOrAlert}
+                      className={`w-full py-3.5 px-4 text-xs sm:text-sm font-black rounded-2xl shadow-md transition flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer ${
+                        !dualAuditSummary.hasDiscrepancies && dualAuditSummary.allIndividuallyComplete
+                          ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                          : dualAuditSummary.hasDiscrepancies
+                          ? 'bg-rose-600 hover:bg-rose-700 text-white'
+                          : 'bg-amber-600 hover:bg-amber-700 text-white'
+                      }`}
+                    >
+                      <ShieldCheck className="w-4 h-4" />
+                      <span>
+                        {!canAudit
+                          ? 'Auditor Phalna Active A Awm Lo (View-Only)'
+                          : !dualAuditSummary.hasDiscrepancies && dualAuditSummary.allIndividuallyComplete
+                          ? '✅ Inmil Thlap! Joint Audit Certificate Submit & Finalize Rawh (2/2)'
+                          : dualAuditSummary.hasDiscrepancies
+                          ? `🔔 Inmil Lohna Alert Co-Auditor Hnenah Thawn Rawh (${dualAuditSummary.discrepancyItems.length} Items)`
+                          : '📤 Ka Audit Chin Submit Rawh (Co-Auditor Nghah Tur — 1/2)'}
+                      </span>
+                    </button>
+                  </div>
+                ) : isConfirmingLock ? (
                   <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 space-y-3">
                     <div className="text-xs font-bold text-rose-900 flex items-center gap-2">
                       <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
@@ -5946,7 +6334,7 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                           ⚠️ Auditor 1 leh 2 Hmuhchhuah A Inang Lo ({dualAuditSummary.discrepancyItems.length} Items Inmil Lo / Query)
                         </h4>
                         <p className="text-[11px] text-rose-300">
-                          Auditor pahnih result a inmil hma chuan <strong>✓ Signed &amp; Verified</strong> leh <strong>Final Audit Certificate</strong> hi tihchhuah theih a ni lo (On Hold).
+                          Auditor pahnih result a inmil hma chuan <strong>✓ Verified &amp; Signed</strong> leh <strong>Final Audit Certificate</strong> hi tihchhuah theih a ni lo (On Hold).
                         </p>
                       </div>
                     </div>
@@ -5984,41 +6372,56 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                 </div>
               )}
 
-              <div className={`border rounded-3xl p-6 sm:p-8 space-y-6 shadow-sm ${
+              {/* Single-Page Joint Verification Certificate Sheet */}
+              <div className={`border-2 rounded-3xl p-5 sm:p-7 space-y-5 shadow-sm ${
                 dualAuditSummary.hasDiscrepancies
                   ? 'bg-rose-50/40 border-rose-300'
-                  : 'bg-slate-50 border-slate-300'
+                  : isDualAuditMode && !dualAuditSummary.isJointFinalized
+                  ? 'bg-amber-50/30 border-amber-300'
+                  : 'bg-white border-slate-300'
               }`}>
                 <div className="text-center border-b border-slate-200 pb-4">
                   <span className={`text-[10px] font-black tracking-widest uppercase px-3 py-1 rounded-full ${
                     dualAuditSummary.hasDiscrepancies
                       ? 'bg-rose-700 text-white'
+                      : isDualAuditMode && !dualAuditSummary.isJointFinalized
+                      ? 'bg-amber-600 text-white'
+                      : isDualAuditMode
+                      ? 'bg-emerald-700 text-white'
                       : 'bg-slate-900 text-white'
                   }`}>
                     {dualAuditSummary.hasDiscrepancies
                       ? `⚠️ ON HOLD — AUDIT RESULT INANG LO (${dualAuditSummary.discrepancyItems.length})`
+                      : isDualAuditMode && !dualAuditSummary.isJointFinalized
+                      ? '⏳ CO-AUDITOR VERIFICATION & FINAL SUBMIT NGHAH MEK'
+                      : isDualAuditMode
+                      ? '✓✓ JOINT FINANCIAL AUDIT CERTIFICATE (FINAL VERIFIED)'
                       : 'Official Audit Certificate'}
                   </span>
                   <h3 className="text-xl sm:text-2xl font-black text-slate-900 mt-3">
                     {campaign.title}
                   </h3>
-                  <p className="text-xs text-slate-500 mt-1 font-medium">
-                    Category: {campaign.category.toUpperCase()} • ID: {campaign.id}
+                  <p className="text-xs text-slate-500 mt-1 font-semibold">
+                    Period: {(isRestrictedAuditor && appointedPeriodLabel) ? appointedPeriodLabel : auditPeriod} • Category: {campaign.category.toUpperCase()}
                   </p>
                 </div>
 
-                <div className="grid grid-cols-3 gap-3 text-center">
-                  <div className="bg-white p-3 rounded-2xl border border-slate-200">
-                    <span className="text-[10px] text-slate-500 font-bold uppercase block">Inflow</span>
-                    <span className="text-base font-black text-emerald-800">₹{stats.totalInflow.toLocaleString('en-IN')}</span>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-center">
+                  <div className="bg-slate-50 p-2.5 rounded-2xl border border-slate-200">
+                    <span className="text-[10px] text-slate-500 font-bold uppercase block">Opening (B/F)</span>
+                    <span className="text-sm font-black text-slate-900">₹{cashBookAuditData.openingBalance.toLocaleString('en-IN')}</span>
                   </div>
-                  <div className="bg-white p-3 rounded-2xl border border-slate-200">
-                    <span className="text-[10px] text-slate-500 font-bold uppercase block">Outflow</span>
-                    <span className="text-base font-black text-rose-800">₹{stats.totalOutflow.toLocaleString('en-IN')}</span>
+                  <div className="bg-emerald-50/60 p-2.5 rounded-2xl border border-emerald-200">
+                    <span className="text-[10px] text-emerald-800 font-bold uppercase block">Inflow (Lut)</span>
+                    <span className="text-sm font-black text-emerald-800">+₹{cashBookAuditData.periodReceiptsTotal.toLocaleString('en-IN')}</span>
                   </div>
-                  <div className="bg-white p-3 rounded-2xl border border-slate-200">
-                    <span className="text-[10px] text-slate-500 font-bold uppercase block">Balance</span>
-                    <span className="text-base font-black text-indigo-900">₹{stats.netBalance.toLocaleString('en-IN')}</span>
+                  <div className="bg-rose-50/60 p-2.5 rounded-2xl border border-rose-200">
+                    <span className="text-[10px] text-rose-800 font-bold uppercase block">Outflow (Senso)</span>
+                    <span className="text-sm font-black text-rose-800">-₹{cashBookAuditData.periodPaymentsTotal.toLocaleString('en-IN')}</span>
+                  </div>
+                  <div className="bg-indigo-50/60 p-2.5 rounded-2xl border border-indigo-200">
+                    <span className="text-[10px] text-indigo-800 font-bold uppercase block">Closing Bal</span>
+                    <span className="text-sm font-black text-indigo-900">₹{cashBookAuditData.closingBalance.toLocaleString('en-IN')}</span>
                   </div>
                 </div>
 
@@ -6034,17 +6437,17 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                     ) : (
                       <>
                         <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                        <span>Auditor Verification Statement</span>
+                        <span>{isDualAuditMode ? 'Joint Auditor Verification Statement' : 'Auditor Verification Statement'}</span>
                       </>
                     )}
                   </div>
                   {dualAuditSummary.hasDiscrepancies ? (
                     <p className="leading-relaxed">
-                      <strong>{campaign.title}</strong> accounts ({auditPeriod}) endiknaah hian Auditor pahnih hmuhchhuah inmil lo / Query <strong>({dualAuditSummary.discrepancyItems.length} items)</strong> a la awm avangin Final Audit Certificate hi <strong>On-Hold (Hren Lailawk)</strong> a ni. Inang lo zawng zawng enfiah a nih hnuah chauh <strong>✓ Signed &amp; Verified</strong> a inthlak ang.
+                      <strong>{campaign.title}</strong> accounts ({(isRestrictedAuditor && appointedPeriodLabel) ? appointedPeriodLabel : auditPeriod}) endiknaah hian Auditor pahnih hmuhchhuah inmil lo / Query <strong>({dualAuditSummary.discrepancyItems.length} items)</strong> a la awm avangin Final Audit Certificate hi <strong>On-Hold (Hren Lailawk)</strong> a ni. Inang lo zawng zawng enfiah a nih hnuah chauh <strong>✓ Verified &amp; Signed</strong> a inthlak ang.
                     </p>
                   ) : (
                     <p className="leading-relaxed">
-                      He lehkha hmang hian <strong>{campaign.title}</strong> accounts hi <strong>{auditPeriod}</strong> a tan enfiah leh audit fel a ni tih nemngheh a ni. Records zawng zawng hi uluk taka endik a ni a, total of <strong>{stats.totalLocked} records</strong> hi tamper-proof audit lock hmangin freeze a ni.
+                      He lehkha hmang hian <strong>{campaign.title}</strong> accounts hi <strong>{(isRestrictedAuditor && appointedPeriodLabel) ? appointedPeriodLabel : auditPeriod}</strong> a tan enfiah leh audit fel a ni tih nemngheh a ni. Records zawng zawng hi uluk taka endik a ni a, total of <strong>{stats.totalLocked} records</strong> hi tamper-proof audit lock hmangin freeze a ni.
                     </p>
                   )}
                   {auditNotes && (
@@ -6054,102 +6457,89 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                   )}
                 </div>
 
-                <div className="flex items-end justify-between pt-4 flex-wrap gap-4">
-                  <div className="text-[11px] text-slate-500 space-y-0.5">
-                    <div>Date: <span className="font-bold text-slate-800">{formatDateDDMMYYYY(new Date().toISOString())}</span></div>
-                    <div>
-                      Digital Stamp:{' '}
-                      {dualAuditSummary.hasDiscrepancies ? (
-                        <span className="text-rose-700 font-black">⚠️ ON HOLD — DISCREPANCY AWM</span>
-                      ) : (
-                        <span className="text-emerald-700 font-bold">RONPAY VERIFIED</span>
-                      )}
+                {/* Joint Auditors Verification Cards on Single Page */}
+                <div className="space-y-2 pt-2">
+                  {dualAuditSummary.auditorsList.length >= 2 && (
+                    <div className="text-[10.5px] font-black uppercase tracking-wider text-slate-500 text-center">
+                      Verified Joint Auditors (Phek Khat — Dual Verification)
                     </div>
-                  </div>
-                  <div className="flex items-end gap-4 flex-wrap">
+                  )}
+                  <div className={`grid gap-3 ${
+                    dualAuditSummary.auditorsList.length >= 2 ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1'
+                  }`}>
                     {dualAuditSummary.auditorsList.length >= 2 ? (
                       dualAuditSummary.auditorsList.map((aud, idx) => {
-                        const statusLabel = aud.hasSignedOff
-                          ? '✓ Signed & Verified'
+                        const isMe = aud.auditorKey === currentAuditorKey;
+                        const isAudVerified = dualAuditSummary.isJointFinalized || aud.hasSignedOff;
+                        const statusLabel = isAudVerified
+                          ? '✓ Verified & Signed'
                           : aud.flaggedCount > 0
-                          ? `⚠️ Query Awm (${aud.flaggedCount}) — Hold`
+                          ? `⚠️ Query Awm (${aud.flaggedCount})`
+                          : aud.rawSignedOff && !dualAuditSummary.hasDiscrepancies
+                          ? '✓ Submitted (1/2 Nghah Mek)'
                           : dualAuditSummary.hasDiscrepancies && aud.individualComplete
                           ? '⏸️ Checked (Co-Auditor Inmil Lo)'
-                          : dualAuditSummary.hasDiscrepancies
-                          ? `⏳ Inmil Lo (${aud.expVerifiedCount}/${dualAuditSummary.totalRequiredExps} Senso)`
-                          : '⏳ Pending Sign-off';
+                          : '⏳ Pending Audit';
 
-                        const statusColor = aud.hasSignedOff
+                        const cardStyle = isAudVerified
+                          ? 'bg-emerald-50/70 border-emerald-400'
+                          : aud.flaggedCount > 0 || dualAuditSummary.hasDiscrepancies
+                          ? 'bg-rose-50/60 border-rose-300'
+                          : aud.rawSignedOff
+                          ? 'bg-indigo-50/60 border-indigo-300'
+                          : 'bg-slate-50 border-slate-300';
+
+                        const statusColor = isAudVerified
                           ? 'text-emerald-700'
                           : aud.flaggedCount > 0 || dualAuditSummary.hasDiscrepancies
                           ? 'text-rose-700'
+                          : aud.rawSignedOff
+                          ? 'text-indigo-700'
                           : 'text-amber-700';
 
                         return (
-                          <div key={aud.auditorKey} className="text-right border-t border-slate-900 pt-1.5 min-w-[155px] space-y-0.5">
-                            <div className="font-bold text-xs text-slate-900">{aud.auditorName}</div>
-                            <div className="text-[10px] text-slate-500">Sum Endiktu (Auditor {idx + 1})</div>
-                            <div className={`text-[9.5px] font-bold ${statusColor}`}>
+                          <div key={aud.auditorKey} className={`rounded-2xl border-2 p-3.5 text-center space-y-1 ${cardStyle}`}>
+                            <div className="text-[10px] font-black uppercase text-slate-500">
+                              Auditor {idx + 1} ({idx === 0 ? 'Sum Endiktu' : 'Co-Auditor'}){isMe ? ' • Nangmah' : ''}
+                            </div>
+                            <div className="font-black text-sm text-slate-900">{aud.auditorName}</div>
+                            <div className="text-[10.5px] font-mono text-slate-600">Phone: {aud.auditorPhone || 'N/A'}</div>
+                            <div className="text-[10px] font-bold text-slate-600">
+                              {isExpenditureOnlyAudit ? 'Lut: ✓ Pawm Sa' : `Lut: ✓${aud.txVerifiedCount}/${dualAuditSummary.totalRequiredTxs}`} • Senso: ✓{aud.expVerifiedCount}/{dualAuditSummary.totalRequiredExps}
+                            </div>
+                            <div className={`text-[11px] font-black pt-0.5 ${statusColor}`}>
                               {statusLabel}
                             </div>
-                            {!aud.hasSignedOff && !aud.individualComplete && canAudit && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  if (!campaign) return;
-                                  if (!isExpenditureOnlyAudit) {
-                                    markBatchRecordsAuditVerification(
-                                      cashBookAuditData.inRangeTxs.map(t => t.id),
-                                      'transaction',
-                                      'verified',
-                                      aud.auditorName,
-                                      '',
-                                      true,
-                                      aud.auditorPhone
-                                    );
-                                  }
-                                  markBatchRecordsAuditVerification(
-                                    cashBookAuditData.inRangeExps.map(e => e.id),
-                                    'expense',
-                                    'verified',
-                                    aud.auditorName,
-                                    '',
-                                    true,
-                                    aud.auditorPhone
-                                  );
-                                  lockCampaignAuditPeriod(
-                                    campaign.id,
-                                    { name: aud.auditorName, phone: aud.auditorPhone },
-                                    auditPeriod.trim(),
-                                    auditNotes.trim()
-                                  );
-                                  setTick(t => t + 1);
-                                  setLockToast(`✅ ${aud.auditorName} (Auditor ${idx + 1}) hmingin record zawng zawng '✓ Signed & Verified' nemngheh fel a ni e!`);
-                                  if (onRecordsUpdated) onRecordsUpdated();
-                                  setTimeout(() => setLockToast(null), 3500);
-                                }}
-                                className="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white text-[9px] font-black shadow-2xs cursor-pointer transition"
-                              >
-                                <span>✍️ Sign &amp; Verify Rawh</span>
-                              </button>
+                            {aud.signedAt && (
+                              <div className="text-[9.5px] text-slate-500">
+                                Signed: {formatDateDDMMYYYY(aud.signedAt)}
+                              </div>
                             )}
                           </div>
                         );
                       })
                     ) : (
-                      <div className="text-right border-t border-slate-900 pt-1.5 min-w-[160px] space-y-0.5">
-                        <div className="font-bold text-xs text-slate-900">
-                          {dualAuditSummary.auditorsList[0]?.auditorName || auditorName}
+                      <div className="flex items-end justify-between pt-2 flex-wrap gap-4">
+                        <div className="text-[11px] text-slate-500 space-y-0.5">
+                          <div>Date: <span className="font-bold text-slate-800">{formatDateDDMMYYYY(new Date().toISOString())}</span></div>
+                          <div>
+                            Digital Stamp: <span className="text-emerald-700 font-bold">RONPAY VERIFIED</span>
+                          </div>
                         </div>
-                        <div className="text-[10px] text-slate-500">Sum Endiktu (Auditor)</div>
-                        <div className={`text-[9.5px] font-bold ${
-                          (dualAuditSummary.auditorsList[0]?.hasSignedOff ?? dualAuditSummary.isJointFinalized)
-                            ? 'text-emerald-700'
-                            : 'text-amber-700'
-                        }`}>
-                          {(dualAuditSummary.auditorsList[0]?.hasSignedOff ?? dualAuditSummary.isJointFinalized)
-                            ? '✓ Signed & Verified'
-                            : '⏳ Pending Sign-off'}
+                        <div className="text-right border-t border-slate-900 pt-1.5 min-w-[160px] space-y-0.5">
+                          <div className="font-bold text-xs text-slate-900">
+                            {dualAuditSummary.auditorsList[0]?.auditorName || auditorName}
+                          </div>
+                          <div className="text-[10px] text-slate-500">Sum Endiktu (Auditor)</div>
+                          <div className={`text-[9.5px] font-bold ${
+                            (dualAuditSummary.auditorsList[0]?.hasSignedOff ?? dualAuditSummary.isJointFinalized)
+                              ? 'text-emerald-700'
+                              : 'text-amber-700'
+                          }`}>
+                            {(dualAuditSummary.auditorsList[0]?.hasSignedOff ?? dualAuditSummary.isJointFinalized)
+                              ? '✓ Signed & Verified'
+                              : '⏳ Pending Sign-off'}
+                          </div>
                         </div>
                       </div>
                     )}
@@ -6168,29 +6558,56 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                     <span>Print Co-Auditor Khaikhinna &amp; Inang Lo Result</span>
                   </button>
                 )}
-                <button
-                  type="button"
-                  disabled={dualAuditSummary.hasDiscrepancies}
-                  onClick={() => {
-                    if (dualAuditSummary.hasDiscrepancies) {
-                      setShowDiscrepancyDrawer(true);
-                      return;
-                    }
-                    handlePrintCertificate();
-                  }}
-                  className={`py-3 px-6 font-bold text-xs rounded-2xl shadow transition flex items-center gap-2 ${
-                    dualAuditSummary.hasDiscrepancies
-                      ? 'bg-slate-300 text-slate-600 cursor-not-allowed'
-                      : 'bg-slate-900 hover:bg-slate-800 text-white cursor-pointer'
-                  }`}
-                >
-                  {dualAuditSummary.hasDiscrepancies ? <Lock className="w-4 h-4" /> : <Printer className="w-4 h-4" />}
-                  <span>
-                    {dualAuditSummary.hasDiscrepancies
-                      ? `🔒 Final Certificate Lock (${dualAuditSummary.discrepancyItems.length} Inang Lo Siamrem Ngai)`
-                      : 'Print / Save PDF Certificate'}
-                  </span>
-                </button>
+                {isDualAuditMode && dualAuditSummary.auditorsList.length >= 2 && canAudit && !dualAuditSummary.isJointFinalized ? (
+                  <button
+                    type="button"
+                    onClick={handleDualAuditorSubmitOrAlert}
+                    className={`py-3 px-6 font-black text-xs rounded-2xl shadow transition flex items-center gap-2 cursor-pointer ${
+                      !dualAuditSummary.hasDiscrepancies && dualAuditSummary.allIndividuallyComplete
+                        ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                        : dualAuditSummary.hasDiscrepancies
+                        ? 'bg-rose-600 hover:bg-rose-700 text-white'
+                        : 'bg-amber-600 hover:bg-amber-700 text-white'
+                    }`}
+                  >
+                    <ShieldCheck className="w-4 h-4" />
+                    <span>
+                      {!dualAuditSummary.hasDiscrepancies && dualAuditSummary.allIndividuallyComplete
+                        ? '✅ Inmil Thlap! Joint Certificate Final & Lock Rawh (2/2)'
+                        : dualAuditSummary.hasDiscrepancies
+                        ? `🔔 Inmil Lohna Alert Thawn Rawh (${dualAuditSummary.discrepancyItems.length})`
+                        : '📤 Ka Audit Chin Submit Rawh (Co-Auditor Nghah Tur — 1/2)'}
+                    </span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={dualAuditSummary.hasDiscrepancies || (isDualAuditMode && !dualAuditSummary.isJointFinalized)}
+                    onClick={() => {
+                      if (dualAuditSummary.hasDiscrepancies) {
+                        setShowDiscrepancyDrawer(true);
+                        return;
+                      }
+                      handlePrintCertificate();
+                    }}
+                    className={`py-3 px-6 font-bold text-xs rounded-2xl shadow transition flex items-center gap-2 ${
+                      dualAuditSummary.hasDiscrepancies || (isDualAuditMode && !dualAuditSummary.isJointFinalized)
+                        ? 'bg-slate-300 text-slate-600 cursor-not-allowed'
+                        : 'bg-slate-900 hover:bg-slate-800 text-white cursor-pointer'
+                    }`}
+                  >
+                    {(dualAuditSummary.hasDiscrepancies || (isDualAuditMode && !dualAuditSummary.isJointFinalized)) ? <Lock className="w-4 h-4" /> : <Printer className="w-4 h-4" />}
+                    <span>
+                      {dualAuditSummary.hasDiscrepancies
+                        ? `🔒 Final Certificate Lock (${dualAuditSummary.discrepancyItems.length} Inang Lo Siamrem Ngai)`
+                        : isDualAuditMode && !dualAuditSummary.isJointFinalized
+                        ? '🔒 Co-Auditor Joint Submit & Consensus Nghah Mek'
+                        : isDualAuditMode
+                        ? '🖨️ Print / Save 1-Page Joint Audit Certificate'
+                        : 'Print / Save PDF Certificate'}
+                    </span>
+                  </button>
+                )}
               </div>
             </div>
           )}

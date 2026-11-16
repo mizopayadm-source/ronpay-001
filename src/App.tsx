@@ -57,7 +57,8 @@ import {
   getActiveAuditorGrantsForUser,
   syncAuditorGrantsAcrossCloud,
   saveStoredAuditorGrants,
-  isApprovedQRCreator
+  isApprovedQRCreator,
+  saveStoredExpenses
 } from './utils/storage';
 import {
   fetchTableData,
@@ -65,7 +66,8 @@ import {
   upsertTransaction,
   upsertCampaign,
   deleteTransaction,
-  runStartupCleanupSequence
+  runStartupCleanupSequence,
+  invalidateSupabaseTableCache
 } from './services/SupabaseSync';
 
 import { 
@@ -477,34 +479,49 @@ export default function App() {
     // Event-driven real-time updates with egress-safe debouncing
     let txDebounceTimer: any = null;
     let campDebounceTimer: any = null;
+    let expDebounceTimer: any = null;
     let memDebounceTimer: any = null;
 
     const unsubTx = subscribeToTable('transactions', () => {
       if (txDebounceTimer) clearTimeout(txDebounceTimer);
       txDebounceTimer = setTimeout(() => {
-        fetchTableData('transactions', { forceAll: true }).then(txs => {
+        fetchTableData('transactions', { forceAll: true, bypassCache: true }).then(txs => {
           if (isMounted && Array.isArray(txs) && txs.length > 0) {
             const reconciled = reconcileWithAuthoritativeTransactions(getStoredTransactions(), txs as Transaction[]);
             setTransactions(reconciled);
             saveStoredTransactions(reconciled, true);
           }
         }).catch(() => {});
-      }, 1500);
+      }, 1000);
     });
 
     const unsubCamp = subscribeToTable('campaigns', () => {
       if (campDebounceTimer) clearTimeout(campDebounceTimer);
       campDebounceTimer = setTimeout(() => {
-        fetchTableData('campaigns').then(camps => {
-          if (isMounted && Array.isArray(camps) && camps.length > 0) setCampaigns(camps as Campaign[]);
+        fetchTableData('campaigns', { forceAll: true, bypassCache: true }).then(camps => {
+          if (isMounted && Array.isArray(camps) && camps.length > 0) {
+            saveStoredCampaigns(camps as Campaign[], true);
+            setCampaigns(getStoredCampaigns());
+          }
         }).catch(() => {});
-      }, 2000);
+      }, 1200);
+    });
+
+    const unsubExp = subscribeToTable('expenses', () => {
+      if (expDebounceTimer) clearTimeout(expDebounceTimer);
+      expDebounceTimer = setTimeout(() => {
+        fetchTableData<any>('expenses', { forceAll: true, bypassCache: true }).then(exps => {
+          if (isMounted && Array.isArray(exps) && exps.length > 0) {
+            saveStoredExpenses(exps, true);
+          }
+        }).catch(() => {});
+      }, 1000);
     });
 
     const unsubMem = subscribeToTable('members', () => {
       if (memDebounceTimer) clearTimeout(memDebounceTimer);
       memDebounceTimer = setTimeout(() => {
-        fetchTableData<MemberRecord>('members').then(mems => {
+        fetchTableData<MemberRecord>('members', { bypassCache: true }).then(mems => {
           if (isMounted && Array.isArray(mems) && mems.length > 0) {
             setMembersState(mems);
             saveMembers(mems, true);
@@ -517,9 +534,11 @@ export default function App() {
       isMounted = false;
       if (txDebounceTimer) clearTimeout(txDebounceTimer);
       if (campDebounceTimer) clearTimeout(campDebounceTimer);
+      if (expDebounceTimer) clearTimeout(expDebounceTimer);
       if (memDebounceTimer) clearTimeout(memDebounceTimer);
       unsubTx.unsubscribe();
       unsubCamp.unsubscribe();
+      unsubExp.unsubscribe();
       unsubMem.unsubscribe();
     };
   }, []);
@@ -690,6 +709,7 @@ export default function App() {
         if (res?.transactions && res.transactions.length > 0) {
           setTransactions(prev => mergeTransactions(prev, res.transactions));
         }
+        reloadLocalData();
       }).catch(() => {});
     });
 
@@ -734,9 +754,12 @@ export default function App() {
   // Force cloud refresh directly from Authoritative Server Database
   const handleRefreshCloudData = useCallback(async () => {
     try {
-      const [txs, camps] = await Promise.all([
-        fetchTableData('transactions').catch(() => []),
-        fetchTableData('campaigns').catch(() => [])
+      invalidateSupabaseTableCache();
+      const [txs, camps, exps] = await Promise.all([
+        fetchTableData('transactions', { forceAll: true, bypassCache: true }).catch(() => []),
+        fetchTableData('campaigns', { forceAll: true, bypassCache: true }).catch(() => []),
+        fetchTableData<any>('expenses', { forceAll: true, bypassCache: true }).catch(() => []),
+        syncAuditorGrantsAcrossCloud().catch(() => [])
       ]);
       if (Array.isArray(txs) && txs.length > 0) {
         const reconciled = reconcileWithAuthoritativeTransactions(getStoredTransactions(), txs as Transaction[]);
@@ -744,7 +767,11 @@ export default function App() {
         saveStoredTransactions(reconciled, true);
       }
       if (Array.isArray(camps) && camps.length > 0) {
-        setCampaigns(camps as Campaign[]);
+        saveStoredCampaigns(camps as Campaign[], true);
+        setCampaigns(getStoredCampaigns());
+      }
+      if (Array.isArray(exps) && exps.length > 0) {
+        saveStoredExpenses(exps, true);
       }
       reloadLocalData();
     } catch (e) {

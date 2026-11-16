@@ -2313,8 +2313,8 @@ export const AuthorizedPersonsModal: React.FC<AuthorizedPersonsModalProps> = ({
                         <Calendar className="w-4 h-4 text-amber-700" />
                         <span>Audit Tur Hun Bi (Appointed Audit Period) *</span>
                       </label>
-                      <span className="text-[10px] font-bold text-amber-800 bg-amber-100/90 px-2 py-0.5 rounded-full border border-amber-300 inline-block w-fit">
-                        Auditor-in he hun chhung chiah hi a audit thei ang
+                      <span className="text-[10px] font-bold text-amber-900 bg-amber-100/90 px-2 py-0.5 rounded-full border border-amber-300 inline-block w-fit">
+                        🔒 He hun bi thlan sa hi Auditor-in a thlak danglam thei lo ang
                       </span>
                     </div>
 
