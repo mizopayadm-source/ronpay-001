@@ -1583,7 +1583,6 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
     const totalRequiredTxs = isExpenditureOnlyAudit ? 0 : cashBookAuditData.inRangeTxs.length;
     const totalRequiredExps = cashBookAuditData.inRangeExps.length;
     const totalRequiredRecords = totalRequiredTxs + totalRequiredExps;
-    const hasDiscrepancies = discrepancyItems.length > 0;
 
     const auditorsList = Array.from(auditorStatsMap.values()).map(st => {
       const hasVerifiedAllRequired =
@@ -1593,9 +1592,7 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
         (isExpenditureOnlyAudit || st.txVerifiedCount >= totalRequiredTxs);
       return {
         ...st,
-        individualComplete: hasVerifiedAllRequired,
-        // 'Signed & Verified' is only granted when the auditor has verified all required items AND there are zero Co-Auditor discrepancies/queries
-        hasSignedOff: Boolean((st.hasSignedOff || hasVerifiedAllRequired) && hasVerifiedAllRequired && !hasDiscrepancies)
+        hasSignedOff: Boolean(st.hasSignedOff || hasVerifiedAllRequired)
       };
     });
     const signedCount = auditorsList.filter(a => a.hasSignedOff).length;
@@ -1604,8 +1601,6 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
       auditorsList,
       signOffs,
       signedCount,
-      totalRequiredTxs,
-      totalRequiredExps,
       consensusVerifiedCount,
       partialVerifiedCount,
       consensusExpCount,
@@ -1613,16 +1608,8 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
       discrepancyItems,
       expDiscrepancyItems,
       txDiscrepancyItems,
-      hasDiscrepancies,
-      isJointFinalized: isDualAuditMode
-        ? signedCount >= 2 && !hasDiscrepancies
-        : Boolean(
-            !hasDiscrepancies &&
-              (freshCamp?.lastAuditedAt ||
-                (totalRequiredRecords > 0 &&
-                  cashBookAuditData.unauditedCount === 0 &&
-                  cashBookAuditData.flaggedCount === 0))
-          )
+      hasDiscrepancies: discrepancyItems.length > 0,
+      isJointFinalized: isDualAuditMode ? signedCount >= 2 && discrepancyItems.length === 0 : Boolean(freshCamp?.lastAuditedAt || (totalRequiredRecords > 0 && cashBookAuditData.unauditedCount === 0 && cashBookAuditData.flaggedCount === 0))
     };
   }, [cashBookAuditData.inRangeTxs, cashBookAuditData.inRangeExps, cashBookAuditData.unauditedCount, cashBookAuditData.flaggedCount, appointedAuditors, campaign, isDualAuditMode, isExpenditureOnlyAudit, tick]);
 
@@ -5935,69 +5922,10 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
           {/* TAB: AUDIT CERTIFICATE */}
           {activeTab === 'certificate' && (
             <div className="space-y-5 max-w-2xl mx-auto">
-              {/* Discrepancy Hold Alert Banner when Auditor 1 & Auditor 2 results do not match */}
-              {dualAuditSummary.hasDiscrepancies && (
-                <div className="bg-rose-950 text-white border-2 border-rose-500 rounded-3xl p-5 space-y-3 shadow-md">
-                  <div className="flex items-start justify-between gap-3 flex-wrap">
-                    <div className="flex items-center gap-2.5">
-                      <AlertCircle className="w-6 h-6 text-rose-400 shrink-0" />
-                      <div>
-                        <h4 className="font-black text-sm sm:text-base text-rose-200">
-                          ⚠️ Auditor 1 leh 2 Hmuhchhuah A Inang Lo ({dualAuditSummary.discrepancyItems.length} Items Inmil Lo / Query)
-                        </h4>
-                        <p className="text-[11px] text-rose-300">
-                          Auditor pahnih result a inmil hma chuan <strong>✓ Signed &amp; Verified</strong> leh <strong>Final Audit Certificate</strong> hi tihchhuah theih a ni lo (On Hold).
-                        </p>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={handlePrintCoAuditorResultReport}
-                      className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-black text-[11px] flex items-center gap-1.5 cursor-pointer shrink-0 shadow"
-                    >
-                      <Printer className="w-3.5 h-3.5" />
-                      <span>Print Inang Lo Result</span>
-                    </button>
-                  </div>
-
-                  <div className="bg-rose-900/60 border border-rose-500/40 rounded-2xl p-3 space-y-2 max-h-48 overflow-y-auto text-xs">
-                    {dualAuditSummary.discrepancyItems.map(item => (
-                      <div key={item.id} className="flex items-center justify-between gap-2 flex-wrap py-1 border-b border-rose-800/60 last:border-b-0">
-                        <div>
-                          <span className="font-black text-white">{item.title}</span>
-                          <span className="ml-2 font-mono font-black text-amber-300">₹{item.amount.toLocaleString('en-IN')}</span>
-                          <div className="text-[10.5px] text-rose-200 mt-0.5">{item.reason}</div>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setSearchQuery(item.id);
-                            setActiveTab(item.recordType === 'transaction' ? 'transactions' : 'expenses');
-                          }}
-                          className="px-2.5 py-1 rounded-lg bg-white text-rose-950 font-black text-[10px] hover:bg-rose-100 cursor-pointer shrink-0"
-                        >
-                          Enfiah &amp; Siamrem →
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <div className={`border rounded-3xl p-6 sm:p-8 space-y-6 shadow-sm ${
-                dualAuditSummary.hasDiscrepancies
-                  ? 'bg-rose-50/40 border-rose-300'
-                  : 'bg-slate-50 border-slate-300'
-              }`}>
+              <div className="bg-slate-50 border border-slate-300 rounded-3xl p-6 sm:p-8 space-y-6 shadow-sm">
                 <div className="text-center border-b border-slate-200 pb-4">
-                  <span className={`text-[10px] font-black tracking-widest uppercase px-3 py-1 rounded-full ${
-                    dualAuditSummary.hasDiscrepancies
-                      ? 'bg-rose-700 text-white'
-                      : 'bg-slate-900 text-white'
-                  }`}>
-                    {dualAuditSummary.hasDiscrepancies
-                      ? `⚠️ ON HOLD — AUDIT RESULT INANG LO (${dualAuditSummary.discrepancyItems.length})`
-                      : 'Official Audit Certificate'}
+                  <span className="text-[10px] font-black tracking-widest uppercase px-3 py-1 rounded-full bg-slate-900 text-white">
+                    Official Audit Certificate
                   </span>
                   <h3 className="text-xl sm:text-2xl font-black text-slate-900 mt-3">
                     {campaign.title}
@@ -6022,31 +5950,14 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                   </div>
                 </div>
 
-                <div className={`border border-dashed rounded-2xl p-4 bg-white text-xs space-y-2 ${
-                  dualAuditSummary.hasDiscrepancies ? 'border-rose-300 text-rose-900' : 'border-slate-300 text-slate-700'
-                }`}>
+                <div className="border border-dashed border-slate-300 rounded-2xl p-4 bg-white text-xs text-slate-700 space-y-2">
                   <div className="font-extrabold text-slate-900 flex items-center gap-1.5">
-                    {dualAuditSummary.hasDiscrepancies ? (
-                      <>
-                        <AlertCircle className="w-4 h-4 text-rose-600" />
-                        <span className="text-rose-800">Audit Verification Hold Statement (Result Inang Lo)</span>
-                      </>
-                    ) : (
-                      <>
-                        <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                        <span>Auditor Verification Statement</span>
-                      </>
-                    )}
+                    <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                    <span>Auditor Verification Statement</span>
                   </div>
-                  {dualAuditSummary.hasDiscrepancies ? (
-                    <p className="leading-relaxed">
-                      <strong>{campaign.title}</strong> accounts ({auditPeriod}) endiknaah hian Auditor pahnih hmuhchhuah inmil lo / Query <strong>({dualAuditSummary.discrepancyItems.length} items)</strong> a la awm avangin Final Audit Certificate hi <strong>On-Hold (Hren Lailawk)</strong> a ni. Inang lo zawng zawng enfiah a nih hnuah chauh <strong>✓ Signed &amp; Verified</strong> a inthlak ang.
-                    </p>
-                  ) : (
-                    <p className="leading-relaxed">
-                      He lehkha hmang hian <strong>{campaign.title}</strong> accounts hi <strong>{auditPeriod}</strong> a tan enfiah leh audit fel a ni tih nemngheh a ni. Records zawng zawng hi uluk taka endik a ni a, total of <strong>{stats.totalLocked} records</strong> hi tamper-proof audit lock hmangin freeze a ni.
-                    </p>
-                  )}
+                  <p className="leading-relaxed">
+                    He lehkha hmang hian <strong>{campaign.title}</strong> accounts hi <strong>{auditPeriod}</strong> a tan enfiah leh audit fel a ni tih nemngheh a ni. Records zawng zawng hi uluk taka endik a ni a, total of <strong>{stats.totalLocked} records</strong> hi tamper-proof audit lock hmangin freeze a ni.
+                  </p>
                   {auditNotes && (
                     <div className="text-slate-600 italic bg-slate-50 p-2.5 rounded-xl border border-slate-200">
                       "{auditNotes}"
@@ -6057,85 +5968,60 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                 <div className="flex items-end justify-between pt-4 flex-wrap gap-4">
                   <div className="text-[11px] text-slate-500 space-y-0.5">
                     <div>Date: <span className="font-bold text-slate-800">{formatDateDDMMYYYY(new Date().toISOString())}</span></div>
-                    <div>
-                      Digital Stamp:{' '}
-                      {dualAuditSummary.hasDiscrepancies ? (
-                        <span className="text-rose-700 font-black">⚠️ ON HOLD — DISCREPANCY AWM</span>
-                      ) : (
-                        <span className="text-emerald-700 font-bold">RONPAY VERIFIED</span>
-                      )}
-                    </div>
+                    <div>Digital Stamp: <span className="text-emerald-700 font-bold">RONPAY VERIFIED</span></div>
                   </div>
                   <div className="flex items-end gap-4 flex-wrap">
                     {dualAuditSummary.auditorsList.length >= 2 ? (
-                      dualAuditSummary.auditorsList.map((aud, idx) => {
-                        const statusLabel = aud.hasSignedOff
-                          ? '✓ Signed & Verified'
-                          : aud.flaggedCount > 0
-                          ? `⚠️ Query Awm (${aud.flaggedCount}) — Hold`
-                          : dualAuditSummary.hasDiscrepancies && aud.individualComplete
-                          ? '⏸️ Checked (Co-Auditor Inmil Lo)'
-                          : dualAuditSummary.hasDiscrepancies
-                          ? `⏳ Inmil Lo (${aud.expVerifiedCount}/${dualAuditSummary.totalRequiredExps} Senso)`
-                          : '⏳ Pending Sign-off';
-
-                        const statusColor = aud.hasSignedOff
-                          ? 'text-emerald-700'
-                          : aud.flaggedCount > 0 || dualAuditSummary.hasDiscrepancies
-                          ? 'text-rose-700'
-                          : 'text-amber-700';
-
-                        return (
-                          <div key={aud.auditorKey} className="text-right border-t border-slate-900 pt-1.5 min-w-[155px] space-y-0.5">
-                            <div className="font-bold text-xs text-slate-900">{aud.auditorName}</div>
-                            <div className="text-[10px] text-slate-500">Sum Endiktu (Auditor {idx + 1})</div>
-                            <div className={`text-[9.5px] font-bold ${statusColor}`}>
-                              {statusLabel}
-                            </div>
-                            {!aud.hasSignedOff && !aud.individualComplete && canAudit && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  if (!campaign) return;
-                                  if (!isExpenditureOnlyAudit) {
-                                    markBatchRecordsAuditVerification(
-                                      cashBookAuditData.inRangeTxs.map(t => t.id),
-                                      'transaction',
-                                      'verified',
-                                      aud.auditorName,
-                                      '',
-                                      true,
-                                      aud.auditorPhone
-                                    );
-                                  }
+                      dualAuditSummary.auditorsList.map((aud, idx) => (
+                        <div key={aud.auditorKey} className="text-right border-t border-slate-900 pt-1.5 min-w-[150px] space-y-0.5">
+                          <div className="font-bold text-xs text-slate-900">{aud.auditorName}</div>
+                          <div className="text-[10px] text-slate-500">Sum Endiktu (Auditor {idx + 1})</div>
+                          <div className={`text-[9.5px] font-bold ${aud.hasSignedOff ? 'text-emerald-700' : 'text-amber-700'}`}>
+                            {aud.hasSignedOff ? '✓ Signed & Verified' : '⏳ Pending Sign-off'}
+                          </div>
+                          {!aud.hasSignedOff && canAudit && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (!campaign) return;
+                                if (!isExpenditureOnlyAudit) {
                                   markBatchRecordsAuditVerification(
-                                    cashBookAuditData.inRangeExps.map(e => e.id),
-                                    'expense',
+                                    cashBookAuditData.inRangeTxs.map(t => t.id),
+                                    'transaction',
                                     'verified',
                                     aud.auditorName,
                                     '',
                                     true,
                                     aud.auditorPhone
                                   );
-                                  lockCampaignAuditPeriod(
-                                    campaign.id,
-                                    { name: aud.auditorName, phone: aud.auditorPhone },
-                                    auditPeriod.trim(),
-                                    auditNotes.trim()
-                                  );
-                                  setTick(t => t + 1);
-                                  setLockToast(`✅ ${aud.auditorName} (Auditor ${idx + 1}) hmingin record zawng zawng '✓ Signed & Verified' nemngheh fel a ni e!`);
-                                  if (onRecordsUpdated) onRecordsUpdated();
-                                  setTimeout(() => setLockToast(null), 3500);
-                                }}
-                                className="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white text-[9px] font-black shadow-2xs cursor-pointer transition"
-                              >
-                                <span>✍️ Sign &amp; Verify Rawh</span>
-                              </button>
-                            )}
-                          </div>
-                        );
-                      })
+                                }
+                                markBatchRecordsAuditVerification(
+                                  cashBookAuditData.inRangeExps.map(e => e.id),
+                                  'expense',
+                                  'verified',
+                                  aud.auditorName,
+                                  '',
+                                  true,
+                                  aud.auditorPhone
+                                );
+                                lockCampaignAuditPeriod(
+                                  campaign.id,
+                                  { name: aud.auditorName, phone: aud.auditorPhone },
+                                  auditPeriod.trim(),
+                                  auditNotes.trim()
+                                );
+                                setTick(t => t + 1);
+                                setLockToast(`✅ ${aud.auditorName} (Auditor ${idx + 1}) hmingin '✓ Signed & Verified' nemngheh fel a ni e!`);
+                                if (onRecordsUpdated) onRecordsUpdated();
+                                setTimeout(() => setLockToast(null), 3500);
+                              }}
+                              className="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white text-[9px] font-black shadow-2xs cursor-pointer transition"
+                            >
+                              <span>✍️ Sign &amp; Verify Rawh</span>
+                            </button>
+                          )}
+                        </div>
+                      ))
                     ) : (
                       <div className="text-right border-t border-slate-900 pt-1.5 min-w-[160px] space-y-0.5">
                         <div className="font-bold text-xs text-slate-900">
@@ -6170,26 +6056,11 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                 )}
                 <button
                   type="button"
-                  disabled={dualAuditSummary.hasDiscrepancies}
-                  onClick={() => {
-                    if (dualAuditSummary.hasDiscrepancies) {
-                      setShowDiscrepancyDrawer(true);
-                      return;
-                    }
-                    handlePrintCertificate();
-                  }}
-                  className={`py-3 px-6 font-bold text-xs rounded-2xl shadow transition flex items-center gap-2 ${
-                    dualAuditSummary.hasDiscrepancies
-                      ? 'bg-slate-300 text-slate-600 cursor-not-allowed'
-                      : 'bg-slate-900 hover:bg-slate-800 text-white cursor-pointer'
-                  }`}
+                  onClick={handlePrintCertificate}
+                  className="py-3 px-6 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-2xl shadow transition flex items-center gap-2 cursor-pointer"
                 >
-                  {dualAuditSummary.hasDiscrepancies ? <Lock className="w-4 h-4" /> : <Printer className="w-4 h-4" />}
-                  <span>
-                    {dualAuditSummary.hasDiscrepancies
-                      ? `🔒 Final Certificate Lock (${dualAuditSummary.discrepancyItems.length} Inang Lo Siamrem Ngai)`
-                      : 'Print / Save PDF Certificate'}
-                  </span>
+                  <Printer className="w-4 h-4" />
+                  <span>Print / Save PDF Certificate</span>
                 </button>
               </div>
             </div>
