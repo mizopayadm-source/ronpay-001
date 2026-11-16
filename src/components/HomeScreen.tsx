@@ -993,9 +993,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
       {/* DEDICATED ORGANIZATION-ONLY WORKSPACE (Role-Based: Public Landing vs Admin Financial Dashboard) */}
       {workspaceViewMode === 'org_only' && activeOrgCampaign && orgDashboardStats ? (
         isAuthorizedForOrg ? (
-        <div className="bg-slate-50 rounded-3xl p-3 sm:p-5 border border-slate-200/90 shadow-xs space-y-4 animate-fadeIn">
+        <div className="bg-slate-50 rounded-3xl p-3 @xl:p-5 border border-slate-200/90 shadow-xs space-y-4 animate-fadeIn">
           {/* Top Organization Workspace Header & Selector */}
-          <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-200/80 flex flex-col gap-3.5">
+          <div className="bg-white rounded-2xl p-3.5 @xl:p-4 shadow-sm border border-slate-200/80 flex flex-col gap-3.5">
             <div className="flex flex-col @xl:flex-row @xl:items-center justify-between gap-3">
               <div className="flex items-center gap-3 min-w-0">
                 <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-indigo-600 to-slate-900 text-white flex items-center justify-center font-black text-lg shadow-sm shrink-0 overflow-hidden border border-indigo-200">
@@ -1023,7 +1023,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                       </span>
                     )}
                   </div>
-                  <h2 className="text-base sm:text-lg font-black text-slate-900 truncate mt-0.5">
+                  <h2 className="text-base @xl:text-lg font-black text-slate-900 truncate mt-0.5">
                     {activeOrgCampaign.title}
                   </h2>
                   <p className="text-[11px] text-slate-500 font-medium truncate">
@@ -1126,24 +1126,24 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             </div>
           </div>
 
-          {/* TOP SECTION: 4 Beautiful Statistic Cards (2x2 on Mobile, 4-col on Desktop) */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3.5">
+          {/* TOP SECTION: 4 Beautiful Statistic Cards (2x2 in Standard View, 4-col in Wide View) */}
+          <div className="grid grid-cols-2 @3xl:grid-cols-4 gap-2.5 @xl:gap-3.5">
             {/* Card 1: Total Collections */}
-            <div className="bg-white rounded-2xl p-3 sm:p-4 shadow-sm border border-slate-200/80 flex flex-col justify-between relative overflow-hidden">
-              <div className="flex items-start justify-between gap-1.5">
-                <div className="min-w-0">
-                  <p className="text-[10px] sm:text-[11px] font-extrabold uppercase tracking-wider text-slate-400 truncate">
+            <div className="bg-white rounded-2xl p-3 @xl:p-4 shadow-sm border border-slate-200/80 flex flex-col justify-between relative overflow-hidden">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <p className="text-[10px] @xl:text-[11px] font-extrabold uppercase tracking-wider text-slate-400 truncate">
                     Total Collections
                   </p>
-                  <h3 className="text-base sm:text-2xl font-black text-slate-900 mt-1 tabular-nums truncate">
+                  <h3 className="text-base @xl:text-2xl font-black text-slate-900 mt-1 tabular-nums truncate">
                     ₹{orgDashboardStats.totalCollections.toLocaleString('en-IN')}
                   </h3>
                 </div>
-                <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl sm:rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white flex items-center justify-center shadow-xs shrink-0">
-                  <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5" />
+                <div className="w-8 h-8 @xl:w-10 @xl:h-10 rounded-xl @xl:rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white flex items-center justify-center shadow-xs shrink-0">
+                  <TrendingUp className="w-4 h-4 @xl:w-5 @xl:h-5" />
                 </div>
               </div>
-              <div className="mt-2.5 pt-2 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-[10px] sm:text-[11px]">
+              <div className="mt-2.5 pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between gap-1 text-[10px] @xl:text-[11px]">
                 <span className="font-extrabold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded-md inline-flex items-center gap-0.5 w-fit">
                   <ArrowUpRight className="w-3 h-3 shrink-0" /> {orgDashboardStats.txnCount} Txns
                 </span>
@@ -1154,24 +1154,24 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             </div>
 
             {/* Card 2: Active Targets & Progress */}
-            <div className="bg-white rounded-2xl p-3 sm:p-4 shadow-sm border border-slate-200/80 flex flex-col justify-between relative overflow-hidden">
-              <div className="flex items-start justify-between gap-1.5">
-                <div className="min-w-0">
-                  <p className="text-[10px] sm:text-[11px] font-extrabold uppercase tracking-wider text-slate-400 truncate">
+            <div className="bg-white rounded-2xl p-3 @xl:p-4 shadow-sm border border-slate-200/80 flex flex-col justify-between relative overflow-hidden">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <p className="text-[10px] @xl:text-[11px] font-extrabold uppercase tracking-wider text-slate-400 truncate">
                     Active Targets
                   </p>
-                  <h3 className="text-base sm:text-2xl font-black text-indigo-950 mt-1 tabular-nums truncate">
+                  <h3 className="text-base @xl:text-2xl font-black text-indigo-950 mt-1 tabular-nums truncate">
                     {orgDashboardStats.activeTarget > 0
                       ? `₹${orgDashboardStats.activeTarget.toLocaleString('en-IN')}`
                       : 'Open Target'}
                   </h3>
                 </div>
-                <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl sm:rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 text-white flex items-center justify-center shadow-xs shrink-0">
-                  <PieChart className="w-4 h-4 sm:w-5 sm:h-5" />
+                <div className="w-8 h-8 @xl:w-10 @xl:h-10 rounded-xl @xl:rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 text-white flex items-center justify-center shadow-xs shrink-0">
+                  <PieChart className="w-4 h-4 @xl:w-5 @xl:h-5" />
                 </div>
               </div>
               <div className="mt-2.5 pt-2 border-t border-slate-100 space-y-1.5">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-0.5 text-[10px] sm:text-[11px]">
+                <div className="flex flex-wrap items-center justify-between gap-1 text-[10px] @xl:text-[11px]">
                   <span className="font-extrabold text-indigo-700 tabular-nums">
                     Achieved: {orgDashboardStats.targetProgressPct}%
                   </span>
@@ -1193,31 +1193,31 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             {/* Card 3: Active Roll (Kohhran / Members) */}
             <div
               onClick={() => onOpenMemberRoll && onOpenMemberRoll('members_list', activeOrgCampaign.id)}
-              className="bg-white rounded-2xl p-3 sm:p-4 shadow-sm border border-slate-200/80 flex flex-col justify-between cursor-pointer hover:border-indigo-300 transition"
+              className="bg-white rounded-2xl p-3 @xl:p-4 shadow-sm border border-slate-200/80 flex flex-col justify-between cursor-pointer hover:border-indigo-300 transition"
             >
-              <div className="flex items-start justify-between gap-1.5">
-                <div className="min-w-0">
-                  <p className="text-[10px] sm:text-[11px] font-extrabold uppercase tracking-wider text-slate-400 truncate">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <p className="text-[10px] @xl:text-[11px] font-extrabold uppercase tracking-wider text-slate-400 truncate">
                     {activeOrgCampaign.rollStructureType === 'hqrs_hierarchy'
                       ? 'Kohhran & Bial Roll'
                       : 'Member Roll'}
                   </p>
-                  <h3 className="text-base sm:text-2xl font-black text-slate-900 mt-1 tabular-nums truncate">
+                  <h3 className="text-base @xl:text-2xl font-black text-slate-900 mt-1 tabular-nums truncate">
                     {orgDashboardStats.memberCount}{' '}
-                    <span className="text-[10px] sm:text-xs font-extrabold text-slate-500">
+                    <span className="text-[10px] @xl:text-xs font-extrabold text-slate-500">
                       {activeOrgCampaign.rollStructureType === 'hqrs_hierarchy' ? 'Kohhran' : 'Members'}
                     </span>
                   </h3>
                 </div>
-                <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl sm:rounded-2xl bg-gradient-to-br from-blue-500 to-cyan-600 text-white flex items-center justify-center shadow-xs shrink-0">
-                  <Users className="w-4 h-4 sm:w-5 sm:h-5" />
+                <div className="w-8 h-8 @xl:w-10 @xl:h-10 rounded-xl @xl:rounded-2xl bg-gradient-to-br from-blue-500 to-cyan-600 text-white flex items-center justify-center shadow-xs shrink-0">
+                  <Users className="w-4 h-4 @xl:w-5 @xl:h-5" />
                 </div>
               </div>
-              <div className="mt-2.5 pt-2 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-[10px] sm:text-[11px]">
+              <div className="mt-2.5 pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between gap-1 text-[10px] @xl:text-[11px]">
                 <span className="font-extrabold text-blue-700 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded-md w-fit">
                   {orgDashboardStats.sectionCount} Bial
                 </span>
-                <span className="text-indigo-600 font-extrabold flex items-center gap-0.5">
+                <span className="text-indigo-600 font-extrabold inline-flex items-center gap-0.5 whitespace-nowrap">
                   Roll En Rawh <ChevronRight className="w-3 h-3 shrink-0" />
                 </span>
               </div>
@@ -1226,26 +1226,26 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             {/* Card 4: Expenses & Net Balance */}
             <div
               onClick={() => onOpenMemberRoll && onOpenMemberRoll('expenses', activeOrgCampaign.id)}
-              className="bg-white rounded-2xl p-3 sm:p-4 shadow-sm border border-slate-200/80 flex flex-col justify-between cursor-pointer hover:border-amber-300 transition"
+              className="bg-white rounded-2xl p-3 @xl:p-4 shadow-sm border border-slate-200/80 flex flex-col justify-between cursor-pointer hover:border-amber-300 transition"
             >
-              <div className="flex items-start justify-between gap-1.5">
-                <div className="min-w-0">
-                  <p className="text-[10px] sm:text-[11px] font-extrabold uppercase tracking-wider text-slate-400 truncate">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <p className="text-[10px] @xl:text-[11px] font-extrabold uppercase tracking-wider text-slate-400 truncate">
                     Net Balance
                   </p>
-                  <h3 className="text-base sm:text-2xl font-black text-emerald-700 mt-1 tabular-nums truncate">
+                  <h3 className="text-base @xl:text-2xl font-black text-emerald-700 mt-1 tabular-nums truncate">
                     ₹{orgDashboardStats.netBalance.toLocaleString('en-IN')}
                   </h3>
                 </div>
-                <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl sm:rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 text-white flex items-center justify-center shadow-xs shrink-0">
-                  <Wallet className="w-4 h-4 sm:w-5 sm:h-5" />
+                <div className="w-8 h-8 @xl:w-10 @xl:h-10 rounded-xl @xl:rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 text-white flex items-center justify-center shadow-xs shrink-0">
+                  <Wallet className="w-4 h-4 @xl:w-5 @xl:h-5" />
                 </div>
               </div>
-              <div className="mt-2.5 pt-2 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-[10px] sm:text-[11px]">
+              <div className="mt-2.5 pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between gap-1 text-[10px] @xl:text-[11px]">
                 <span className="font-extrabold text-rose-700 bg-rose-50 border border-rose-200 px-1.5 py-0.5 rounded-md inline-flex items-center gap-0.5 w-fit tabular-nums truncate max-w-full">
                   <ArrowDownRight className="w-3 h-3 shrink-0" /> ₹{orgDashboardStats.totalExpenses.toLocaleString('en-IN')}
                 </span>
-                <span className="text-slate-500 font-bold">
+                <span className="text-slate-500 font-bold whitespace-nowrap">
                   {orgDashboardStats.expenseCount} Vouchers
                 </span>
               </div>
@@ -1253,25 +1253,25 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           </div>
 
           {/* MIDDLE SECTION: Visual Statistics (Collection Progress Donut/Pie & Monthly Revenue Bar Chart) */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5">
+          <div className="grid grid-cols-1 @3xl:grid-cols-2 gap-3.5">
             {/* Chart 1: Collection Progress & Category Breakdown (Donut Chart) */}
-            <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-200/80 flex flex-col justify-between">
-              <div className="flex items-center justify-between mb-3">
-                <div>
-                  <h3 className="text-xs sm:text-sm font-black text-slate-900 flex items-center gap-1.5">
-                    <PieChart className="w-4 h-4 text-indigo-600" />
+            <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-200/80 flex flex-col justify-between overflow-hidden">
+              <div className="flex flex-wrap items-start justify-between gap-2 mb-3">
+                <div className="min-w-0 flex-1">
+                  <h3 className="text-xs @xl:text-sm font-black text-slate-900 flex items-center gap-1.5">
+                    <PieChart className="w-4 h-4 text-indigo-600 shrink-0" />
                     <span>Collection Progress & Category Share</span>
                   </h3>
-                  <p className="text-[10.5px] text-slate-500 font-medium">
+                  <p className="text-[10.5px] text-slate-500 font-medium mt-0.5">
                     Bawm chhung category hrang hrang atanga pawisa lut zat
                   </p>
                 </div>
-                <span className="text-[10px] font-black text-indigo-700 bg-indigo-50 border border-indigo-200 px-2.5 py-1 rounded-full">
+                <span className="text-[10px] font-black text-indigo-700 bg-indigo-50 border border-indigo-200 px-2.5 py-1 rounded-full whitespace-nowrap shrink-0">
                   {orgDashboardStats.targetProgressPct}% Target
                 </span>
               </div>
 
-              <div className="flex flex-col sm:flex-row items-center gap-4 my-auto py-2">
+              <div className="flex flex-col @lg:flex-row items-center gap-4 my-auto py-2">
                 {/* Interactive SVG Donut Chart */}
                 <div className="relative w-36 h-36 shrink-0 flex items-center justify-center">
                   <svg className="w-36 h-36 -rotate-90" viewBox="0 0 120 120">
@@ -1323,10 +1323,10 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                 </div>
 
                 {/* Category Legend & Progress Bars */}
-                <div className="flex-1 w-full space-y-2">
+                <div className="flex-1 w-full min-w-0 space-y-2">
                   {orgDashboardStats.categoryBreakdown.slice(0, 6).map((cat) => (
                     <div key={cat.name} className="space-y-1">
-                      <div className="flex items-center justify-between text-[11px]">
+                      <div className="flex items-center justify-between gap-2 text-[11px]">
                         <div className="flex items-center gap-1.5 min-w-0">
                           <span
                             className="w-2.5 h-2.5 rounded-full shrink-0"
@@ -1334,7 +1334,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                           />
                           <span className="font-extrabold text-slate-700 truncate">{cat.name}</span>
                         </div>
-                        <div className="flex items-center gap-1.5 shrink-0">
+                        <div className="flex items-center gap-1.5 shrink-0 tabular-nums">
                           <span className="font-black text-slate-900">
                             ₹{cat.amount.toLocaleString('en-IN')}
                           </span>
@@ -1354,28 +1354,28 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             </div>
 
             {/* Chart 2: Monthly Revenue & Expense Bar Chart */}
-            <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-200/80 flex flex-col justify-between">
-              <div className="flex items-center justify-between mb-3">
-                <div>
-                  <h3 className="text-xs sm:text-sm font-black text-slate-900 flex items-center gap-1.5">
-                    <BarChart3 className="w-4 h-4 text-emerald-600" />
+            <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-200/80 flex flex-col justify-between overflow-hidden">
+              <div className="flex flex-wrap items-start justify-between gap-2 mb-3">
+                <div className="min-w-0 flex-1">
+                  <h3 className="text-xs @xl:text-sm font-black text-slate-900 flex items-center gap-1.5">
+                    <BarChart3 className="w-4 h-4 text-emerald-600 shrink-0" />
                     <span>Monthly Revenue & Expense Trend</span>
                   </h3>
-                  <p className="text-[10.5px] text-slate-500 font-medium">
+                  <p className="text-[10.5px] text-slate-500 font-medium mt-0.5">
                     Thla 6 kalta chhung pawisa lut (Received) leh hmanral (Paid)
                   </p>
                 </div>
-                <div className="flex items-center gap-2 text-[10px] font-extrabold">
-                  <span className="flex items-center gap-1 text-emerald-700">
-                    <span className="w-2.5 h-2.5 rounded-xs bg-emerald-500 inline-block" /> Received
+                <div className="flex items-center gap-2.5 text-[10px] font-extrabold shrink-0">
+                  <span className="flex items-center gap-1 text-emerald-700 whitespace-nowrap">
+                    <span className="w-2.5 h-2.5 rounded-xs bg-emerald-500 inline-block shrink-0" /> Received
                   </span>
-                  <span className="flex items-center gap-1 text-rose-600">
-                    <span className="w-2.5 h-2.5 rounded-xs bg-rose-400 inline-block" /> Paid
+                  <span className="flex items-center gap-1 text-rose-600 whitespace-nowrap">
+                    <span className="w-2.5 h-2.5 rounded-xs bg-rose-400 inline-block shrink-0" /> Paid
                   </span>
                 </div>
               </div>
 
-              <div className="h-44 flex items-end justify-between gap-2 pt-6 pb-1 px-1 border-b border-slate-100">
+              <div className="h-44 flex items-end justify-between gap-1.5 @xl:gap-2 pt-6 pb-1 px-1 border-b border-slate-100">
                 {orgDashboardStats.monthlySeries.map((m) => {
                   const revHeightPct = Math.max(
                     m.revenue > 0 ? 10 : 3,
@@ -1386,34 +1386,34 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                     Math.round((m.expense / orgDashboardStats.maxMonthlyVal) * 100)
                   );
                   return (
-                    <div key={m.key} className="flex-1 flex flex-col items-center gap-1.5 h-full justify-end group">
-                      <div className="text-[9px] font-extrabold text-slate-600 truncate max-w-full">
+                    <div key={m.key} className="flex-1 min-w-0 flex flex-col items-center gap-1.5 h-full justify-end group">
+                      <div className="text-[8.5px] @xl:text-[9.5px] font-extrabold text-slate-600 truncate max-w-full tabular-nums">
                         {m.revenue > 0 ? `₹${(m.revenue >= 1000 ? `${(m.revenue / 1000).toFixed(1)}k` : m.revenue)}` : '₹0'}
                       </div>
                       <div className="w-full flex items-end justify-center gap-1 h-28">
                         <div
-                          className="w-3.5 sm:w-5 bg-gradient-to-t from-emerald-600 to-emerald-400 rounded-t-md transition-all duration-500 shadow-2xs"
+                          className="w-3 @xl:w-5 bg-gradient-to-t from-emerald-600 to-emerald-400 rounded-t-md transition-all duration-500 shadow-2xs"
                           style={{ height: `${revHeightPct}%` }}
                           title={`${m.label} Received: ₹${m.revenue.toLocaleString('en-IN')}`}
                         />
                         <div
-                          className="w-2.5 sm:w-3.5 bg-gradient-to-t from-rose-500 to-rose-300 rounded-t-md transition-all duration-500"
+                          className="w-2 @xl:w-3.5 bg-gradient-to-t from-rose-500 to-rose-300 rounded-t-md transition-all duration-500"
                           style={{ height: `${expHeightPct}%` }}
                           title={`${m.label} Paid: ₹${m.expense.toLocaleString('en-IN')}`}
                         />
                       </div>
-                      <span className="text-[10px] font-extrabold text-slate-500">{m.label}</span>
+                      <span className="text-[9.5px] @xl:text-[10px] font-extrabold text-slate-500 truncate max-w-full">{m.label}</span>
                     </div>
                   );
                 })}
               </div>
 
-              <div className="pt-2.5 flex items-center justify-between text-[11px] text-slate-600">
+              <div className="pt-2.5 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-600">
                 <span className="font-bold">
-                  Total Received: <strong className="text-emerald-700">₹{orgDashboardStats.totalCollections.toLocaleString('en-IN')}</strong>
+                  Total Received: <strong className="text-emerald-700 tabular-nums">₹{orgDashboardStats.totalCollections.toLocaleString('en-IN')}</strong>
                 </span>
                 <span className="font-bold">
-                  Total Paid: <strong className="text-rose-600">₹{orgDashboardStats.totalExpenses.toLocaleString('en-IN')}</strong>
+                  Total Paid: <strong className="text-rose-600 tabular-nums">₹{orgDashboardStats.totalExpenses.toLocaleString('en-IN')}</strong>
                 </span>
               </div>
             </div>
@@ -1421,22 +1421,22 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
           {/* BOTTOM SECTION: Responsive Records & Report Table */}
           <div className="bg-white rounded-2xl shadow-sm border border-slate-200/80 overflow-hidden">
-            <div className="p-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+            <div className="p-4 border-b border-slate-100 flex flex-col @xl:flex-row @xl:items-center justify-between gap-2.5">
               <div>
-                <h3 className="text-xs sm:text-sm font-black text-slate-900 flex items-center gap-1.5">
-                  <FileSpreadsheet className="w-4 h-4 text-indigo-600" />
+                <h3 className="text-xs @xl:text-sm font-black text-slate-900 flex items-center gap-1.5">
+                  <FileSpreadsheet className="w-4 h-4 text-indigo-600 shrink-0" />
                   <span>Recent Transactions & Reports ({activeOrgCampaign.title})</span>
                 </h3>
                 <p className="text-[10.5px] text-slate-500 font-medium">
                   Pawisa lut (Received) leh hmanral (Paid) chhinchhiahna hnuhnung berte
                 </p>
               </div>
-              <div className="grid grid-cols-2 sm:flex items-center gap-2 w-full sm:w-auto">
+              <div className="grid grid-cols-2 @xl:flex items-center gap-2 w-full @xl:w-auto">
                 {onOpenMemberRoll && (
                   <button
                     type="button"
                     onClick={() => onOpenMemberRoll('print_reports', activeOrgCampaign.id)}
-                    className="w-full sm:w-auto justify-center px-3 py-2 sm:py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-[11px] font-extrabold transition cursor-pointer text-center whitespace-nowrap"
+                    className="w-full @xl:w-auto justify-center px-3 py-2 @xl:py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-[11px] font-extrabold transition cursor-pointer text-center whitespace-nowrap"
                   >
                     🖨️ Print Statement
                   </button>
@@ -1444,7 +1444,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                 <button
                   type="button"
                   onClick={onOpenReports}
-                  className="w-full sm:w-auto justify-center px-3 py-2 sm:py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-[11px] font-extrabold transition cursor-pointer text-center whitespace-nowrap"
+                  className="w-full @xl:w-auto justify-center px-3 py-2 @xl:py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-[11px] font-extrabold transition cursor-pointer text-center whitespace-nowrap"
                 >
                   Full Ledger & Excel
                 </button>
@@ -1514,12 +1514,12 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         </div>
         ) : (
         /* PUBLIC / GUEST ORGANIZATION PORTAL (Protected: No sensitive statistics, collections, or donor ledgers leaked) */
-        <div className="bg-slate-50 rounded-3xl p-3 sm:p-5 border border-slate-200/90 shadow-xs space-y-4 animate-fadeIn">
+        <div className="bg-slate-50 rounded-3xl p-3 @xl:p-5 border border-slate-200/90 shadow-xs space-y-4 animate-fadeIn">
           {/* Public Organization Identity & Welcome Card */}
-          <div className="bg-white rounded-2xl p-4 sm:p-5 shadow-sm border border-slate-200/80 flex flex-col gap-4">
-            <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+          <div className="bg-white rounded-2xl p-4 @xl:p-5 shadow-sm border border-slate-200/80 flex flex-col gap-4">
+            <div className="flex flex-col @xl:flex-row @xl:items-start justify-between gap-4">
               <div className="flex items-start gap-3.5 min-w-0">
-                <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-gradient-to-br from-indigo-600 via-indigo-700 to-slate-900 text-white flex items-center justify-center font-black text-2xl shadow-md shrink-0 overflow-hidden border-2 border-indigo-200">
+                <div className="w-16 h-16 @xl:w-20 @xl:h-20 rounded-2xl bg-gradient-to-br from-indigo-600 via-indigo-700 to-slate-900 text-white flex items-center justify-center font-black text-2xl shadow-md shrink-0 overflow-hidden border-2 border-indigo-200">
                   {activeOrgCampaign.imageUrl ? (
                     <img
                       src={activeOrgCampaign.imageUrl}
@@ -1541,10 +1541,10 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                       </span>
                     )}
                   </div>
-                  <h1 className="text-lg sm:text-2xl font-black text-slate-900 mt-1">
+                  <h1 className="text-lg @xl:text-2xl font-black text-slate-900 mt-1">
                     {activeOrgCampaign.title}
                   </h1>
-                  <p className="text-xs sm:text-sm text-slate-600 font-medium mt-0.5">
+                  <p className="text-xs @xl:text-sm text-slate-600 font-medium mt-0.5">
                     {activeOrgCampaign.subTitle || activeOrgCampaign.location || 'Official Online Giving & Contribution Portal'}
                   </p>
                   {activeOrgCampaign.description && (
@@ -1556,7 +1556,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               </div>
 
               {/* Quick Mode Switcher for users who want standard personal features */}
-              <div className="shrink-0 self-start sm:self-center">
+              <div className="shrink-0 self-start @xl:self-center">
                 <button
                   type="button"
                   onClick={() => toggleWorkspaceViewMode('hybrid')}
@@ -1571,8 +1571,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
             {/* Target Goal Progress (Safe Public View: Target Goal & Progress % without internal ledger leak) */}
             {orgDashboardStats.activeTarget > 0 && (
-              <div className="p-3.5 sm:p-4 rounded-2xl bg-gradient-to-r from-indigo-50/80 via-white to-indigo-50/50 border border-indigo-100 shadow-2xs space-y-2">
-                <div className="flex items-center justify-between text-xs sm:text-sm">
+              <div className="p-3.5 @xl:p-4 rounded-2xl bg-gradient-to-r from-indigo-50/80 via-white to-indigo-50/50 border border-indigo-100 shadow-2xs space-y-2">
+                <div className="flex items-center justify-between text-xs @xl:text-sm">
                   <span className="font-extrabold text-indigo-950 flex items-center gap-1.5">
                     <TrendingUp className="w-4 h-4 text-indigo-600" /> Target / Hmalakna Goal
                   </span>
@@ -1594,7 +1594,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             )}
 
             {/* Enabled Categories Pill Strip */}
-            <div className="pt-2 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div className="pt-2 border-t border-slate-100 flex flex-col @xl:flex-row @xl:items-center justify-between gap-2">
               <div className="flex items-center gap-1.5 flex-wrap">
                 <span className="text-[10.5px] font-black uppercase text-slate-400 mr-1 flex items-center gap-1">
                   <CheckSquare className="w-3 h-3 text-indigo-600" /> Thawhlawm / Giving Categories:
@@ -1612,7 +1612,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           </div>
 
           {/* TWO PRIMARY ACTION BUTTONS (Lian leh Fiah tak) */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+          <div className="grid grid-cols-1 @xl:grid-cols-2 gap-3.5">
             {/* Button 1: Thawh Rawh / Pekna (Contribute Now) */}
             <button
               type="button"
@@ -1625,7 +1625,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                 </div>
                 <div className="min-w-0">
                   <div className="flex items-center gap-1.5">
-                    <span className="font-black text-base sm:text-lg text-white">⚡ Thawh Rawh / Pekna</span>
+                    <span className="font-black text-base @xl:text-lg text-white">⚡ Thawh Rawh / Pekna</span>
                     <span className="text-[9px] font-black uppercase bg-amber-400 text-slate-950 px-1.5 py-0.2 rounded-md">
                       DIRECT UPI
                     </span>
@@ -1650,7 +1650,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                 </div>
                 <div className="min-w-0">
                   <div className="flex items-center gap-1.5">
-                    <span className="font-black text-base sm:text-lg text-white">📖 Quick Entry (Digit 4)</span>
+                    <span className="font-black text-base @xl:text-lg text-white">📖 Quick Entry (Digit 4)</span>
                     <span className="text-[9px] font-black uppercase bg-indigo-500 text-white px-1.5 py-0.2 rounded-md font-mono">
                       PASSBOOK
                     </span>
@@ -1665,7 +1665,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           </div>
 
           {/* Security & Confidentiality Notice + Officer Login Portal */}
-          <div className="bg-white rounded-2xl p-4 sm:p-5 shadow-xs border border-slate-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-slate-600">
+          <div className="bg-white rounded-2xl p-4 @xl:p-5 shadow-xs border border-slate-200/80 flex flex-col @xl:flex-row @xl:items-center justify-between gap-3 text-xs text-slate-600">
             <div className="flex items-start gap-2.5 min-w-0">
               <Info className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
               <p className="leading-relaxed">
