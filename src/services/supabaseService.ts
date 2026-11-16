@@ -179,10 +179,50 @@ export async function upsertSupabaseUser(user: CreatorProfile): Promise<boolean>
 // 2. TRANSACTIONS (PostgREST SDK)
 // ---------------------------------------------------------------------------
 
-export async function fetchSupabaseTransactions(campaignId?: string): Promise<Transaction[]> {
+// Smart in-memory delta cache to eliminate redundant full-table Egress when no rows changed
+let _cachedSupaTxns: Transaction[] | null = null;
+let _cachedSupaTxCount: number = -1;
+let _cachedSupaLatestUpdatedAt: string = '';
+let _lastSupaTxFetchMs: number = 0;
+
+export function invalidateSupabaseTransactionsCache(): void {
+  _cachedSupaTxCount = -1;
+  _cachedSupaLatestUpdatedAt = '';
+  _lastSupaTxFetchMs = 0;
+}
+
+export async function fetchSupabaseTransactions(campaignId?: string, forceFull: boolean = false): Promise<Transaction[]> {
   if (isSupabaseQuotaBlocked()) return getStoredTransactions();
   const supabase = getSupabase();
   if (!supabase) return getStoredTransactions();
+
+  const isAllCampaigns = !campaignId || campaignId === 'all';
+  const now = Date.now();
+
+  // 1. Short 4-second deduplication guard for simultaneous calls across components
+  if (isAllCampaigns && !forceFull && _cachedSupaTxns && _cachedSupaTxns.length > 0 && now - _lastSupaTxFetchMs < 4000) {
+    return _cachedSupaTxns;
+  }
+
+  // 2. Ultra-lightweight 120-byte Delta Probe: check if count or latest updated_at changed before downloading all rows
+  if (isAllCampaigns && !forceFull && _cachedSupaTxns && _cachedSupaTxns.length > 0 && _cachedSupaTxCount >= 0) {
+    try {
+      const { data: probe, count, error: probeErr } = await supabase
+        .from('transactions')
+        .select('id,updated_at', { count: 'exact' })
+        .neq('status', 'deleted')
+        .order('updated_at', { ascending: false })
+        .limit(1);
+
+      if (!probeErr && typeof count === 'number') {
+        const latestUpd = Array.isArray(probe) && probe.length > 0 ? String(probe[0].updated_at || '') : '';
+        if (count === _cachedSupaTxCount && latestUpd === _cachedSupaLatestUpdatedAt) {
+          _lastSupaTxFetchMs = now;
+          return _cachedSupaTxns;
+        }
+      }
+    } catch {}
+  }
 
   let query = supabase
     .from('transactions')
@@ -206,7 +246,7 @@ export async function fetchSupabaseTransactions(campaignId?: string): Promise<Tr
     if (validRows.length > 0) {
       unpurgeTransactionIds(validRows.map((r: any) => String(r.id)));
     }
-    return validRows.map((row: any) => ({
+    const mapped: Transaction[] = validRows.map((row: any) => ({
         id: row.id,
         campaignId: row.campaign_id,
         campaignTitle: row.campaign_title,
@@ -235,6 +275,19 @@ export async function fetchSupabaseTransactions(campaignId?: string): Promise<Tr
         updatedAt: row.updated_at,
         ...(row.metadata || {})
       }));
+
+    if (isAllCampaigns) {
+      _cachedSupaTxns = mapped;
+      _cachedSupaTxCount = validRows.length;
+      let maxUpd = '';
+      for (const r of validRows) {
+        const u = String(r.updated_at || '');
+        if (u > maxUpd) maxUpd = u;
+      }
+      _cachedSupaLatestUpdatedAt = maxUpd;
+      _lastSupaTxFetchMs = Date.now();
+    }
+    return mapped;
   }
 
   // Resilient fallback to backend server which has 100% reliable link to Supabase
@@ -370,6 +423,7 @@ export async function insertSupabaseTransaction(tx: Transaction): Promise<boolea
     }
   } catch {}
 
+  invalidateSupabaseTransactionsCache();
   // Recalibrate fund pool immediately
   await recalibrateSupabaseFundPool('public_pool');
   try {
@@ -405,6 +459,7 @@ export async function updateSupabaseTransaction(tx: Partial<Transaction> & { id:
     return false;
   }
 
+  invalidateSupabaseTransactionsCache();
   await recalibrateSupabaseFundPool('public_pool');
   try {
     if (typeof window !== 'undefined') {
@@ -438,6 +493,7 @@ export async function deleteSupabaseTransaction(id: string): Promise<boolean> {
       .or(matchFilter);
   } catch {}
 
+  invalidateSupabaseTransactionsCache();
   await recalibrateSupabaseFundPool('public_pool');
   try {
     if (typeof window !== 'undefined') {
@@ -475,6 +531,8 @@ export async function deleteMultipleSupabaseTransactions(ids: string[]): Promise
       .delete()
       .in('id', idArray);
   } catch {}
+
+  invalidateSupabaseTransactionsCache();
 
   await recalibrateSupabaseFundPool('public_pool');
   try {
@@ -1940,9 +1998,12 @@ export function initSupabaseRealtimeSync(callbacks: SupabaseRealtimeCallbacks): 
     }, 350);
   };
 
+  let isChannelSubscribed = false;
+
   const channel = supabase.channel('ronpay-realtime-master')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions' }, (payload) => {
       console.info('[Supabase Realtime] Transactions event:', payload.eventType);
+      invalidateSupabaseTransactionsCache();
       const isDelete = payload.eventType === 'DELETE';
       const isStatusDeleted = payload.eventType === 'UPDATE' && (payload.new as any)?.status === 'deleted';
       if (isDelete || isStatusDeleted) {
@@ -1979,10 +2040,23 @@ export function initSupabaseRealtimeSync(callbacks: SupabaseRealtimeCallbacks): 
       refreshUsers();
     })
     .subscribe((status) => {
+      isChannelSubscribed = status === 'SUBSCRIBED';
       console.info('[Supabase Realtime] Channel status:', status);
     });
 
+  // Egress-Safe Fallback Poll:
+  // - Does NOT run when WebSocket is SUBSCRIBED (0 polling egress)
+  // - Does NOT run when browser tab is hidden in background (0 background egress)
+  // - Uses the 120-byte delta probe inside fetchSupabaseTransactions() so full rows are only downloaded when a transaction actually changed!
+  const fallbackPollInterval = setInterval(() => {
+    if (isSupabaseQuotaBlocked()) return;
+    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+    if (isChannelSubscribed) return;
+    refreshTxns();
+  }, 30000);
+
   return () => {
+    clearInterval(fallbackPollInterval);
     if (txDebounce) clearTimeout(txDebounce);
     if (campDebounce) clearTimeout(campDebounce);
     if (memDebounce) clearTimeout(memDebounce);

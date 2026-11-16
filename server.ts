@@ -5245,20 +5245,56 @@ app.get('/api/data/events', (req: Request, res: Response) => {
 
 let serverSupabaseBlockedUntil = 0;
 let lastServerSupabaseSync = 0;
+let lastServerFullTablesSync = 0;
+let lastKnownSupaTxCount = -1;
+let lastKnownSupaLatestUpdatedAt = '';
 
 async function syncFromSupabase(db: DatabaseSchema, force: boolean = false): Promise<boolean> {
   try {
     const now = Date.now();
     if (now < serverSupabaseBlockedUntil) return false;
-    // Egress Protection: Do not query Supabase if already synced within last 10 minutes, unless explicitly forced or empty
+    // Egress Protection: 5-second debounce for delta checks unless forced or empty
     const hasTransactions = Array.isArray(db.transactions) && db.transactions.length > 0;
-    if (!force && hasTransactions && (now - lastServerSupabaseSync < 10 * 60 * 1000)) {
+    if (!force && hasTransactions && (now - lastServerSupabaseSync < 5 * 1000)) {
       return false;
     }
     const sbConfig = (db as any).supabaseConfig || {};
     const sbUrl = sbConfig.url || process.env.VITE_SUPABASE_URL || 'https://aqrplcmpealgruduwnhw.supabase.co';
     const sbKey = sbConfig.anonKey || process.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable__zS5fiKvBI5u6HYgour64g_g_tJj5WL';
     if (!sbUrl || !sbKey) return false;
+
+    // 1. Ultra-lightweight 120-byte Delta Probe on transactions (checks exact count & latest updated_at)
+    let txChanged = !hasTransactions || force || lastKnownSupaTxCount < 0;
+    if (!txChanged) {
+      try {
+        const probeRes = await fetch(
+          `${sbUrl}/rest/v1/transactions?select=id,updated_at&status=neq.deleted&order=updated_at.desc&limit=1`,
+          {
+            headers: {
+              'apikey': sbKey,
+              'Authorization': `Bearer ${sbKey}`,
+              'Prefer': 'count=exact'
+            },
+            signal: AbortSignal.timeout(6000)
+          }
+        );
+        if (probeRes.ok) {
+          const contentRange = probeRes.headers.get('content-range') || '';
+          const totalMatch = contentRange.match(/\/(\d+)$/);
+          const remoteCount = totalMatch ? parseInt(totalMatch[1], 10) : -1;
+          const probeRows: any[] = await probeRes.json();
+          const remoteLatestUpd = Array.isArray(probeRows) && probeRows.length > 0 ? String(probeRows[0].updated_at || '') : '';
+          if (remoteCount !== lastKnownSupaTxCount || remoteLatestUpd !== lastKnownSupaLatestUpdatedAt) {
+            txChanged = true;
+          }
+        }
+      } catch {}
+    }
+
+    if (!txChanged && !force && (now - lastServerFullTablesSync < 10 * 60 * 1000)) {
+      lastServerSupabaseSync = now;
+      return false;
+    }
 
     const res = await fetch(`${sbUrl}/rest/v1/transactions?select=*`, {
       headers: {
@@ -5352,9 +5388,19 @@ async function syncFromSupabase(db: DatabaseSchema, force: boolean = false): Pro
       });
 
       db.transactions = mergedTxs;
+      lastKnownSupaTxCount = validRows.length;
+      let maxUpd = '';
+      for (const r of validRows) {
+        const u = String(r.updated_at || '');
+        if (u > maxUpd) maxUpd = u;
+      }
+      lastKnownSupaLatestUpdatedAt = maxUpd;
     }
 
-    // 2. Fetch campaigns from Supabase
+    // 2. Fetch campaigns, expenses & members from Supabase only if forced or > 10 minutes since last full sync (saves large base64 image Egress)
+    const shouldSyncHeavyTables = force || lastServerFullTablesSync === 0 || (now - lastServerFullTablesSync >= 10 * 60 * 1000);
+    if (shouldSyncHeavyTables) {
+      lastServerFullTablesSync = now;
     try {
       const campRes = await fetch(`${sbUrl}/rest/v1/campaigns?select=*&order=created_at.desc`, {
         headers: {
@@ -5573,6 +5619,7 @@ async function syncFromSupabase(db: DatabaseSchema, force: boolean = false): Pro
         }
       }
     } catch {}
+    } // end shouldSyncHeavyTables
 
     lastServerSupabaseSync = Date.now();
     saveDatabase(db);
@@ -5610,7 +5657,7 @@ setInterval(async () => {
 // GET /api/data/state - Fetch current central database state with role-based query isolation
 app.get('/api/data/state', async (req: Request, res: Response) => {
   const db = getDatabase();
-  await syncFromSupabase(db);
+  await syncFromSupabase(db, false);
   const caller = parseCallerInfo(req);
 
   // Return full state with all authoritative transactions from Supabase
@@ -5622,10 +5669,11 @@ app.get('/api/data/state', async (req: Request, res: Response) => {
 });
 
 // POST /api/data/sync - Central sync endpoint for web, mobile apps, and AI Studio
-app.post('/api/data/sync', (req: Request, res: Response) => {
+app.post('/api/data/sync', async (req: Request, res: Response) => {
   try {
     const body = req.body || {};
     const db = getDatabase();
+    await syncFromSupabase(db);
 
     if (Array.isArray(body.deletedMemberIds) && body.deletedMemberIds.length > 0) {
       const delMemSet = new Set<string>(body.deletedMemberIds.map((id: any) => String(id).toLowerCase().trim()));

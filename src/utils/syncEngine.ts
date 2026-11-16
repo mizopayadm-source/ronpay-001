@@ -196,6 +196,39 @@ export async function syncAllWithServer(forceAuthoritative: boolean = false): Pr
         }
       }
 
+      // Always merge live authoritative transactions directly from Supabase so static hosts (ronpay.app) and preview servers never lag behind
+      try {
+        const { fetchSupabaseTransactions } = await import('../services/supabaseService');
+        const supaTxs = await fetchSupabaseTransactions();
+        if (Array.isArray(supaTxs) && supaTxs.length > 0) {
+          if (!serverData) {
+            serverData = {
+              campaigns: localCampaigns,
+              members: localMembers,
+              transactions: supaTxs,
+              creators: localCreators,
+              pricingConfig: localPricingConfig,
+              announcement: localAnnouncement,
+              auditLogs: localAuditLogs,
+              staffAccounts: localStaff,
+            };
+          } else {
+            const mergedMap = new Map<string, any>();
+            for (const st of (serverData.transactions || [])) {
+              if (st && st.id) mergedMap.set(String(st.id).toLowerCase().trim(), st);
+            }
+            for (const spt of supaTxs) {
+              if (spt && spt.id) {
+                const k = String(spt.id).toLowerCase().trim();
+                const prev = mergedMap.get(k);
+                mergedMap.set(k, prev ? { ...prev, ...spt } : spt);
+              }
+            }
+            serverData.transactions = Array.from(mergedMap.values());
+          }
+        }
+      } catch {}
+
       if (!serverData) {
         throw new Error(`Sync server responded with status ${response.status}`);
       }
@@ -1021,7 +1054,26 @@ export async function pullLatestServerState(): Promise<SyncDataState | null> {
           saveMembers(serverData.members, true);
         }
 
-        // 4. Transactions - merge authoritative server data with genuine offline creations
+        // 4. Transactions - merge authoritative server & Supabase data with genuine offline creations
+        try {
+          const { fetchSupabaseTransactions } = await import('../services/supabaseService');
+          const supaTxs = await fetchSupabaseTransactions();
+          if (Array.isArray(supaTxs) && supaTxs.length > 0) {
+            const mergedMap = new Map<string, any>();
+            for (const st of (serverData.transactions || [])) {
+              if (st && st.id) mergedMap.set(String(st.id).toLowerCase().trim(), st);
+            }
+            for (const spt of supaTxs) {
+              if (spt && spt.id) {
+                const k = String(spt.id).toLowerCase().trim();
+                const prev = mergedMap.get(k);
+                mergedMap.set(k, prev ? { ...prev, ...spt } : spt);
+              }
+            }
+            serverData.transactions = Array.from(mergedMap.values());
+          }
+        } catch {}
+
         if (Array.isArray(serverData.transactions)) {
           if (Array.isArray(serverData.deletedTransactionIds) && serverData.deletedTransactionIds.length > 0) {
             saveDeletedTransactionIds(serverData.deletedTransactionIds);
@@ -1029,7 +1081,6 @@ export async function pullLatestServerState(): Promise<SyncDataState | null> {
           const currentTxs = getStoredTransactions();
           const deletedIds = getDeletedTransactionIds();
           const txMap = new Map<string, Transaction>();
-          const nowMs = Date.now();
 
           // 1. Authoritative server transactions
           for (const st of serverData.transactions) {
