@@ -7298,17 +7298,25 @@ export const lockCampaignAuditPeriod = (
   const totalAuditors = options?.totalActiveAuditors ?? Math.max(1, uniqueGrantKeys.size);
   const isDualMode = options?.isDualAuditMode ?? (totalAuditors >= 2 || Boolean(targetCamp?.requireDualAuditorConsensus));
 
-  // Record this auditor's sign-off in campaign.auditSignOffs
+  // Record this auditor's sign-off in campaign.auditSignOffs (strictly scoped to the current audit cycle so previous cycle sign-offs never leak into a new cycle)
   const prevSignOffs = Array.isArray(targetCamp?.auditSignOffs) ? [...targetCamp!.auditSignOffs!] : [];
   const signMap = new Map<string, any>();
   for (const s of prevSignOffs) {
-    if (s && s.auditorKey) signMap.set(String(s.auditorKey), s);
+    if (!s || !s.auditorKey) continue;
+    const samePeriod = !s.auditPeriod || !periodLabel || String(s.auditPeriod).trim() === String(periodLabel).trim();
+    const sameFrom = !effFromDate || !s.fromDate || String(s.fromDate).slice(0, 10) === effFromDate;
+    const sameTo = !effToDate || !s.toDate || String(s.toDate).slice(0, 10) === effToDate;
+    if (samePeriod && sameFrom && sameTo) {
+      signMap.set(String(s.auditorKey), s);
+    }
   }
   signMap.set(aKey, {
     auditorKey: aKey,
     auditorPhone: auditorPhone || 'N/A',
     auditorName,
     auditPeriod: periodLabel,
+    fromDate: effFromDate || undefined,
+    toDate: effToDate || undefined,
     signedAt: nowIso,
     notes: notes || ''
   });
@@ -7332,17 +7340,28 @@ export const lockCampaignAuditPeriod = (
       expDiffCount: 0,
       summaryMessage: `📤 ${auditorName}-in he period [${periodLabel}] audit a zo tawh a, Co-Auditor endik zawh & cross-check nghah mek a ni.`
     };
+    const existingPeriodChangeAlert =
+      targetCamp.auditPeriodChangeAlert || (targetCamp.metadata as any)?.auditPeriodChangeAlert || null;
+    const updatedPeriodChangeAlert = existingPeriodChangeAlert
+      ? {
+          ...existingPeriodChangeAlert,
+          acknowledgedByKeys: Array.from(new Set([...(existingPeriodChangeAlert.acknowledgedByKeys || []), aKey]))
+        }
+      : null;
+
     const partialCamp: Campaign = {
       ...targetCamp,
       auditSignOffs: mergedSignOffs,
       coAuditAlert: awaitingAlert,
+      auditPeriodChangeAlert: updatedPeriodChangeAlert,
       lastAuditPeriod: periodLabel,
       lastAuditNotes: notes || targetCamp.lastAuditNotes,
       updatedAt: nowIso,
       metadata: {
         ...(targetCamp.metadata || {}),
         auditSignOffs: mergedSignOffs,
-        coAuditAlert: awaitingAlert
+        coAuditAlert: awaitingAlert,
+        auditPeriodChangeAlert: updatedPeriodChangeAlert
       }
     };
     saveCampaign(partialCamp);
@@ -7382,6 +7401,8 @@ export const lockCampaignAuditPeriod = (
           auditorPhone: gPhone || 'N/A',
           auditorName: gName,
           auditPeriod: periodLabel,
+          fromDate: effFromDate || undefined,
+          toDate: effToDate || undefined,
           signedAt: nowIso,
           notes: notes || ''
         });
@@ -7554,6 +7575,7 @@ export const lockCampaignAuditPeriod = (
         ...targetCamp,
         auditSignOffs: finalMergedSignOffs,
         coAuditAlert: finalizedAlert,
+        auditPeriodChangeAlert: null,
         lockedAuditPeriods: mergedLockedPeriods,
         lastAuditedAt: nowIso,
         lastAuditedBy: finalLockedByLabel,
@@ -7564,6 +7586,7 @@ export const lockCampaignAuditPeriod = (
           ...(targetCamp.metadata || {}),
           auditSignOffs: finalMergedSignOffs,
           coAuditAlert: finalizedAlert,
+          auditPeriodChangeAlert: null,
           lockedAuditPeriods: mergedLockedPeriods,
           lastAuditedAt: nowIso,
           lastAuditedBy: finalLockedByLabel,

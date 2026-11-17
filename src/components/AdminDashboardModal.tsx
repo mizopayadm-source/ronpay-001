@@ -100,7 +100,10 @@ import {
   FeeOptionMode,
   SectionQuickPreset,
   ModificationRequest,
-  AuditorAccessGrant
+  AuditorAccessGrant,
+  AuditPeriodChangeAlert,
+  CoAuditAlert,
+  LockedAuditPeriod
 } from '../types';
 import { SectionPresetManagerModal } from './SectionPresetManagerModal';
 import { formatDateDDMMYYYY, isCampaignExpired, getTodayDateTimeLocal } from '../utils/date';
@@ -135,7 +138,8 @@ import {
   reviewModificationRequest,
   getStoredAuditorGrants,
   revokeAuditorGrant,
-  permanentlyDeleteAuditorGrant
+  permanentlyDeleteAuditorGrant,
+  normalizeAuditorKey
 } from '../utils/storage';
 import { 
   ROLE_DEFINITIONS, 
@@ -303,7 +307,9 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
   const [isRefreshingLogs, setIsRefreshingLogs] = useState<boolean>(false);
 
   // Maker-Checker & Auditor Approval Console state
-  const [auditConsoleSubTab, setAuditConsoleSubTab] = useState<'requests' | 'grants' | 'logs'>('requests');
+  const [auditConsoleSubTab, setAuditConsoleSubTab] = useState<'requests' | 'grants' | 'campaign_status' | 'logs'>('requests');
+  const [auditStatusFilter, setAuditStatusFilter] = useState<'all' | 'pending_reapproval' | 'discrepancy' | 'auditing' | 'sealed' | 'unaudited'>('all');
+  const [auditStatusSearch, setAuditStatusSearch] = useState<string>('');
   const [modRequestsList, setModRequestsList] = useState<ModificationRequest[]>(() => getStoredModificationRequests());
   const [allAuditorGrantsList, setAllAuditorGrantsList] = useState<AuditorAccessGrant[]>(() => getStoredAuditorGrants());
   const [selectedModRequest, setSelectedModRequest] = useState<ModificationRequest | null>(null);
@@ -3688,50 +3694,399 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                     </div>
                   </div>
 
-                  {/* Sub-tabs */}
-                  <div className="flex items-center gap-2 border-b border-slate-200 pb-2 overflow-x-auto">
-                    <button
-                      type="button"
-                      onClick={() => setAuditConsoleSubTab('requests')}
-                      className={`text-xs px-3.5 py-1.5 rounded-xl font-bold transition flex items-center gap-1.5 ${
-                        auditConsoleSubTab === 'requests'
-                          ? 'bg-amber-600 text-white shadow-2xs'
-                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                      }`}
-                    >
-                      <Lock className="w-3.5 h-3.5" />
-                      <span>Modification Requests</span>
-                      {modRequestsList.filter(r => r.status === 'pending').length > 0 && (
-                        <span className="bg-white text-amber-800 text-[10px] px-1.5 py-0.2 rounded-full font-black">
-                          {modRequestsList.filter(r => r.status === 'pending').length}
-                        </span>
-                      )}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setAuditConsoleSubTab('grants')}
-                      className={`text-xs px-3.5 py-1.5 rounded-xl font-bold transition flex items-center gap-1.5 ${
-                        auditConsoleSubTab === 'grants'
-                          ? 'bg-indigo-600 text-white shadow-2xs'
-                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                      }`}
-                    >
-                      <ShieldCheck className="w-3.5 h-3.5" />
-                      <span>Auditor Grants ({allAuditorGrantsList.filter(g => g.status === 'active').length})</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setAuditConsoleSubTab('logs')}
-                      className={`text-xs px-3.5 py-1.5 rounded-xl font-bold transition flex items-center gap-1.5 ${
-                        auditConsoleSubTab === 'logs'
-                          ? 'bg-slate-800 text-white shadow-2xs'
-                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                      }`}
-                    >
-                      <FileText className="w-3.5 h-3.5" />
-                      <span>Activity Log ({logsList.length})</span>
-                    </button>
-                  </div>
+                  {/* Campaign Audit Status Summary KPI Strip */}
+                  {(() => {
+                    const nowMs = Date.now();
+                    const summaryRows = campaigns.map(camp => {
+                      const meta = (camp as any).metadata || {};
+                      const campIdLow = String(camp.id || '').toLowerCase().trim();
+                      const campGrants = [
+                        ...(Array.isArray(camp.auditorGrants) ? camp.auditorGrants : []),
+                        ...(Array.isArray(meta.auditorGrants) ? meta.auditorGrants : []),
+                        ...allAuditorGrantsList.filter(g => String(g.campaignId || g.campaign_id || '').toLowerCase().trim() === campIdLow)
+                      ];
+                      const uniqueActiveMap = new Map<string, AuditorAccessGrant>();
+                      campGrants.forEach(g => {
+                        if (!g || g.status !== 'active') return;
+                        const expMs = new Date(g.expiresAt || g.expires_at || 0).getTime();
+                        if (expMs > 0 && expMs <= nowMs) return;
+                        const k = normalizeAuditorKey(g.auditorPhone || g.auditor_phone, g.auditorName || g.auditor_name);
+                        if (!uniqueActiveMap.has(k)) uniqueActiveMap.set(k, g);
+                      });
+                      const activeAuditors = Array.from(uniqueActiveMap.values());
+                      const periodChangeAlert: AuditPeriodChangeAlert | null =
+                        camp.auditPeriodChangeAlert || (meta.auditPeriodChangeAlert as AuditPeriodChangeAlert | undefined) || null;
+                      const coAlert: CoAuditAlert | null = camp.coAuditAlert || (meta.coAuditAlert as CoAuditAlert | undefined) || null;
+                      const lockedPeriods: LockedAuditPeriod[] = Array.isArray(camp.lockedAuditPeriods)
+                        ? camp.lockedAuditPeriods
+                        : (Array.isArray(meta.lockedAuditPeriods) ? meta.lockedAuditPeriods : []);
+
+                      const firstActive = activeAuditors[0];
+                      const appointedFrom =
+                        firstActive?.auditFromDate ||
+                        firstActive?.audit_from_date ||
+                        meta.appointedAuditFromDate ||
+                        (camp as any).appointedAuditFromDate ||
+                        '';
+                      const appointedTo =
+                        firstActive?.auditToDate ||
+                        firstActive?.audit_to_date ||
+                        meta.appointedAuditToDate ||
+                        (camp as any).appointedAuditToDate ||
+                        '';
+                      const appointedPeriod =
+                        firstActive?.auditPeriod ||
+                        firstActive?.audit_period ||
+                        meta.appointedAuditPeriod ||
+                        (camp as any).appointedAuditPeriod ||
+                        camp.lastAuditPeriod ||
+                        '';
+
+                      const periodDisplay =
+                        appointedFrom && appointedTo
+                          ? `${formatDateDDMMYYYY(appointedFrom)} – ${formatDateDDMMYYYY(appointedTo)}`
+                          : appointedPeriod || (lockedPeriods.length > 0 ? lockedPeriods[lockedPeriods.length - 1].periodLabel : 'Not Appointed');
+
+                      const ackKeys = new Set(periodChangeAlert?.acknowledgedByKeys || []);
+                      const hasRelevantPeriodAlert = Boolean(
+                        periodChangeAlert &&
+                        (!periodChangeAlert.newPeriodLabel || !appointedPeriod || periodChangeAlert.newPeriodLabel === appointedPeriod) &&
+                        (!periodChangeAlert.newFromDate || !appointedFrom || periodChangeAlert.newFromDate === appointedFrom) &&
+                        (!periodChangeAlert.newToDate || !appointedTo || periodChangeAlert.newToDate === appointedTo)
+                      );
+                      const unackedAuditorsCount = hasRelevantPeriodAlert
+                        ? activeAuditors.length > 0
+                          ? activeAuditors.filter(g => !ackKeys.has(normalizeAuditorKey(g.auditorPhone || g.auditor_phone, g.auditorName || g.auditor_name))).length
+                          : ackKeys.size === 0 ? 1 : 0
+                        : 0;
+                      const isPendingReapproval = hasRelevantPeriodAlert && unackedAuditorsCount > 0;
+
+                      const isLatestSealed = Boolean(
+                        camp.lastAuditedAt &&
+                        (!appointedPeriod ||
+                          lockedPeriods.some(p =>
+                            (!appointedPeriod || p.periodLabel === appointedPeriod) &&
+                            (!appointedFrom || !p.fromDate || p.fromDate === appointedFrom) &&
+                            (!appointedTo || !p.toDate || p.toDate === appointedTo)
+                          ))
+                      );
+
+                      let statusKey: 'pending_reapproval' | 'discrepancy' | 'auditing' | 'sealed' | 'unaudited' = 'unaudited';
+                      if (isPendingReapproval) {
+                        statusKey = 'pending_reapproval';
+                      } else if (coAlert?.status === 'discrepancy_alert') {
+                        statusKey = 'discrepancy';
+                      } else if (activeAuditors.length > 0 && !isLatestSealed) {
+                        statusKey = 'auditing';
+                      } else if (isLatestSealed || lockedPeriods.length > 0) {
+                        statusKey = 'sealed';
+                      }
+
+                      return {
+                        camp,
+                        activeAuditors,
+                        periodChangeAlert: hasRelevantPeriodAlert ? periodChangeAlert : null,
+                        unackedAuditorsCount,
+                        coAlert,
+                        lockedPeriods,
+                        periodDisplay,
+                        appointedPeriod,
+                        statusKey
+                      };
+                    });
+
+                    const reapprovalCount = summaryRows.filter(r => r.statusKey === 'pending_reapproval').length;
+                    const discrepancyCount = summaryRows.filter(r => r.statusKey === 'discrepancy').length;
+                    const auditingCount = summaryRows.filter(r => r.statusKey === 'auditing').length;
+                    const sealedCount = summaryRows.filter(r => r.statusKey === 'sealed').length;
+
+                    const filteredRows = summaryRows.filter(r => {
+                      if (auditStatusFilter !== 'all' && r.statusKey !== auditStatusFilter) return false;
+                      if (auditStatusSearch.trim()) {
+                        const q = auditStatusSearch.toLowerCase();
+                        return (
+                          (r.camp.title || '').toLowerCase().includes(q) ||
+                          (r.camp.orgName || '').toLowerCase().includes(q) ||
+                          (r.periodDisplay || '').toLowerCase().includes(q) ||
+                          r.activeAuditors.some(a => (a.auditorName || a.auditor_name || '').toLowerCase().includes(q))
+                        );
+                      }
+                      return true;
+                    });
+
+                    return (
+                      <>
+                        {/* Summary KPI Strip */}
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setAuditConsoleSubTab('campaign_status');
+                              setAuditStatusFilter('pending_reapproval');
+                            }}
+                            className={`text-left p-2.5 rounded-xl border transition cursor-pointer ${
+                              reapprovalCount > 0
+                                ? 'bg-amber-50 border-amber-300 hover:bg-amber-100/70'
+                                : 'bg-slate-50 border-slate-200 hover:bg-slate-100'
+                            }`}
+                          >
+                            <div className="text-[10px] font-black uppercase text-amber-700 flex items-center justify-between">
+                              <span>Pending Re-Approval</span>
+                              {reapprovalCount > 0 && <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />}
+                            </div>
+                            <div className="text-lg font-black text-amber-900 mt-0.5">{reapprovalCount}</div>
+                            <div className="text-[10px] text-amber-700/80 font-medium">Range thlak hnua pawm nawn ngai</div>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setAuditConsoleSubTab('campaign_status');
+                              setAuditStatusFilter('discrepancy');
+                            }}
+                            className={`text-left p-2.5 rounded-xl border transition cursor-pointer ${
+                              discrepancyCount > 0
+                                ? 'bg-rose-50 border-rose-300 hover:bg-rose-100/70'
+                                : 'bg-slate-50 border-slate-200 hover:bg-slate-100'
+                            }`}
+                          >
+                            <div className="text-[10px] font-black uppercase text-rose-700">Discrepancy Alert</div>
+                            <div className="text-lg font-black text-rose-900 mt-0.5">{discrepancyCount}</div>
+                            <div className="text-[10px] text-rose-700/80 font-medium">Co-Auditor inmil lo awm</div>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setAuditConsoleSubTab('campaign_status');
+                              setAuditStatusFilter('auditing');
+                            }}
+                            className="text-left p-2.5 rounded-xl border bg-indigo-50/70 border-indigo-200 hover:bg-indigo-100/70 transition cursor-pointer"
+                          >
+                            <div className="text-[10px] font-black uppercase text-indigo-700">Active Auditing</div>
+                            <div className="text-lg font-black text-indigo-900 mt-0.5">{auditingCount}</div>
+                            <div className="text-[10px] text-indigo-700/80 font-medium">Endik lai mek / nghah mek</div>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setAuditConsoleSubTab('campaign_status');
+                              setAuditStatusFilter('sealed');
+                            }}
+                            className="text-left p-2.5 rounded-xl border bg-emerald-50/70 border-emerald-200 hover:bg-emerald-100/70 transition cursor-pointer"
+                          >
+                            <div className="text-[10px] font-black uppercase text-emerald-700">Audited &amp; Sealed</div>
+                            <div className="text-lg font-black text-emerald-900 mt-0.5">{sealedCount}</div>
+                            <div className="text-[10px] text-emerald-700/80 font-medium">Audit &amp; Lock fel tawh</div>
+                          </button>
+                        </div>
+
+                        {/* Sub-tabs */}
+                        <div className="flex items-center gap-2 border-b border-slate-200 pb-2 overflow-x-auto">
+                          <button
+                            type="button"
+                            onClick={() => setAuditConsoleSubTab('requests')}
+                            className={`text-xs px-3.5 py-1.5 rounded-xl font-bold transition flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer ${
+                              auditConsoleSubTab === 'requests'
+                                ? 'bg-amber-600 text-white shadow-2xs'
+                                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                            }`}
+                          >
+                            <Lock className="w-3.5 h-3.5" />
+                            <span>Modification Requests</span>
+                            {modRequestsList.filter(r => r.status === 'pending').length > 0 && (
+                              <span className="bg-white text-amber-800 text-[10px] px-1.5 py-0.2 rounded-full font-black">
+                                {modRequestsList.filter(r => r.status === 'pending').length}
+                              </span>
+                            )}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setAuditConsoleSubTab('campaign_status')}
+                            className={`text-xs px-3.5 py-1.5 rounded-xl font-bold transition flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer ${
+                              auditConsoleSubTab === 'campaign_status'
+                                ? 'bg-emerald-700 text-white shadow-2xs'
+                                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                            }`}
+                          >
+                            <Activity className="w-3.5 h-3.5" />
+                            <span>Audit Status Summary ({campaigns.length})</span>
+                            {reapprovalCount > 0 && (
+                              <span className="bg-amber-400 text-slate-950 text-[10px] px-1.5 py-0.2 rounded-full font-black">
+                                {reapprovalCount} Re-approval
+                              </span>
+                            )}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setAuditConsoleSubTab('grants')}
+                            className={`text-xs px-3.5 py-1.5 rounded-xl font-bold transition flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer ${
+                              auditConsoleSubTab === 'grants'
+                                ? 'bg-indigo-600 text-white shadow-2xs'
+                                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                            }`}
+                          >
+                            <ShieldCheck className="w-3.5 h-3.5" />
+                            <span>Auditor Grants ({allAuditorGrantsList.filter(g => g.status === 'active').length})</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setAuditConsoleSubTab('logs')}
+                            className={`text-xs px-3.5 py-1.5 rounded-xl font-bold transition flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer ${
+                              auditConsoleSubTab === 'logs'
+                                ? 'bg-slate-800 text-white shadow-2xs'
+                                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                            }`}
+                          >
+                            <FileText className="w-3.5 h-3.5" />
+                            <span>Activity Log ({logsList.length})</span>
+                          </button>
+                        </div>
+
+                        {/* SUBTAB 2B: CAMPAIGN AUDIT STATUS SUMMARY WIDGET */}
+                        {auditConsoleSubTab === 'campaign_status' && (
+                          <div className="space-y-3">
+                            <div className="flex flex-col sm:flex-row gap-2 justify-between items-stretch sm:items-center bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                {[
+                                  { id: 'all', label: `All (${summaryRows.length})` },
+                                  { id: 'pending_reapproval', label: `🔔 Re-Approval (${reapprovalCount})` },
+                                  { id: 'discrepancy', label: `⚠️ Discrepancy (${discrepancyCount})` },
+                                  { id: 'auditing', label: `⏳ Auditing (${auditingCount})` },
+                                  { id: 'sealed', label: `🔒 Sealed (${sealedCount})` },
+                                  { id: 'unaudited', label: `Unaudited (${summaryRows.filter(r => r.statusKey === 'unaudited').length})` }
+                                ].map(opt => (
+                                  <button
+                                    key={opt.id}
+                                    type="button"
+                                    onClick={() => setAuditStatusFilter(opt.id as any)}
+                                    className={`px-2.5 py-1 rounded-lg text-[10.5px] font-bold transition cursor-pointer ${
+                                      auditStatusFilter === opt.id
+                                        ? 'bg-slate-900 text-white'
+                                        : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                                    }`}
+                                  >
+                                    {opt.label}
+                                  </button>
+                                ))}
+                              </div>
+                              <div className="relative min-w-[200px]">
+                                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                                <input
+                                  type="text"
+                                  value={auditStatusSearch}
+                                  onChange={e => setAuditStatusSearch(e.target.value)}
+                                  placeholder="Search campaign, period, auditor..."
+                                  className="w-full pl-8 pr-3 py-1.5 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                />
+                              </div>
+                            </div>
+
+                            {filteredRows.length === 0 ? (
+                              <div className="text-center py-10 bg-slate-50 rounded-2xl border border-slate-200 text-slate-400 text-xs font-bold">
+                                He filter milpui Campaign Audit record a awm rih lo.
+                              </div>
+                            ) : (
+                              <div className="space-y-2">
+                                {filteredRows.map(({ camp, activeAuditors, periodChangeAlert, unackedAuditorsCount, coAlert, lockedPeriods, periodDisplay, statusKey }) => {
+                                  const badgeStyle =
+                                    statusKey === 'pending_reapproval'
+                                      ? 'bg-amber-100 text-amber-900 border-amber-300'
+                                      : statusKey === 'discrepancy'
+                                      ? 'bg-rose-100 text-rose-900 border-rose-300'
+                                      : statusKey === 'auditing'
+                                      ? 'bg-indigo-100 text-indigo-900 border-indigo-300'
+                                      : statusKey === 'sealed'
+                                      ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
+                                      : 'bg-slate-100 text-slate-600 border-slate-200';
+                                  const statusLabel =
+                                    statusKey === 'pending_reapproval'
+                                      ? `🔔 Pending Re-Approval (${unackedAuditorsCount})`
+                                      : statusKey === 'discrepancy'
+                                      ? '⚠️ Co-Auditor Discrepancy'
+                                      : statusKey === 'auditing'
+                                      ? (coAlert?.status === 'awaiting_co_auditor' ? '⏳ 1/2 Submitted — Nghah Mek' : '⏳ Auditing In Progress')
+                                      : statusKey === 'sealed'
+                                      ? `🔒 Sealed & Audited (${lockedPeriods.length})`
+                                      : '— La Audit Loh';
+
+                                  return (
+                                    <div
+                                      key={camp.id}
+                                      className={`p-3 rounded-xl border transition flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 ${
+                                        statusKey === 'pending_reapproval'
+                                          ? 'bg-amber-50/70 border-amber-300 shadow-2xs'
+                                          : statusKey === 'discrepancy'
+                                          ? 'bg-rose-50/60 border-rose-300'
+                                          : 'bg-white border-slate-200'
+                                      }`}
+                                    >
+                                      <div className="space-y-1 min-w-0">
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                          <span className="font-black text-xs text-slate-900 truncate">{camp.title}</span>
+                                          {camp.orgName && (
+                                            <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-600">
+                                              {camp.orgName}
+                                            </span>
+                                          )}
+                                          <span className={`text-[10px] font-black px-2 py-0.5 rounded-full border ${badgeStyle}`}>
+                                            {statusLabel}
+                                          </span>
+                                        </div>
+                                        <div className="text-[11px] text-slate-600 flex items-center gap-3 flex-wrap">
+                                          <span className="flex items-center gap-1">
+                                            <Calendar className="w-3 h-3 text-slate-400" />
+                                            Audit Period: <strong className="text-slate-800">{periodDisplay}</strong>
+                                          </span>
+                                          {activeAuditors.length > 0 && (
+                                            <span className="flex items-center gap-1">
+                                              <Users className="w-3 h-3 text-indigo-500" />
+                                              Auditors:{' '}
+                                              <strong className="text-slate-800">
+                                                {activeAuditors.map(a => a.auditorName || a.auditor_name).join(', ')}
+                                              </strong>
+                                            </span>
+                                          )}
+                                        </div>
+                                        {statusKey === 'pending_reapproval' && periodChangeAlert && (
+                                          <div className="text-[10.5px] text-amber-800 font-semibold bg-amber-100/70 border border-amber-200 rounded-lg px-2 py-1 inline-block">
+                                            Range Thlak ({periodChangeAlert.changedBy}):{' '}
+                                            <span className="line-through opacity-75">
+                                              {periodChangeAlert.previousFromDate && periodChangeAlert.previousToDate
+                                                ? `${formatDateDDMMYYYY(periodChangeAlert.previousFromDate)} – ${formatDateDDMMYYYY(periodChangeAlert.previousToDate)}`
+                                                : (periodChangeAlert.previousPeriodLabel || 'Previous')}
+                                            </span>{' '}
+                                            →{' '}
+                                            <strong>
+                                              {periodChangeAlert.newFromDate && periodChangeAlert.newToDate
+                                                ? `${formatDateDDMMYYYY(periodChangeAlert.newFromDate)} – ${formatDateDDMMYYYY(periodChangeAlert.newToDate)}`
+                                                : periodChangeAlert.newPeriodLabel}
+                                            </strong>
+                                          </div>
+                                        )}
+                                      </div>
+
+                                      <div className="text-[10.5px] text-right shrink-0 space-y-0.5 text-slate-500">
+                                        {camp.lastAuditedAt ? (
+                                          <>
+                                            <div className="font-bold text-emerald-700">Last Lock: {formatDateDDMMYYYY(camp.lastAuditedAt)}</div>
+                                            {camp.lastAuditedBy && <div>By: {camp.lastAuditedBy}</div>}
+                                          </>
+                                        ) : (
+                                          <div className="italic">No final lock yet</div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
 
                   {/* SUBTAB 1: MAKER-CHECKER MODIFICATION REQUESTS */}
                   {auditConsoleSubTab === 'requests' && (

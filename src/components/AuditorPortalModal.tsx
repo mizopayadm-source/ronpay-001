@@ -27,7 +27,7 @@ import {
   UserPlus,
   FolderTree
 } from 'lucide-react';
-import { Campaign, CreatorProfile, KumtluangExpense, AuditorAccessGrant, CoAuditAlert } from '../types';
+import { Campaign, CreatorProfile, KumtluangExpense, AuditorAccessGrant, CoAuditAlert, AuditPeriodChangeAlert } from '../types';
 import { 
   getStoredCampaigns,
   getStoredTransactions, 
@@ -54,7 +54,8 @@ import {
   saveMultipleTransactions,
   saveStoredExpenses,
   isTransactionForCampaign,
-  isConfirmedTransaction
+  isConfirmedTransaction,
+  safeApiFetch
 } from '../utils/storage';
 import { syncAllWithServer, pullLatestServerState, RONPAY_SYNC_EVENT } from '../utils/syncEngine';
 import { fetchOpeningBalanceFromSupabase, invalidateSupabaseTableCache } from '../services/SupabaseSync';
@@ -741,20 +742,78 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
     return getStoredExpenses(activeCamp.id);
   }, [freshCampObj, campaign, tick]);
 
+  // Scope stats & Cross-Check strictly to Creator-appointed audit date window when present (with B/F Opening Balance from prior cycles)
+  const { scopedTransactions, scopedExpenses, scopedOpeningBalance } = useMemo(() => {
+    const validStatuses = new Set(['completed', 'confirmed', 'success', 'verified', 'paid', 'approved']);
+    const isOkTx = (t: any) => {
+      const st = String(t.status || '').toLowerCase().trim();
+      return !st || validStatuses.has(st) || (st !== 'failed' && st !== 'rejected' && st !== 'cancelled');
+    };
+    const getIso = (rawVal: any): string => {
+      const raw = String(rawVal || '').trim();
+      if (!raw) return '';
+      if (raw.length >= 10 && /^\d{4}-\d{2}-\d{2}/.test(raw)) return raw.slice(0, 10);
+      const d = new Date(raw);
+      return !isNaN(d.getTime()) ? d.toISOString().slice(0, 10) : '';
+    };
+
+    if (!hasCreatorAppointedDates || (!appointedFromDate && !appointedToDate)) {
+      return {
+        scopedTransactions: allTransactions,
+        scopedExpenses: allExpenses,
+        scopedOpeningBalance: effectiveOpeningBalance
+      };
+    }
+
+    let priorIn = 0;
+    let priorOut = 0;
+    if (appointedFromDate) {
+      allTransactions.filter(isOkTx).forEach(t => {
+        const d = getIso(t.timestamp || t.date || t.createdAt);
+        if (d && d < appointedFromDate) priorIn += Number(t.amount) || 0;
+      });
+      allExpenses.forEach(e => {
+        const d = getIso(e.spentDate || e.date || e.createdAt);
+        if (d && d < appointedFromDate) priorOut += Number(e.amount) || 0;
+      });
+    }
+
+    const inScopeTx = allTransactions.filter(t => {
+      const d = getIso(t.timestamp || t.date || t.createdAt);
+      if (!d) return false;
+      if (appointedFromDate && d < appointedFromDate) return false;
+      if (appointedToDate && d > appointedToDate) return false;
+      return true;
+    });
+    const inScopeExp = allExpenses.filter(e => {
+      const d = getIso(e.spentDate || e.date || e.createdAt);
+      if (!d) return false;
+      if (appointedFromDate && d < appointedFromDate) return false;
+      if (appointedToDate && d > appointedToDate) return false;
+      return true;
+    });
+
+    return {
+      scopedTransactions: inScopeTx,
+      scopedExpenses: inScopeExp,
+      scopedOpeningBalance: effectiveOpeningBalance + priorIn - priorOut
+    };
+  }, [allTransactions, allExpenses, effectiveOpeningBalance, hasCreatorAppointedDates, appointedFromDate, appointedToDate]);
+
   // Statistics with explicit Counts & Rupee Amounts for Total, Verified, Flagged, Unchecked, Locked
   const stats = useMemo(() => {
     const validStatuses = new Set(['completed', 'confirmed', 'success', 'verified', 'paid', 'approved']);
-    const verifiedTx = allTransactions.filter(t => {
+    const verifiedTx = scopedTransactions.filter(t => {
       const st = String(t.status || '').toLowerCase().trim();
       return !st || validStatuses.has(st) || (st !== 'failed' && st !== 'rejected' && st !== 'cancelled');
     });
 
     const sumTx = (list: typeof verifiedTx) => list.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
-    const sumExp = (list: typeof allExpenses) => list.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+    const sumExp = (list: typeof scopedExpenses) => list.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
 
-    const openingBalance = effectiveOpeningBalance;
+    const openingBalance = scopedOpeningBalance;
     const totalInflow = sumTx(verifiedTx);
-    const totalOutflow = sumExp(allExpenses);
+    const totalOutflow = sumExp(scopedExpenses);
     const netBalance = openingBalance + totalInflow - totalOutflow;
 
     const lockedTxList = verifiedTx.filter(t => t.is_locked);
@@ -763,11 +822,11 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
     const auditFlaggedTxList = verifiedTx.filter(t => getRecordAuditCategory(t, 'transaction') === 'flagged');
     const uncheckedTxList = verifiedTx.filter(t => getRecordAuditCategory(t, 'transaction') === 'unaudited');
 
-    const lockedExpList = allExpenses.filter(e => e.is_locked);
-    const unlockedExpList = allExpenses.filter(e => !e.is_locked);
-    const auditVerifiedExpList = allExpenses.filter(e => getRecordAuditCategory(e, 'expense') === 'audited');
-    const auditFlaggedExpList = allExpenses.filter(e => getRecordAuditCategory(e, 'expense') === 'flagged');
-    const uncheckedExpList = allExpenses.filter(e => getRecordAuditCategory(e, 'expense') === 'unaudited');
+    const lockedExpList = scopedExpenses.filter(e => e.is_locked);
+    const unlockedExpList = scopedExpenses.filter(e => !e.is_locked);
+    const auditVerifiedExpList = scopedExpenses.filter(e => getRecordAuditCategory(e, 'expense') === 'audited');
+    const auditFlaggedExpList = scopedExpenses.filter(e => getRecordAuditCategory(e, 'expense') === 'flagged');
+    const uncheckedExpList = scopedExpenses.filter(e => getRecordAuditCategory(e, 'expense') === 'unaudited');
 
     return {
       openingBalance,
@@ -775,7 +834,7 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
       totalOutflow,
       netBalance,
       txCount: verifiedTx.length,
-      expCount: allExpenses.length,
+      expCount: scopedExpenses.length,
       lockedTxCount: lockedTxList.length,
       lockedInflowAmount: sumTx(lockedTxList),
       unlockedTxCount: unlockedTxList.length,
@@ -796,19 +855,19 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
       flaggedOutflowAmount: sumExp(auditFlaggedExpList),
       uncheckedExpCount: uncheckedExpList.length,
       uncheckedOutflowAmount: sumExp(uncheckedExpList),
-      totalRecords: verifiedTx.length + allExpenses.length,
+      totalRecords: verifiedTx.length + scopedExpenses.length,
       totalLocked: lockedTxList.length + lockedExpList.length,
       totalUnlocked: unlockedTxList.length + unlockedExpList.length,
       totalAuditVerified: auditVerifiedTxList.length + auditVerifiedExpList.length,
       totalAuditFlagged: auditFlaggedTxList.length + auditFlaggedExpList.length,
       totalUnchecked: uncheckedTxList.length + uncheckedExpList.length
     };
-  }, [allTransactions, allExpenses, effectiveOpeningBalance, getRecordAuditCategory]);
+  }, [scopedTransactions, scopedExpenses, scopedOpeningBalance, getRecordAuditCategory]);
 
   // Cross-Check & Reconciliation Analytics (Bank/UPI vs Cash, Member Roll, Section-wise, Collector-wise, Anomaly Scanner)
   const crossCheckData = useMemo(() => {
     const validStatuses = new Set(['completed', 'confirmed', 'success', 'verified', 'paid', 'approved']);
-    const validTx = allTransactions.filter(t => {
+    const validTx = scopedTransactions.filter(t => {
       const st = String(t.status || '').toLowerCase().trim();
       return !st || validStatuses.has(st) || (st !== 'failed' && st !== 'rejected' && st !== 'cancelled');
     });
@@ -824,13 +883,13 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
     const cashInflowAmount = cashInflowList.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
     const onlineInflowAmount = onlineInflowList.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
 
-    const cashOutflowList = allExpenses.filter(e => isCashMode(e.paymentMode || (e as any).paymentMethod || 'cash'));
-    const onlineOutflowList = allExpenses.filter(e => !isCashMode(e.paymentMode || (e as any).paymentMethod || 'cash'));
+    const cashOutflowList = scopedExpenses.filter(e => isCashMode(e.paymentMode || (e as any).paymentMethod || 'cash'));
+    const onlineOutflowList = scopedExpenses.filter(e => !isCashMode(e.paymentMode || (e as any).paymentMethod || 'cash'));
 
     const cashOutflowAmount = cashOutflowList.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
     const onlineOutflowAmount = onlineOutflowList.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
 
-    const openingBalance = effectiveOpeningBalance;
+    const openingBalance = scopedOpeningBalance;
     const expectedClosingBalance = openingBalance + stats.totalInflow - stats.totalOutflow;
     const expectedBankBalance = openingBalance + onlineInflowAmount - onlineOutflowAmount;
     const expectedCashInHand = cashInflowAmount - cashOutflowAmount;
@@ -917,7 +976,7 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
     });
 
     // 3. Expenses missing Voucher No or Payee
-    allExpenses.forEach(e => {
+    scopedExpenses.forEach(e => {
       if (!e.voucherNo || !(e.paidTo || (e as any).payeeName)) {
         anomalies.push({
           id: e.id,
@@ -952,7 +1011,7 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
       collectorBreakdown,
       anomalies
     };
-  }, [allTransactions, allExpenses, freshCampObj, campaign, effectiveOpeningBalance, stats.totalInflow, stats.totalOutflow]);
+  }, [scopedTransactions, scopedExpenses, freshCampObj, campaign, scopedOpeningBalance, stats.totalInflow, stats.totalOutflow]);
 
   const handleSaveReconciliation = () => {
     if (!campaign || !canAudit) return;
@@ -1559,11 +1618,19 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
     const freshCamp = campaign
       ? getStoredCampaigns().find(c => String(c.id).toLowerCase().trim() === String(campaign.id).toLowerCase().trim()) || campaign
       : null;
-    const signOffs = Array.isArray(freshCamp?.auditSignOffs)
+    const rawSignOffs = Array.isArray(freshCamp?.auditSignOffs)
       ? freshCamp!.auditSignOffs!
       : Array.isArray((freshCamp as any)?.metadata?.auditSignOffs)
       ? (freshCamp as any).metadata.auditSignOffs
       : [];
+    // Filter sign-offs strictly to the current audit cycle (period & date range) so prior cycle sign-offs never pollute a new audit cycle
+    const signOffs = rawSignOffs.filter((s: any) => {
+      if (!s || !s.auditorKey) return false;
+      const samePeriod = !s.auditPeriod || !certificateCoverageInfo.periodTitle || String(s.auditPeriod).trim() === String(certificateCoverageInfo.periodTitle).trim();
+      const sameFrom = !s.fromDate || !certificateCoverageInfo.fromIso || String(s.fromDate).slice(0, 10) === certificateCoverageInfo.fromIso;
+      const sameTo = !s.toDate || !certificateCoverageInfo.toIso || String(s.toDate).slice(0, 10) === certificateCoverageInfo.toIso;
+      return samePeriod && sameFrom && sameTo;
+    });
     const signOffMap = new Map<string, any>();
     signOffs.forEach((s: any) => {
       if (s && s.auditorKey) signOffMap.set(String(s.auditorKey), s);
@@ -1772,16 +1839,72 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
       txDiscrepancyItems,
       hasDiscrepancies,
       isJointFinalized: isDualAuditMode
-        ? Boolean(!hasDiscrepancies && allIndividuallyComplete && (Boolean(freshCamp?.lastAuditedAt) || rawSubmittedCount >= 2))
+        ? Boolean(!hasDiscrepancies && allIndividuallyComplete && rawSubmittedCount >= 2)
         : Boolean(
-            !hasDiscrepancies &&
-              (freshCamp?.lastAuditedAt ||
-                (totalRequiredRecords > 0 &&
-                  cashBookAuditData.unauditedCount === 0 &&
-                  cashBookAuditData.flaggedCount === 0))
+            totalRequiredRecords > 0 &&
+              !hasDiscrepancies &&
+              cashBookAuditData.unauditedCount === 0 &&
+              cashBookAuditData.flaggedCount === 0 &&
+              (rawSubmittedCount >= 1 ||
+                ((isExpenditureOnlyAudit || cashBookAuditData.inRangeTxs.every(t => Boolean(t.is_locked))) &&
+                  cashBookAuditData.inRangeExps.every(e => Boolean(e.is_locked))))
           )
     };
-  }, [cashBookAuditData.inRangeTxs, cashBookAuditData.inRangeExps, cashBookAuditData.unauditedCount, cashBookAuditData.flaggedCount, appointedAuditors, campaign, isDualAuditMode, isExpenditureOnlyAudit, tick]);
+  }, [cashBookAuditData.inRangeTxs, cashBookAuditData.inRangeExps, cashBookAuditData.unauditedCount, cashBookAuditData.flaggedCount, appointedAuditors, campaign, isDualAuditMode, isExpenditureOnlyAudit, certificateCoverageInfo.periodTitle, certificateCoverageInfo.fromIso, certificateCoverageInfo.toIso, tick]);
+
+  const activePeriodChangeAlert: AuditPeriodChangeAlert | null = useMemo(() => {
+    const rawAlert: AuditPeriodChangeAlert | null =
+      freshCampObj?.auditPeriodChangeAlert || (freshCampMeta?.auditPeriodChangeAlert as AuditPeriodChangeAlert | undefined) || null;
+    if (!rawAlert) return null;
+    if (dualAuditSummary.isJointFinalized) return null;
+    // Ensure the alert matches the currently appointed period/dates so stale alerts never linger across cycles
+    const samePeriod = !rawAlert.newPeriodLabel || !appointedPeriodLabel || rawAlert.newPeriodLabel === appointedPeriodLabel;
+    const sameFrom = !rawAlert.newFromDate || !appointedFromDate || rawAlert.newFromDate === appointedFromDate;
+    const sameTo = !rawAlert.newToDate || !appointedToDate || rawAlert.newToDate === appointedToDate;
+    if (!samePeriod || !sameFrom || !sameTo) return null;
+    return rawAlert;
+  }, [freshCampObj, freshCampMeta, dualAuditSummary.isJointFinalized, appointedPeriodLabel, appointedFromDate, appointedToDate]);
+
+  const isPeriodChangePendingMyAck = useMemo(() => {
+    if (!activePeriodChangeAlert) return false;
+    const acked = Array.isArray(activePeriodChangeAlert.acknowledgedByKeys)
+      ? activePeriodChangeAlert.acknowledgedByKeys
+      : [];
+    if (acked.includes(currentAuditorKey)) return false;
+    const isCurrentViewerAppointedAuditor =
+      !canConfigureAuditScope || appointedAuditors.some(a => a.auditorKey === currentAuditorKey);
+    return isCurrentViewerAppointedAuditor;
+  }, [activePeriodChangeAlert, currentAuditorKey, canConfigureAuditScope, appointedAuditors]);
+
+  const handleAcknowledgePeriodChange = () => {
+    if (!campaign || !activePeriodChangeAlert) return;
+    const targetCamp = freshCampObj || campaign;
+    const updatedAlert: AuditPeriodChangeAlert = {
+      ...activePeriodChangeAlert,
+      acknowledgedByKeys: Array.from(
+        new Set([...(activePeriodChangeAlert.acknowledgedByKeys || []), currentAuditorKey])
+      )
+    };
+    const updatedCamp: Campaign = {
+      ...targetCamp,
+      auditPeriodChangeAlert: updatedAlert,
+      updatedAt: new Date().toISOString(),
+      metadata: {
+        ...(targetCamp.metadata || {}),
+        auditPeriodChangeAlert: updatedAlert
+      }
+    };
+    saveCampaign(updatedCamp);
+    safeApiFetch('/api/audit/sync-action', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ campaign: updatedCamp })
+    }).catch(() => {});
+    setTick(t => t + 1);
+    setLockToast('✅ Audit hun bi thar hriatpui / pawm nawn a ni e.');
+    if (onRecordsUpdated) onRecordsUpdated();
+    setTimeout(() => setLockToast(null), 3500);
+  };
 
   // Verify all unaudited Receipts & Payments within the currently selected Cash Book date range
   const handleVerifySelectedRange = () => {
@@ -1940,6 +2063,34 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
           </div>
         `;
 
+    const effCbPeriodTitle = (hasCreatorAppointedDates || isRestrictedAuditor)
+      ? (certificateCoverageInfo.periodTitle || cashBookAuditData.rangeLabel)
+      : (cashBookAuditData.rangeLabel || certificateCoverageInfo.periodTitle);
+    const effCbFromIso = (hasCreatorAppointedDates || isRestrictedAuditor)
+      ? certificateCoverageInfo.fromIso
+      : (cashBookAuditData.effFrom || certificateCoverageInfo.fromIso);
+    const effCbToIso = (hasCreatorAppointedDates || isRestrictedAuditor)
+      ? certificateCoverageInfo.toIso
+      : (cashBookAuditData.effTo || certificateCoverageInfo.toIso);
+    const effCbFromDisp = effCbFromIso ? formatDateDDMMYYYY(effCbFromIso) : '';
+    const effCbToDisp = effCbToIso ? formatDateDDMMYYYY(effCbToIso) : '';
+    const effCbCoverageText = effCbFromDisp && effCbToDisp
+      ? `${effCbFromDisp} – ${effCbToDisp}`
+      : effCbFromDisp
+      ? `${effCbFromDisp} aṭanga Tun Thleng (${formatDateDDMMYYYY(new Date().toISOString())})`
+      : effCbToDisp
+      ? `A Bul aṭanga ${effCbToDisp} thleng`
+      : certificateCoverageInfo.coverageRangeDisplay;
+    let effCbDurationDays: number | null = certificateCoverageInfo.durationDays;
+    if (effCbFromIso && effCbToIso && /^\d{4}-\d{2}-\d{2}$/.test(effCbFromIso) && /^\d{4}-\d{2}-\d{2}$/.test(effCbToIso)) {
+      const sMs = new Date(`${effCbFromIso}T00:00:00Z`).getTime();
+      const eMs = new Date(`${effCbToIso}T00:00:00Z`).getTime();
+      if (!isNaN(sMs) && !isNaN(eMs) && eMs >= sMs) {
+        effCbDurationDays = Math.round((eMs - sMs) / 86400000) + 1;
+      }
+    }
+    const effCbDurationText = effCbDurationDays !== null ? ` (Ni ${effCbDurationDays})` : '';
+
     const html = `
       <!DOCTYPE html>
       <html>
@@ -1951,7 +2102,8 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
           body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #0f172a; margin: 0; padding: 10px; font-size: 11px; }
           .header { text-align: center; border-bottom: 2px solid #0f172a; padding-bottom: 10px; margin-bottom: 14px; }
           .title { font-size: 18px; font-weight: 900; margin: 0; text-transform: uppercase; }
-          .sub { font-size: 12px; color: #475569; margin: 4px 0 0 0; font-weight: 600; }
+          .period-pill { display: inline-block; margin-top: 6px; padding: 4px 12px; border-radius: 6px; background: #eef2ff; border: 1px solid #c7d2fe; font-size: 11px; font-weight: 800; color: #1e1b4b; }
+          .sub { font-size: 11px; color: #475569; margin: 5px 0 0 0; font-weight: 600; }
           .summary-bar { display: flex; justify-content: space-between; gap: 10px; margin-bottom: 12px; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 8px 12px; }
           .ledger-grid { display: flex; gap: 12px; align-items: stretch; }
           .side { flex: 1; border: 1.5px solid #0f172a; border-radius: 6px; overflow: hidden; display: flex; flex-direction: column; justify-content: space-between; }
@@ -1969,7 +2121,10 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
       <body>
         <div class="header">
           <h1 class="title">${campaign?.title || ''} — CASH BOOK (RECEIPTS &amp; PAYMENTS)</h1>
-          <p class="sub">Period / Range: ${cashBookAuditData.rangeLabel} • Audit Status: ✓ Audited (${cashBookAuditData.auditedCount}) | ⏳ La Audit Loh (${cashBookAuditData.unauditedCount})</p>
+          <div class="period-pill">
+            📅 Audit Period: ${effCbPeriodTitle} • Hun Chhung: ${effCbCoverageText}${effCbDurationText}
+          </div>
+          <p class="sub">Audit Status: ✓ Audited (${cashBookAuditData.auditedCount}) | ⏳ La Audit Loh (${cashBookAuditData.unauditedCount}) • Printed: ${formatDateDDMMYYYY(new Date().toISOString())}</p>
         </div>
         <div class="summary-bar">
           <div><strong>Opening Balance (B/F):</strong> ₹${cashBookAuditData.openingBalance.toLocaleString('en-IN')}</div>
@@ -2473,7 +2628,7 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
       <body>
         <div class="header">
           <h1 class="title">${campaign.title} — CO-AUDITOR KHAIKHINNA &amp; AUDIT RESULT REPORT</h1>
-          <p class="sub">Audit Period: ${cashBookAuditData.rangeLabel} • Printed: ${formatDateDDMMYYYY(new Date().toISOString())}</p>
+          <p class="sub">Audit Period: ${certificateCoverageInfo.periodTitle || cashBookAuditData.rangeLabel} • Hun Chhung: ${certificateCoverageInfo.coverageRangeDisplay}${certificateCoverageInfo.durationDays !== null ? ` (Ni ${certificateCoverageInfo.durationDays})` : ''} • Printed: ${formatDateDDMMYYYY(new Date().toISOString())}</p>
         </div>
 
         <div class="verdict">
@@ -2966,6 +3121,44 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
               </div>
             </div>
 
+            {/* Re-Approval Notification Banner when Creator changes audit date range after an auditor was appointed */}
+            {isPeriodChangePendingMyAck && activePeriodChangeAlert && (
+              <div className="bg-amber-500/20 border-2 border-amber-400 rounded-xl px-3.5 py-2.5 flex items-center justify-between gap-2.5 flex-wrap shadow-sm">
+                <div className="flex items-start gap-2.5 text-[11.5px] text-amber-50">
+                  <Calendar className="w-4 h-4 text-amber-300 shrink-0 mt-0.5 animate-pulse" />
+                  <div className="space-y-0.5">
+                    <div className="font-black text-amber-200 tracking-tight">
+                      🔔 CREATOR-IN AUDIT HUN BI A THLAK DANGLAM — RE-APPROVAL NGAI
+                    </div>
+                    <div className="text-amber-100/95 leading-snug">
+                      <strong>{activePeriodChangeAlert.changedBy || 'Creator'}</strong>-in Audit Hun Bi a thlak danglam e:{' '}
+                      <span className="line-through text-amber-200/75 font-semibold">
+                        {activePeriodChangeAlert.previousFromDate && activePeriodChangeAlert.previousToDate
+                          ? `${formatDateDDMMYYYY(activePeriodChangeAlert.previousFromDate)} – ${formatDateDDMMYYYY(activePeriodChangeAlert.previousToDate)}`
+                          : (activePeriodChangeAlert.previousPeriodLabel || 'Hun Bi Hlui')}
+                      </span>{' '}
+                      →{' '}
+                      <strong className="text-white underline decoration-amber-300">
+                        {activePeriodChangeAlert.newFromDate && activePeriodChangeAlert.newToDate
+                          ? `${formatDateDDMMYYYY(activePeriodChangeAlert.newFromDate)} – ${formatDateDDMMYYYY(activePeriodChangeAlert.newToDate)}`
+                          : activePeriodChangeAlert.newPeriodLabel}
+                      </strong>
+                      {activePeriodChangeAlert.hadPriorSignOffs
+                        ? ' • Hun bi hmasa sign-off reset a ni a, hun bi thar hi endik nawnin pawm nawn (Re-approve) rawh.'
+                        : ' • Hun bi thar hi hriatpui / pawm nawn phawt rawh.'}
+                    </div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleAcknowledgePeriodChange}
+                  className="px-3 py-1.5 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-[10.5px] shrink-0 cursor-pointer shadow-xs transition"
+                >
+                  ✓ Hun Bi Thar Ka Hria &amp; Pawm Nawn E
+                </button>
+              </div>
+            )}
+
             {/* Co-Auditor Real-Time Workflow Alert Banner (Dual Mode Only) */}
             {isDualAuditMode && dualAuditSummary.auditorsList.length >= 2 && activeCoAuditAlert && !dualAuditSummary.isJointFinalized && (
               activeCoAuditAlert.status === 'discrepancy_alert' ? (
@@ -3264,6 +3457,8 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                         return;
                       }
                       const now = new Date();
+                      const preSaveGrants = getStoredAuditorGrants(campaign.id);
+                      const hadActiveGrantBefore = preSaveGrants.some(g => g && g.status === 'active');
                       const exp = new Date(now.getTime() + 72 * 60 * 60 * 1000).toISOString();
                       const g1: AuditorAccessGrant = {
                         id: `GRANT_${Date.now()}_A1`,
@@ -3329,19 +3524,53 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
 
                       const updatedGrants = getStoredAuditorGrants(campaign.id);
                       const isDualNow = qaMode === 'dual' || updatedGrants.filter(g => g.status === 'active').length >= 2;
+                      const baseCamp = freshCampObj || campaign;
+                      const prevMeta = (baseCamp as any)?.metadata || {};
+                      const prevPeriodStr = prevMeta?.appointedAuditPeriod || baseCamp.lastAuditPeriod || '';
+                      const prevFromStr = prevMeta?.appointedAuditFromDate || '';
+                      const prevToStr = prevMeta?.appointedAuditToDate || '';
+                      const isRangeChanged =
+                        prevPeriodStr !== cashBookAuditData.rangeLabel ||
+                        prevFromStr !== (cashBookAuditData.effFrom || '') ||
+                        prevToStr !== (cashBookAuditData.effTo || '');
+                      const hadPriorSignOffs = Array.isArray(baseCamp.auditSignOffs) && baseCamp.auditSignOffs.length > 0;
+                      const isNewCycle = isRangeChanged || Boolean(baseCamp.lastAuditedAt);
+                      const shouldTriggerReapprovalAlert = isRangeChanged && (hadActiveGrantBefore || hadPriorSignOffs);
+                      const nextPeriodChangeAlert: AuditPeriodChangeAlert | null | undefined = shouldTriggerReapprovalAlert
+                        ? {
+                            id: `PCHG_${Date.now()}`,
+                            previousPeriodLabel: prevPeriodStr || undefined,
+                            previousFromDate: prevFromStr || undefined,
+                            previousToDate: prevToStr || undefined,
+                            newPeriodLabel: cashBookAuditData.rangeLabel,
+                            newFromDate: cashBookAuditData.effFrom || undefined,
+                            newToDate: cashBookAuditData.effTo || undefined,
+                            changedAt: now.toISOString(),
+                            changedBy: creatorProfile?.name || 'Creator',
+                            hadPriorSignOffs,
+                            acknowledgedByKeys: []
+                          }
+                        : isNewCycle
+                        ? null
+                        : (baseCamp.auditPeriodChangeAlert ?? prevMeta?.auditPeriodChangeAlert ?? null);
+
                       saveCampaign({
-                        ...campaign,
+                        ...baseCamp,
                         auditorGrants: updatedGrants,
                         requireDualAuditorConsensus: isDualNow,
                         auditScope: qaScope,
+                        ...(isNewCycle ? { auditSignOffs: [], coAuditAlert: null } : {}),
+                        auditPeriodChangeAlert: nextPeriodChangeAlert,
                         metadata: {
-                          ...(campaign.metadata || {}),
+                          ...prevMeta,
                           auditorGrants: updatedGrants,
                           requireDualAuditorConsensus: isDualNow,
                           auditScope: qaScope,
                           appointedAuditPeriod: cashBookAuditData.rangeLabel,
                           appointedAuditFromDate: cashBookAuditData.effFrom || '',
-                          appointedAuditToDate: cashBookAuditData.effTo || ''
+                          appointedAuditToDate: cashBookAuditData.effTo || '',
+                          ...(isNewCycle ? { auditSignOffs: [], coAuditAlert: null } : {}),
+                          auditPeriodChangeAlert: nextPeriodChangeAlert
                         }
                       });
                       setQaName1('');
@@ -3544,7 +3773,7 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                           <span>🔒 Creator-in Audit Hun Bi A Ruatsa (Auditor tan thlak danglam theih a ni lo)</span>
                         </div>
                         <span className="text-[10.5px] font-black px-2.5 py-0.5 rounded-full bg-amber-200/80 text-amber-950 border border-amber-400">
-                          📍 {cashBookAuditData.rangeLabel}
+                          📍 {certificateCoverageInfo.periodTitle || cashBookAuditData.rangeLabel} ({certificateCoverageInfo.coverageRangeDisplay}{certificateCoverageInfo.durationDays !== null ? ` • Ni ${certificateCoverageInfo.durationDays}` : ''})
                         </span>
                       </div>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">

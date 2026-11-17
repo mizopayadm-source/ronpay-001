@@ -32,7 +32,7 @@ import {
   Sparkles,
   AlertTriangle
 } from 'lucide-react';
-import { Campaign, Transaction, CreatorProfile, AuthorizedOfficer, AuthorizedOfficerRole, MemberRecord, AuditorAccessGrant } from '../types';
+import { Campaign, Transaction, CreatorProfile, AuthorizedOfficer, AuthorizedOfficerRole, MemberRecord, AuditorAccessGrant, AuditPeriodChangeAlert } from '../types';
 import { 
   saveCampaign, 
   isCampaignCreator, 
@@ -133,36 +133,11 @@ export const AuthorizedPersonsModal: React.FC<AuthorizedPersonsModalProps> = ({
   const [auditorFromDate, setAuditorFromDate] = useState<string>(defaultFromDate);
   const [auditorToDate, setAuditorToDate] = useState<string>(defaultToDate);
 
-  const handleSelectAuditPeriodPreset = (preset: string) => {
-    setAuditorPeriodPreset(preset);
-    if (preset === 'fy_prev') {
-      const lbl = `FY ${fyCurrStart - 1}-${fyCurrStart}`;
-      setAuditorPeriodLabel(lbl);
-      setAuditorFromDate(`${fyCurrStart - 1}-04-01`);
-      setAuditorToDate(`${fyCurrStart}-03-31`);
-    } else if (preset === 'fy_curr') {
-      const lbl = `FY ${fyCurrStart}-${fyCurrStart + 1}`;
-      setAuditorPeriodLabel(lbl);
-      setAuditorFromDate(`${fyCurrStart}-04-01`);
-      setAuditorToDate(`${fyCurrStart + 1}-03-31`);
-    } else if (preset === 'cy_prev') {
-      const y = nowForFy.getFullYear() - 1;
-      setAuditorPeriodLabel(`Kum ${y}`);
-      setAuditorFromDate(`${y}-01-01`);
-      setAuditorToDate(`${y}-12-31`);
-    } else if (preset === 'cy_curr') {
-      const y = nowForFy.getFullYear();
-      setAuditorPeriodLabel(`Kum ${y}`);
-      setAuditorFromDate(`${y}-01-01`);
-      setAuditorToDate(`${y}-12-31`);
-    } else if (preset === 'all') {
-      setAuditorPeriodLabel('Hun Chhung Zawng (All Records)');
-      setAuditorFromDate('');
-      setAuditorToDate('');
-    } else if (preset === 'custom') {
-      setAuditorPeriodLabel('Custom Date Range');
-    }
-  };
+  // Inline Date Range editor for already-appointed active Auditors
+  const [isEditingAppointedRange, setIsEditingAppointedRange] = useState<boolean>(false);
+  const [editPeriodLabel, setEditPeriodLabel] = useState<string>('');
+  const [editFromDate, setEditFromDate] = useState<string>('');
+  const [editToDate, setEditToDate] = useState<string>('');
 
   useEffect(() => {
     if (campaign?.id) {
@@ -208,6 +183,215 @@ export const AuthorizedPersonsModal: React.FC<AuthorizedPersonsModalProps> = ({
       }
     };
   }, [campaign, auditorGrants, auditorTick]);
+
+  const sealedAuditPeriods = useMemo(() => {
+    const raw = effectiveCampaign?.lockedAuditPeriods || (effectiveCampaign as any)?.metadata?.lockedAuditPeriods;
+    return Array.isArray(raw) ? raw.filter((p: any) => p && p.lockedAt) : [];
+  }, [effectiveCampaign, auditorTick]);
+
+  const nextPeriodSuggestion = useMemo(() => {
+    if (sealedAuditPeriods.length === 0) return null;
+    const dated = sealedAuditPeriods.filter((p: any) => p.toDate && /^\d{4}-\d{2}-\d{2}/.test(String(p.toDate)));
+    if (dated.length === 0) return null;
+    const sorted = [...dated].sort((a: any, b: any) => String(a.toDate).slice(0, 10).localeCompare(String(b.toDate).slice(0, 10)));
+    const latest = sorted[sorted.length - 1];
+    const lastToIso = String(latest.toDate).slice(0, 10);
+    const nextDay = new Date(`${lastToIso}T00:00:00Z`);
+    nextDay.setUTCDate(nextDay.getUTCDate() + 1);
+    const nextFromIso = nextDay.toISOString().slice(0, 10);
+    const todayIso = new Date().toISOString().slice(0, 10);
+    const effTo = todayIso >= nextFromIso ? todayIso : nextFromIso;
+    return {
+      fromDate: nextFromIso,
+      toDate: effTo,
+      label: `Audit Thar (${formatDateDDMMYYYY(nextFromIso)} – ${formatDateDDMMYYYY(effTo)})`,
+      lastLockedTo: lastToIso,
+      lastLockedLabel: latest.periodLabel || lastToIso
+    };
+  }, [sealedAuditPeriods]);
+
+  const overlappingSealedPeriod = useMemo(() => {
+    if (sealedAuditPeriods.length === 0) return null;
+    const f = auditorFromDate || '';
+    const t = auditorToDate || '';
+    return sealedAuditPeriods.find((p: any) => {
+      const pf = p.fromDate ? String(p.fromDate).slice(0, 10) : '';
+      const pt = p.toDate ? String(p.toDate).slice(0, 10) : String(p.lockedAt || '').slice(0, 10);
+      if (!f && !t) return true;
+      const fromMatches = !pt || !f || f <= pt;
+      const toMatches = !pf || !t || t >= pf;
+      return fromMatches && toMatches;
+    }) || null;
+  }, [sealedAuditPeriods, auditorFromDate, auditorToDate]);
+
+  const handleSelectAuditPeriodPreset = (preset: string) => {
+    setAuditorPeriodPreset(preset);
+    if (preset === 'next_after_lock' && nextPeriodSuggestion) {
+      setAuditorPeriodLabel(nextPeriodSuggestion.label);
+      setAuditorFromDate(nextPeriodSuggestion.fromDate);
+      setAuditorToDate(nextPeriodSuggestion.toDate);
+    } else if (preset === 'fy_prev') {
+      const lbl = `FY ${fyCurrStart - 1}-${fyCurrStart}`;
+      setAuditorPeriodLabel(lbl);
+      setAuditorFromDate(`${fyCurrStart - 1}-04-01`);
+      setAuditorToDate(`${fyCurrStart}-03-31`);
+    } else if (preset === 'fy_curr') {
+      const lbl = `FY ${fyCurrStart}-${fyCurrStart + 1}`;
+      setAuditorPeriodLabel(lbl);
+      setAuditorFromDate(`${fyCurrStart}-04-01`);
+      setAuditorToDate(`${fyCurrStart + 1}-03-31`);
+    } else if (preset === 'cy_prev') {
+      const y = nowForFy.getFullYear() - 1;
+      setAuditorPeriodLabel(`Kum ${y}`);
+      setAuditorFromDate(`${y}-01-01`);
+      setAuditorToDate(`${y}-12-31`);
+    } else if (preset === 'cy_curr') {
+      const y = nowForFy.getFullYear();
+      setAuditorPeriodLabel(`Kum ${y}`);
+      setAuditorFromDate(`${y}-01-01`);
+      setAuditorToDate(`${y}-12-31`);
+    } else if (preset === 'all') {
+      setAuditorPeriodLabel('Hun Chhung Zawng (All Records)');
+      setAuditorFromDate('');
+      setAuditorToDate('');
+    } else if (preset === 'custom') {
+      setAuditorPeriodLabel('Custom Date Range');
+    }
+  };
+
+  const editOverlappingSealedPeriod = useMemo(() => {
+    if (!isEditingAppointedRange || sealedAuditPeriods.length === 0) return null;
+    const f = editFromDate || '';
+    const t = editToDate || '';
+    return sealedAuditPeriods.find((p: any) => {
+      const pf = p.fromDate ? String(p.fromDate).slice(0, 10) : '';
+      const pt = p.toDate ? String(p.toDate).slice(0, 10) : String(p.lockedAt || '').slice(0, 10);
+      if (!f && !t) return true;
+      const fromMatches = !pt || !f || f <= pt;
+      const toMatches = !pf || !t || t >= pf;
+      return fromMatches && toMatches;
+    }) || null;
+  }, [isEditingAppointedRange, sealedAuditPeriods, editFromDate, editToDate]);
+
+  const handleOpenEditAppointedRange = () => {
+    const activeList = auditorGrants.filter(g => g && g.status === 'active');
+    const sample = activeList[0] || auditorGrants[0];
+    const meta = (effectiveCampaign as any)?.metadata || {};
+    const currFrom = sample?.auditFromDate || sample?.audit_from_date || meta.appointedAuditFromDate || '';
+    const currTo = sample?.auditToDate || sample?.audit_to_date || meta.appointedAuditToDate || '';
+    const currLabel = sample?.auditPeriod || sample?.audit_period || meta.appointedAuditPeriod || 'Custom Date Range';
+    setEditFromDate(currFrom);
+    setEditToDate(currTo);
+    setEditPeriodLabel(currLabel);
+    setIsEditingAppointedRange(true);
+  };
+
+  const handleSaveEditedAppointedRange = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!campaign) return;
+    if (editFromDate && editToDate && editFromDate > editToDate) {
+      showToast('⚠️ "From Date" hi "To Date" aiin a tlai zawk thei lo.');
+      return;
+    }
+
+    const now = new Date();
+    const nowIso = now.toISOString();
+    const effLabel =
+      editPeriodLabel.trim() ||
+      (editFromDate && editToDate
+        ? `${formatDateDDMMYYYY(editFromDate)} – ${formatDateDDMMYYYY(editToDate)}`
+        : 'Hun Chhung Zawng (All Records)');
+
+    const rawGrants = getStoredAuditorGrants(campaign.id);
+    const activeGrants = rawGrants.filter(g => {
+      if (!g || g.status !== 'active') return false;
+      const expIso = g.expiresAt || g.expires_at || '';
+      const expMs = expIso ? new Date(expIso).getTime() : 0;
+      return !expMs || expMs > now.getTime();
+    });
+    if (activeGrants.length === 0) {
+      showToast('⚠️ Active Auditor ruat sa an awm rih lo.');
+      return;
+    }
+
+    activeGrants.forEach(g => {
+      saveAuditorGrant({
+        ...g,
+        auditPeriod: effLabel,
+        audit_period: effLabel,
+        auditFromDate: editFromDate || '',
+        audit_from_date: editFromDate || '',
+        auditToDate: editToDate || '',
+        audit_to_date: editToDate || '',
+        updatedAt: nowIso,
+        updated_at: nowIso
+      });
+    });
+
+    const updatedGrants = getStoredAuditorGrants(campaign.id);
+    const freshStored = getStoredCampaigns().find(
+      c => String(c.id || '').toLowerCase().trim() === String(campaign.id).toLowerCase().trim()
+    );
+    const baseCamp = freshStored || campaign;
+    const prevMeta = (baseCamp as any)?.metadata || {};
+    const prevPeriodStr = prevMeta?.appointedAuditPeriod || activeGrants[0]?.auditPeriod || baseCamp.lastAuditPeriod || '';
+    const prevFromStr = prevMeta?.appointedAuditFromDate || activeGrants[0]?.auditFromDate || '';
+    const prevToStr = prevMeta?.appointedAuditToDate || activeGrants[0]?.auditToDate || '';
+
+    const isRangeChanged =
+      prevPeriodStr !== effLabel ||
+      prevFromStr !== (editFromDate || '') ||
+      prevToStr !== (editToDate || '');
+    const hadPriorSignOffs = Array.isArray(baseCamp.auditSignOffs) && baseCamp.auditSignOffs.length > 0;
+
+    const periodChangeAlert: AuditPeriodChangeAlert | null | undefined = isRangeChanged
+      ? {
+          id: `PCHG_${Date.now()}`,
+          previousPeriodLabel: prevPeriodStr || undefined,
+          previousFromDate: prevFromStr || undefined,
+          previousToDate: prevToStr || undefined,
+          newPeriodLabel: effLabel,
+          newFromDate: editFromDate || undefined,
+          newToDate: editToDate || undefined,
+          changedAt: nowIso,
+          changedBy: creatorProfile?.name || 'Creator',
+          hadPriorSignOffs,
+          acknowledgedByKeys: []
+        }
+      : (baseCamp.auditPeriodChangeAlert ?? prevMeta?.auditPeriodChangeAlert ?? null);
+
+    const updatedCamp: Campaign = {
+      ...baseCamp,
+      auditorGrants: updatedGrants,
+      ...(isRangeChanged ? { auditSignOffs: [], coAuditAlert: null } : {}),
+      auditPeriodChangeAlert: periodChangeAlert,
+      updatedAt: nowIso,
+      metadata: {
+        ...prevMeta,
+        auditorGrants: updatedGrants,
+        appointedAuditPeriod: effLabel,
+        appointedAuditFromDate: editFromDate || '',
+        appointedAuditToDate: editToDate || '',
+        ...(isRangeChanged ? { auditSignOffs: [], coAuditAlert: null } : {}),
+        auditPeriodChangeAlert: periodChangeAlert
+      }
+    };
+    saveCampaign(updatedCamp);
+    setAuditorGrants(updatedGrants);
+    if (onCampaignUpdated) {
+      onCampaignUpdated(updatedCamp);
+    }
+    setAuditorTick(t => t + 1);
+    setIsEditingAppointedRange(false);
+    recordAuditLog(
+      'Auditor Audit Period Updated',
+      `Updated appointed audit period to "${effLabel}" (${editFromDate || 'Start'} – ${editToDate || 'Present'}) for ${activeGrants.length} active auditor(s) on ${campaign.title}.`,
+      'campaign',
+      campaign.id,
+      creatorProfile?.name || 'Creator'
+    );
+    showToast(`✅ Active Auditor (${activeGrants.length}) te Audit Hun Bi (${effLabel}) siam ṭhat & sync fel a ni e!`);
+  };
 
   useEffect(() => {
     const handleGrantsUpdated = () => {
@@ -1034,6 +1218,9 @@ export const AuthorizedPersonsModal: React.FC<AuthorizedPersonsModalProps> = ({
       }
     }
 
+    const preSaveGrants = getStoredAuditorGrants(campaign.id);
+    const hadActiveGrantBefore = preSaveGrants.some(g => g && g.status === 'active');
+
     // Check if an active grant already exists for Auditor 1 phone on this campaign; if so, update it
     const existingGrant = auditorGrants.find(
       g => String(g.auditorPhone || g.auditor_phone || '').replace(/\D/g, '').slice(-10) === cleanPhone
@@ -1141,20 +1328,57 @@ export const AuthorizedPersonsModal: React.FC<AuthorizedPersonsModalProps> = ({
     });
 
     const updatedGrants = getStoredAuditorGrants(campaign.id);
+    const freshStored = getStoredCampaigns().find(
+      c => String(c.id || '').toLowerCase().trim() === String(campaign.id).toLowerCase().trim()
+    );
+    const baseCamp = freshStored || campaign;
+    const prevMeta = (baseCamp as any)?.metadata || {};
+    const prevPeriodStr = prevMeta?.appointedAuditPeriod || baseCamp.lastAuditPeriod || '';
+    const prevFromStr = prevMeta?.appointedAuditFromDate || '';
+    const prevToStr = prevMeta?.appointedAuditToDate || '';
+    const isRangeChanged =
+      prevPeriodStr !== effectivePeriodLabel ||
+      prevFromStr !== (auditorFromDate || '') ||
+      prevToStr !== (auditorToDate || '');
+    const hadPriorSignOffs = Array.isArray(baseCamp.auditSignOffs) && baseCamp.auditSignOffs.length > 0;
+    const isNewAuditCycle = isRangeChanged || Boolean(baseCamp.lastAuditedAt);
+    const shouldTriggerReapprovalAlert = isRangeChanged && (hadActiveGrantBefore || hadPriorSignOffs);
+    const nextPeriodChangeAlert: AuditPeriodChangeAlert | null | undefined = shouldTriggerReapprovalAlert
+      ? {
+          id: `PCHG_${Date.now()}`,
+          previousPeriodLabel: prevPeriodStr || undefined,
+          previousFromDate: prevFromStr || undefined,
+          previousToDate: prevToStr || undefined,
+          newPeriodLabel: effectivePeriodLabel,
+          newFromDate: auditorFromDate || undefined,
+          newToDate: auditorToDate || undefined,
+          changedAt: now.toISOString(),
+          changedBy: creatorProfile?.name || 'Creator',
+          hadPriorSignOffs,
+          acknowledgedByKeys: []
+        }
+      : isNewAuditCycle
+      ? null
+      : (baseCamp.auditPeriodChangeAlert ?? prevMeta?.auditPeriodChangeAlert ?? null);
+
     const isNowDual = auditAppointmentMode === 'dual' || updatedGrants.filter(g => g.status === 'active').length >= 2;
     const updatedCamp: Campaign = {
-      ...campaign,
+      ...baseCamp,
       auditorGrants: updatedGrants,
       requireDualAuditorConsensus: isNowDual,
       auditScope: auditScopeMode,
+      ...(isNewAuditCycle ? { auditSignOffs: [], coAuditAlert: null } : {}),
+      auditPeriodChangeAlert: nextPeriodChangeAlert,
       metadata: {
-        ...(campaign.metadata || {}),
+        ...prevMeta,
         auditorGrants: updatedGrants,
         requireDualAuditorConsensus: isNowDual,
         auditScope: auditScopeMode,
         appointedAuditPeriod: effectivePeriodLabel,
         appointedAuditFromDate: auditorFromDate || '',
-        appointedAuditToDate: auditorToDate || ''
+        appointedAuditToDate: auditorToDate || '',
+        ...(isNewAuditCycle ? { auditSignOffs: [], coAuditAlert: null } : {}),
+        auditPeriodChangeAlert: nextPeriodChangeAlert
       }
     };
     saveCampaign(updatedCamp);
@@ -2318,9 +2542,47 @@ export const AuthorizedPersonsModal: React.FC<AuthorizedPersonsModalProps> = ({
                       </span>
                     </div>
 
+                    {/* Previously Sealed / Audited Periods & Overlap Notice */}
+                    {sealedAuditPeriods.length > 0 && (
+                      <div className="bg-white/90 border border-emerald-200 rounded-xl p-2.5 space-y-1.5">
+                        <div className="text-[10.5px] font-black text-emerald-900 flex items-center justify-between gap-2 flex-wrap">
+                          <span>🔒 Audit &amp; Lock Tawh Hun Bi Hmasa Te:</span>
+                          {nextPeriodSuggestion && (
+                            <button
+                              type="button"
+                              onClick={() => handleSelectAuditPeriodPreset('next_after_lock')}
+                              className={`text-[10px] font-black px-2.5 py-1 rounded-lg border transition cursor-pointer ${
+                                auditorPeriodPreset === 'next_after_lock'
+                                  ? 'bg-emerald-600 text-white border-emerald-600'
+                                  : 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100'
+                              }`}
+                            >
+                              ⏭️ Audit Hnuhnung Zawh Aṭang ({formatDateDDMMYYYY(nextPeriodSuggestion.fromDate)} – Tun)
+                            </button>
+                          )}
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {sealedAuditPeriods.map((p: any, idx: number) => (
+                            <span
+                              key={p.id || idx}
+                              className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200"
+                            >
+                              ✓ {p.periodLabel}: {p.fromDate ? formatDateDDMMYYYY(p.fromDate) : 'Start'} – {p.toDate ? formatDateDDMMYYYY(p.toDate) : formatDateDDMMYYYY(p.lockedAt)}
+                            </span>
+                          ))}
+                        </div>
+                        {overlappingSealedPeriod && (
+                          <div className="text-[10.5px] font-bold text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5">
+                            ℹ️ I hun bi thlan hi audit &amp; lock tawh (<strong>{overlappingSealedPeriod.periodLabel}</strong>) nen a inthuah (overlap) deuh — record lock tawh sa te erawh an him reng ang a, lock loh leh record thar chiah audit &amp; lock theih a ni ang.
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                     {/* Presets */}
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                       {[
+                        ...(nextPeriodSuggestion ? [{ id: 'next_after_lock', label: `⏭️ Next: ${formatDateDDMMYYYY(nextPeriodSuggestion.fromDate)} – Tun` }] : []),
                         { id: 'fy_prev', label: `FY ${fyCurrStart - 1}-${fyCurrStart} (Kum Hmasa)` },
                         { id: 'fy_curr', label: `FY ${fyCurrStart}-${fyCurrStart + 1} (Kumin FY)` },
                         { id: 'cy_prev', label: `Kum ${nowForFy.getFullYear() - 1}` },
@@ -2498,7 +2760,7 @@ export const AuthorizedPersonsModal: React.FC<AuthorizedPersonsModalProps> = ({
               {/* Auditor Grants List */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between text-xs font-bold text-slate-700 flex-wrap gap-2">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <span>Auditor Ruat Tawh Te ({auditorGrants.length})</span>
                     <button
                       type="button"
@@ -2510,6 +2772,20 @@ export const AuthorizedPersonsModal: React.FC<AuthorizedPersonsModalProps> = ({
                       <RefreshCw className={`w-3 h-3 ${isSyncingAuditors ? 'animate-spin text-indigo-600' : ''}`} />
                       <span>{isSyncingAuditors ? 'Syncing...' : 'Sync Cloud'}</span>
                     </button>
+                    {auditorGrants.some(g => g.status === 'active') && (
+                      <button
+                        type="button"
+                        onClick={() => isEditingAppointedRange ? setIsEditingAppointedRange(false) : handleOpenEditAppointedRange()}
+                        className={`text-[10.5px] px-2.5 py-0.5 rounded-lg border flex items-center gap-1 font-bold cursor-pointer transition ${
+                          isEditingAppointedRange
+                            ? 'bg-amber-600 text-white border-amber-600'
+                            : 'bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-300'
+                        }`}
+                      >
+                        <Edit3 className="w-3 h-3" />
+                        <span>{isEditingAppointedRange ? 'Edit Khâr Rawh' : '📅 Date Range Siam Ṭha'}</span>
+                      </button>
+                    )}
                   </div>
                   <button
                     type="button"
@@ -2520,6 +2796,146 @@ export const AuthorizedPersonsModal: React.FC<AuthorizedPersonsModalProps> = ({
                     <span>Auditor Portal En Chhin Rawh</span>
                   </button>
                 </div>
+
+                {/* Inline Date Range Editor for Currently Appointed Active Auditors */}
+                {isEditingAppointedRange && (
+                  <form
+                    onSubmit={handleSaveEditedAppointedRange}
+                    className="p-4 rounded-2xl border-2 border-amber-400 bg-amber-50/90 space-y-3 shadow-xs animate-fadeIn"
+                  >
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <div className="text-xs font-black text-amber-950 flex items-center gap-1.5">
+                        <Calendar className="w-4 h-4 text-amber-700" />
+                        <span>Ruat Mek Active Auditor Zawng Zawng Audit Date Range Siam Ṭhatna</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setIsEditingAppointedRange(false)}
+                        className="text-slate-500 hover:text-slate-800 cursor-pointer"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    <p className="text-[11px] text-amber-900 leading-snug">
+                      Date range i thlak danglam rualin active Auditor ruat mek zawng zawngah a in-sync nghal ang a, Auditor-te hnenah <strong>Re-Approval Notification</strong> a thawn nghal bawk ang.
+                    </p>
+
+                    <div className="flex flex-wrap gap-1.5">
+                      {nextPeriodSuggestion && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditPeriodLabel(nextPeriodSuggestion.label);
+                            setEditFromDate(nextPeriodSuggestion.fromDate);
+                            setEditToDate(nextPeriodSuggestion.toDate);
+                          }}
+                          className="py-1 px-2.5 rounded-lg border border-emerald-400 bg-emerald-50 hover:bg-emerald-100 text-emerald-900 text-[10.5px] font-black cursor-pointer"
+                        >
+                          ⏭️ Audit Hnuhnung Zawh Aṭang
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditPeriodLabel(`FY ${fyCurrStart - 1}-${fyCurrStart}`);
+                          setEditFromDate(`${fyCurrStart - 1}-04-01`);
+                          setEditToDate(`${fyCurrStart}-03-31`);
+                        }}
+                        className="py-1 px-2.5 rounded-lg border border-amber-200 bg-white hover:bg-amber-100 text-slate-700 text-[10.5px] font-bold cursor-pointer"
+                      >
+                        FY {fyCurrStart - 1}-{fyCurrStart}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditPeriodLabel(`FY ${fyCurrStart}-${fyCurrStart + 1}`);
+                          setEditFromDate(`${fyCurrStart}-04-01`);
+                          setEditToDate(`${fyCurrStart + 1}-03-31`);
+                        }}
+                        className="py-1 px-2.5 rounded-lg border border-amber-200 bg-white hover:bg-amber-100 text-slate-700 text-[10.5px] font-bold cursor-pointer"
+                      >
+                        FY {fyCurrStart}-{fyCurrStart + 1}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const y = nowForFy.getFullYear();
+                          setEditPeriodLabel(`Kum ${y}`);
+                          setEditFromDate(`${y}-01-01`);
+                          setEditToDate(`${y}-12-31`);
+                        }}
+                        className="py-1 px-2.5 rounded-lg border border-amber-200 bg-white hover:bg-amber-100 text-slate-700 text-[10.5px] font-bold cursor-pointer"
+                      >
+                        Kum {nowForFy.getFullYear()}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditPeriodLabel('Custom Date Range');
+                        }}
+                        className="py-1 px-2.5 rounded-lg border border-amber-200 bg-white hover:bg-amber-100 text-slate-700 text-[10.5px] font-bold cursor-pointer"
+                      >
+                        Custom Range
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                      <div>
+                        <label className="block text-[10.5px] font-bold text-slate-700 mb-1">Period Label / Title *</label>
+                        <input
+                          type="text"
+                          required
+                          value={editPeriodLabel}
+                          onChange={e => setEditPeriodLabel(e.target.value)}
+                          placeholder="e.g. Custom Date Range"
+                          className="w-full text-xs p-2.5 rounded-xl bg-white border border-amber-300 focus:outline-none focus:ring-2 focus:ring-amber-500 font-bold"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10.5px] font-bold text-slate-700 mb-1">From Date (Aṭanga)</label>
+                        <input
+                          type="date"
+                          value={editFromDate}
+                          onChange={e => setEditFromDate(e.target.value)}
+                          className="w-full text-xs p-2.5 rounded-xl bg-white border border-amber-300 focus:outline-none focus:ring-2 focus:ring-amber-500 font-mono font-bold"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10.5px] font-bold text-slate-700 mb-1">To Date (Thlengin)</label>
+                        <input
+                          type="date"
+                          value={editToDate}
+                          onChange={e => setEditToDate(e.target.value)}
+                          className="w-full text-xs p-2.5 rounded-xl bg-white border border-amber-300 focus:outline-none focus:ring-2 focus:ring-amber-500 font-mono font-bold"
+                        />
+                      </div>
+                    </div>
+
+                    {editOverlappingSealedPeriod && (
+                      <div className="p-2.5 rounded-xl bg-amber-100 border border-amber-300 text-[10.5px] text-amber-950 font-semibold">
+                        ℹ️ Hun bi thlan hi audit &amp; lock tawh (<strong>{editOverlappingSealedPeriod.periodLabel}</strong>) nen a inthuah (overlap) deuh — record lock tawh sa te erawh an him reng ang.
+                      </div>
+                    )}
+
+                    <div className="flex items-center justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setIsEditingAppointedRange(false)}
+                        className="py-1.5 px-3 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-600 hover:bg-slate-50 cursor-pointer"
+                      >
+                        Thulh Rawh
+                      </button>
+                      <button
+                        type="submit"
+                        className="py-1.5 px-4 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-black shadow-xs transition flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                        <span>✓ Date Range Thar Save &amp; Sync Rawh</span>
+                      </button>
+                    </div>
+                  </form>
+                )}
 
                 {auditorGrants.length === 0 ? (
                   <div className="p-8 text-center bg-slate-50 rounded-2xl border border-slate-200 text-xs text-slate-500 space-y-1">
@@ -2592,12 +3008,24 @@ export const AuthorizedPersonsModal: React.FC<AuthorizedPersonsModalProps> = ({
 
                             {/* Appointed Period Display */}
                             <div className="bg-white/90 p-2 rounded-xl border border-amber-200 text-[11px] space-y-0.5">
-                              <div className="flex items-center justify-between font-bold text-slate-800">
+                              <div className="flex items-center justify-between font-bold text-slate-800 gap-1">
                                 <span className="flex items-center gap-1 text-indigo-900">
                                   <Calendar className="w-3 h-3 text-indigo-600" />
                                   <span>Audit Hun Bi:</span>
                                 </span>
-                                <span className="text-amber-950 font-black">{grant.auditPeriod || 'Hun Chhung Zawng'}</span>
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-amber-950 font-black">{grant.auditPeriod || 'Hun Chhung Zawng'}</span>
+                                  {isActive && (
+                                    <button
+                                      type="button"
+                                      onClick={handleOpenEditAppointedRange}
+                                      title="Audit Date Range siam ṭha rawh"
+                                      className="text-[9.5px] px-1.5 py-0.5 rounded bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 font-black cursor-pointer"
+                                    >
+                                      ✏️ Siam Ṭha
+                                    </button>
+                                  )}
+                                </div>
                               </div>
                               {(grant.auditFromDate || grant.auditToDate) && (
                                 <div className="text-[10px] text-slate-500 font-mono">
