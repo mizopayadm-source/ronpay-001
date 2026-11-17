@@ -282,49 +282,83 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
     return Array.from(map.values());
   }, [campaign, tick]);
 
-  // Look up Creator-appointed audit dates from the user's grant OR from any active appointed auditor grant on this campaign
+  const freshCampObj = useMemo(() => {
+    if (!campaign?.id) return campaign;
+    return getStoredCampaigns().find(c => String(c.id).toLowerCase().trim() === String(campaign.id).toLowerCase().trim()) || campaign;
+  }, [campaign, tick]);
+
+  const freshCampMeta = useMemo(() => {
+    return (freshCampObj as any)?.metadata || (campaign as any)?.metadata || {};
+  }, [freshCampObj, campaign]);
+
+  // Look up Creator-appointed audit dates from user's grant, embedded campaign grants, historical grants, campaign metadata, or lockedAuditPeriods
   const campaignAppointedGrant = useMemo(() => {
-    if (activeGrant && (activeGrant.auditFromDate || activeGrant.audit_from_date || activeGrant.auditToDate || activeGrant.audit_to_date || activeGrant.auditPeriod || activeGrant.audit_period)) {
-      return activeGrant;
-    }
+    const hasDates = (g: any) => Boolean(g && (g.auditFromDate || g.audit_from_date || g.auditToDate || g.audit_to_date));
+    const hasCustomPeriod = (g: any) => {
+      const p = g?.auditPeriod || g?.audit_period || '';
+      return Boolean(p && p !== 'Hun Chhung Zawng (All Records)');
+    };
+
+    if (hasDates(activeGrant)) return activeGrant;
     if (!campaign?.id) return activeGrant;
+
     const campId = String(campaign.id).toLowerCase().trim();
-    const allGrants = getStoredAuditorGrants(campId).filter(g => g && g.status === 'active');
+    const delSet = new Set(getStoredDeletedAuditorGrantIds());
+    const embeddedGrants: AuditorAccessGrant[] = [
+      ...(Array.isArray(campaign?.auditorGrants) ? campaign.auditorGrants : []),
+      ...(Array.isArray((campaign as any)?.metadata?.auditorGrants) ? (campaign as any).metadata.auditorGrants : []),
+      ...(Array.isArray(freshCampObj?.auditorGrants) ? freshCampObj!.auditorGrants! : []),
+      ...(Array.isArray((freshCampObj as any)?.metadata?.auditorGrants) ? (freshCampObj as any).metadata.auditorGrants : [])
+    ];
+    const allNonDeleted = [...getStoredAuditorGrants(campId), ...embeddedGrants].filter(g => {
+      if (!g || !g.id) return false;
+      if (delSet.has(String(g.id).toLowerCase().trim())) return false;
+      const gCamp = String(g.campaignId || g.campaign_id || '').toLowerCase().trim();
+      return !gCamp || gCamp === campId;
+    });
+
+    const activeGrants = allNonDeleted.filter(g => g.status === 'active');
     return (
-      allGrants.find(g => g.auditFromDate || g.audit_from_date || g.auditToDate || g.audit_to_date || (g.auditPeriod && g.auditPeriod !== 'Hun Chhung Zawng (All Records)')) ||
-      allGrants[0] ||
+      activeGrants.find(hasDates) ||
+      activeGrants.find(hasCustomPeriod) ||
+      (hasCustomPeriod(activeGrant) ? activeGrant : null) ||
+      allNonDeleted.find(hasDates) ||
+      allNonDeleted.find(hasCustomPeriod) ||
+      activeGrants[0] ||
       activeGrant ||
       null
     );
-  }, [activeGrant, campaign?.id, tick]);
+  }, [activeGrant, campaign, freshCampObj, tick]);
 
   const isDualAuditMode = useMemo(() => {
-    const freshCamp = campaign?.id
-      ? getStoredCampaigns().find(c => String(c.id).toLowerCase().trim() === String(campaign.id).toLowerCase().trim()) || campaign
-      : campaign;
-    return appointedAuditors.length >= 2 || Boolean(freshCamp?.requireDualAuditorConsensus);
-  }, [appointedAuditors, campaign, tick]);
+    return appointedAuditors.length >= 2 || Boolean(freshCampObj?.requireDualAuditorConsensus);
+  }, [appointedAuditors, freshCampObj]);
 
-  const freshCampMeta = useMemo(() => {
-    if (!campaign?.id) return (campaign as any)?.metadata || {};
-    const found = getStoredCampaigns().find(c => String(c.id).toLowerCase().trim() === String(campaign.id).toLowerCase().trim());
-    return (found as any)?.metadata || (campaign as any)?.metadata || {};
-  }, [campaign, tick]);
+  const latestSealedPeriod = useMemo(() => {
+    const list = Array.isArray(freshCampObj?.lockedAuditPeriods)
+      ? freshCampObj!.lockedAuditPeriods!
+      : (Array.isArray(freshCampMeta?.lockedAuditPeriods) ? freshCampMeta.lockedAuditPeriods : []);
+    if (!Array.isArray(list) || list.length === 0) return null;
+    return list[list.length - 1];
+  }, [freshCampObj, freshCampMeta]);
 
   const appointedFromDate =
     campaignAppointedGrant?.auditFromDate ||
     campaignAppointedGrant?.audit_from_date ||
     freshCampMeta?.appointedAuditFromDate ||
+    latestSealedPeriod?.fromDate ||
     '';
   const appointedToDate =
     campaignAppointedGrant?.auditToDate ||
     campaignAppointedGrant?.audit_to_date ||
     freshCampMeta?.appointedAuditToDate ||
+    latestSealedPeriod?.toDate ||
     '';
   const rawAppointedPeriod =
     campaignAppointedGrant?.auditPeriod ||
     campaignAppointedGrant?.audit_period ||
     freshCampMeta?.appointedAuditPeriod ||
+    latestSealedPeriod?.periodLabel ||
     '';
   const appointedPeriodLabel =
     rawAppointedPeriod ||
@@ -345,24 +379,18 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
     return !canConfigureAuditScope || hasCreatorAppointedDates;
   }, [canConfigureAuditScope, hasCreatorAppointedDates]);
 
-  const freshCampObj = useMemo(() => {
-    if (!campaign?.id) return campaign;
-    return getStoredCampaigns().find(c => String(c.id).toLowerCase().trim() === String(campaign.id).toLowerCase().trim()) || campaign;
-  }, [campaign, tick]);
-
   const activeCoAuditAlert: CoAuditAlert | null = useMemo(() => {
     return freshCampObj?.coAuditAlert || (freshCampObj as any)?.metadata?.coAuditAlert || null;
   }, [freshCampObj]);
 
   // Sign & Lock inputs
+  const defaultFyText = `FY ${new Date().getFullYear() - 1}-${new Date().getFullYear()}`;
   const [auditPeriod, setAuditPeriod] = useState<string>(() => {
-    return appointedPeriodLabel || `FY ${new Date().getFullYear() - 1}-${new Date().getFullYear()}`;
+    return appointedPeriodLabel || freshCampObj?.lastAuditPeriod || defaultFyText;
   });
   useEffect(() => {
-    if (appointedPeriodLabel) {
-      setAuditPeriod(appointedPeriodLabel);
-    }
-  }, [appointedPeriodLabel]);
+    setAuditPeriod(appointedPeriodLabel || freshCampObj?.lastAuditPeriod || defaultFyText);
+  }, [campaign?.id, appointedPeriodLabel, freshCampObj?.lastAuditPeriod]);
   const [auditorName, setAuditorName] = useState<string>(creatorProfile?.name || 'Auditor');
   const [auditorPhone, setAuditorPhone] = useState<string>(creatorProfile?.phone || creatorProfile?.phoneNumber || '');
   const [auditNotes, setAuditNotes] = useState<string>('Accounts and vouchers verified with bank statements and receipts.');
@@ -1462,12 +1490,16 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
 
   // Canonical Audit Period & Coverage Date Range for On-Screen & Printable Audit Certificates
   const certificateCoverageInfo = useMemo(() => {
-    const periodTitle = (isRestrictedAuditor && appointedPeriodLabel) ? appointedPeriodLabel : auditPeriod;
-    let fromIso = appointedFromDate || cashBookAuditData.effFrom || '';
-    let toIso = appointedToDate || cashBookAuditData.effTo || '';
+    const periodTitle = (hasCreatorAppointedDates && appointedPeriodLabel)
+      ? appointedPeriodLabel
+      : (appointedPeriodLabel && appointedPeriodLabel !== 'Hun Chhung Zawng (All Records)'
+          ? appointedPeriodLabel
+          : (auditPeriod || freshCampObj?.lastAuditPeriod || cashBookAuditData.rangeLabel));
+    let fromIso = appointedFromDate || cashBookAuditData.effFrom || latestSealedPeriod?.fromDate || '';
+    let toIso = appointedToDate || cashBookAuditData.effTo || latestSealedPeriod?.toDate || '';
 
-    // When no explicit date filter is active (All Time), derive earliest & latest dates from the ledger entries
-    if (!fromIso || !toIso) {
+    // Only when BOTH start and end dates are unset (e.g. All-Time audit), derive earliest & latest dates from the ledger entries
+    if (!fromIso && !toIso) {
       const isoDates: string[] = [];
       const extractIso = (rawVal: any) => {
         const raw = String(rawVal || '').trim();
@@ -1482,8 +1514,10 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
       cashBookAuditData.inRangeTxs.forEach((t: any) => extractIso(t.timestamp || t.date || t.createdAt));
       cashBookAuditData.inRangeExps.forEach((e: any) => extractIso(e.spentDate || e.date || e.createdAt));
       isoDates.sort();
-      if (!fromIso && isoDates.length > 0) fromIso = isoDates[0];
-      if (!toIso && isoDates.length > 0) toIso = isoDates[isoDates.length - 1];
+      if (isoDates.length > 0) {
+        fromIso = isoDates[0];
+        toIso = isoDates[isoDates.length - 1];
+      }
     }
 
     const fromDisplay = fromIso ? formatDateDDMMYYYY(fromIso) : '';
@@ -1515,9 +1549,10 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
       toDisplay,
       coverageRangeDisplay,
       durationDays,
-      isExplicitDateRange: Boolean(appointedFromDate || appointedToDate || cashBookAuditData.effFrom || cashBookAuditData.effTo)
+      isCreatorAppointed: hasCreatorAppointedDates,
+      isExplicitDateRange: Boolean(appointedFromDate || appointedToDate || cashBookAuditData.effFrom || cashBookAuditData.effTo || latestSealedPeriod)
     };
-  }, [isRestrictedAuditor, appointedPeriodLabel, auditPeriod, appointedFromDate, appointedToDate, cashBookAuditData]);
+  }, [hasCreatorAppointedDates, appointedPeriodLabel, auditPeriod, freshCampObj?.lastAuditPeriod, appointedFromDate, appointedToDate, cashBookAuditData, latestSealedPeriod]);
 
   // Dual / Co-Auditor Consensus, Progress & Discrepancy Engine
   const dualAuditSummary = useMemo(() => {
@@ -2234,14 +2269,15 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
           <div class="header-box">
             <div class="badge">${dualAuditSummary.isJointFinalized ? '✓✓ JOINT FINANCIAL AUDIT CERTIFICATE (FINAL VERIFIED)' : 'OFFICIAL JOINT AUDIT CERTIFICATE'}</div>
             <h1 class="title">${campaign.title}</h1>
-            <p class="subtitle">Period: <strong>${effPeriodText}</strong> • Category: ${campaign.category.toUpperCase()} • ID: ${campaign.id}</p>
-            <div class="coverage-pill">📅 Audit Huam Hun Chhung: <strong>${effCoverageText}</strong>${effDurationLabel}</div>
+            <p class="subtitle">Audit Period: <strong>${effPeriodText}</strong> • Category: ${campaign.category.toUpperCase()} • ID: ${campaign.id}</p>
+            <div class="coverage-pill">📅 Audit Huam Hun Chhung: <strong>${effCoverageText}</strong>${effDurationLabel}${certificateCoverageInfo.isCreatorAppointed ? ' • 🔒 Creator Ruatsa Hun Bi' : ''}</div>
           </div>
 
           <div class="grid">
             <div class="stat-box">
               <div class="stat-label">Opening (B/F)</div>
               <div class="stat-val">₹${cashBookAuditData.openingBalance.toLocaleString('en-IN')}</div>
+              <div style="font-size:9px;color:#64748b;">${certificateCoverageInfo.fromDisplay ? `${certificateCoverageInfo.fromDisplay} hma` : 'A Bul'}</div>
             </div>
             <div class="stat-box">
               <div class="stat-label">Total Receipts (Lut)</div>
@@ -2322,7 +2358,7 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
           <div class="badge">Official Financial Audit Certificate</div>
           <h1 class="title">${campaign.title}</h1>
           <p class="subtitle">Audit Period: <strong>${effPeriodText}</strong> • Category: ${campaign.category.toUpperCase()} • ID: ${campaign.id}</p>
-          <div class="coverage-pill">📅 Audit Huam Hun Chhung: <strong>${effCoverageText}</strong>${effDurationLabel}</div>
+          <div class="coverage-pill">📅 Audit Huam Hun Chhung: <strong>${effCoverageText}</strong>${effDurationLabel}${certificateCoverageInfo.isCreatorAppointed ? ' • 🔒 Creator Ruatsa Hun Bi' : ''}</div>
         </div>
 
         <div class="grid">
@@ -3302,7 +3338,10 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                           ...(campaign.metadata || {}),
                           auditorGrants: updatedGrants,
                           requireDualAuditorConsensus: isDualNow,
-                          auditScope: qaScope
+                          auditScope: qaScope,
+                          appointedAuditPeriod: cashBookAuditData.rangeLabel,
+                          appointedAuditFromDate: cashBookAuditData.effFrom || '',
+                          appointedAuditToDate: cashBookAuditData.effTo || ''
                         }
                       });
                       setQaName1('');
@@ -6553,7 +6592,7 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                     {campaign.title}
                   </h3>
                   <p className="text-xs text-slate-500 mt-1 font-semibold">
-                    Period: {certificateCoverageInfo.periodTitle} • Category: {campaign.category.toUpperCase()}
+                    Audit Period: <strong className="text-slate-700">{certificateCoverageInfo.periodTitle}</strong> • Category: {campaign.category.toUpperCase()}
                   </p>
                   <div className="mt-2.5 inline-flex flex-wrap items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-indigo-50 border border-indigo-200 text-[11px] font-bold text-indigo-950">
                     <Calendar className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
@@ -6564,6 +6603,12 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                     {certificateCoverageInfo.durationDays !== null && (
                       <span className="text-[10px] font-extrabold text-indigo-700 bg-white px-2 py-0.5 rounded-md border border-indigo-200">
                         (Ni {certificateCoverageInfo.durationDays})
+                      </span>
+                    )}
+                    {certificateCoverageInfo.isCreatorAppointed && (
+                      <span className="text-[10px] font-extrabold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-md border border-amber-300 inline-flex items-center gap-1">
+                        <Lock className="w-2.5 h-2.5" />
+                        Creator Ruatsa Hun Bi
                       </span>
                     )}
                   </div>
