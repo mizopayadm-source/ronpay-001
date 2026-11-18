@@ -2318,7 +2318,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                 Kumtluang Permanent NGO / Church
               </span>
               <h3 className="font-black text-slate-900 text-sm truncate mt-0.5">
-                {translateCampaignTitle(campaign, language) || campaign?.orgName || campaign?.title || 'BCM Ebenezer, Zobawk'}
+                {translateCampaignTitle(campaign, language) || campaign?.orgName || campaign?.title || 'Kumtluang Bawm'}
               </h3>
               <p className="text-[10px] text-slate-500 font-medium">
                 {campaign?.location || 'Zobawk, Lunglei, Mizoram'}

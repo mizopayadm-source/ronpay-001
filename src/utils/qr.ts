@@ -90,7 +90,8 @@ export const generateCampaignWebLink = (campaignOrId: string | Campaign, customD
   if (camp.title) params.set('title', camp.title);
   if (camp.targetUpiId || camp.upiId) params.set('upi', camp.targetUpiId || camp.upiId);
   if (camp.location) params.set('loc', camp.location);
-  if (camp.orgName || camp.orgCode) params.set('org', (camp.orgName || camp.orgCode)!);
+  if (camp.orgName) params.set('orgName', camp.orgName);
+  if (camp.orgCode) params.set('orgCode', camp.orgCode);
   if (camp.targetAmount) params.set('target', String(camp.targetAmount));
   if (camp.cause) params.set('cause', camp.cause);
   if (camp.creatorName) params.set('creator', camp.creatorName);

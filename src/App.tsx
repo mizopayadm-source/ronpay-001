@@ -466,6 +466,21 @@ export default function App() {
             try {
               window.dispatchEvent(new CustomEvent('ronpay_campaigns_updated', { detail: state.campaigns }));
             } catch {}
+            // Re-resolve active QR / Web Portal deep-link once authoritative cloud campaigns finish loading
+            try {
+              const urlParams = new URLSearchParams(window.location.search);
+              const hasCampaignDeepLink = Boolean(
+                urlParams.get('campaign') ||
+                urlParams.get('cmp') ||
+                urlParams.get('c') ||
+                urlParams.get('bawm') ||
+                urlParams.get('org') ||
+                urlParams.get('orgCode')
+              );
+              if (hasCampaignDeepLink && (currentScreenRef.current === 'home' || currentScreenRef.current === 'checkout')) {
+                applyRouteFromUrlRef.current?.(state.campaigns);
+              }
+            } catch {}
           }
           if (state.members && state.members.length > 0) {
             setMembersState(state.members);
@@ -820,20 +835,37 @@ export default function App() {
   }, [reloadLocalData]);
 
 
+  const applyRouteFromUrlRef = useRef<((campaignsOverride?: Campaign[]) => Promise<void>) | null>(null);
+
   // Apply route from current browser URL (for Google Lens, QR scans, and browser Back/Forward navigation)
   useEffect(() => {
     const init = async () => {
         if (!localStorage.getItem('ronpay_cleared_once')) {
             await wipeAllClientStorage();
             localStorage.setItem('ronpay_cleared_once', 'true');
-            handleRefreshCloudData();
+            await handleRefreshCloudData();
+            try {
+              const urlParams = new URLSearchParams(window.location.search);
+              const hasDeepLink = Boolean(
+                urlParams.get('campaign') ||
+                urlParams.get('cmp') ||
+                urlParams.get('c') ||
+                urlParams.get('bawm') ||
+                urlParams.get('org') ||
+                urlParams.get('orgCode') ||
+                urlParams.get('receipt')
+              );
+              if (hasDeepLink) {
+                await applyRouteFromUrlRef.current?.(getStoredCampaigns());
+              }
+            } catch {}
         }
     };
     init();
   }, [handleRefreshCloudData]);
 
-  const applyRouteFromUrl = useCallback(async () => {
-    const route = getUrlRoute();
+  const applyRouteFromUrl = useCallback(async (campaignsOverride?: Campaign[]) => {
+    const route = getUrlRoute(campaignsOverride);
     if (!route) return;
 
     if (route.view) {
@@ -1262,6 +1294,9 @@ export default function App() {
     window.addEventListener('popstate', handlePopState);
     window.addEventListener('hashchange', handlePopState);
 
+    // Keep ref synced for async cloud loaders
+    applyRouteFromUrlRef.current = applyRouteFromUrl;
+
     // Run on initial mount
     applyRouteFromUrl();
 
@@ -1280,11 +1315,19 @@ export default function App() {
         matched.title !== selectedCampaign.title ||
         matched.targetAmount !== selectedCampaign.targetAmount ||
         matched.upiId !== selectedCampaign.upiId ||
+        matched.createdBy !== selectedCampaign.createdBy ||
+        matched.contactPhone !== selectedCampaign.contactPhone ||
+        matched.orgName !== selectedCampaign.orgName ||
+        matched.orgCode !== selectedCampaign.orgCode ||
+        matched.imageUrl !== selectedCampaign.imageUrl ||
+        matched.description !== selectedCampaign.description ||
+        (matched.subCategories?.length || 0) !== (selectedCampaign.subCategories?.length || 0) ||
+        (matched.enabledCategories?.length || 0) !== (selectedCampaign.enabledCategories?.length || 0) ||
         matched.officerPasscode !== selectedCampaign.officerPasscode ||
         matched.allowPublicGroupDeposits !== selectedCampaign.allowPublicGroupDeposits ||
         (matched.updatedAt && matched.updatedAt !== selectedCampaign.updatedAt)
       )) {
-        setSelectedCampaign(matched);
+        setSelectedCampaign(selectedCampaign.customAmount ? { ...matched, customAmount: selectedCampaign.customAmount } : matched);
       }
     }
   }, [campaigns, selectedCampaign]);

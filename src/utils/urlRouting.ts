@@ -89,14 +89,17 @@ export function getUrlRoute(campaignsList?: Campaign[], transactionsList?: Trans
       searchParams.set('campaign', campPathMatch[1]);
     }
 
-    const campaignId = searchParams.get('campaign') || 
-                       searchParams.get('cmp') || 
-                       searchParams.get('c') || 
-                       searchParams.get('org') ||
-                       searchParams.get('id') || 
-                       searchParams.get('bawm') || 
-                       searchParams.get('post') ||
-                       searchParams.get('p');
+    const explicitCampaignParam =
+      searchParams.get('campaign') ||
+      searchParams.get('cmp') ||
+      searchParams.get('c') ||
+      searchParams.get('bawm') ||
+      searchParams.get('id') ||
+      searchParams.get('post') ||
+      searchParams.get('p');
+    const orgOnlyParam = searchParams.get('org');
+    const orgCodeParam = searchParams.get('orgCode');
+    const campaignId = explicitCampaignParam || orgOnlyParam || orgCodeParam;
 
     const screenParam = searchParams.get('screen') || searchParams.get('page');
     const viewParam = searchParams.get('view');
@@ -266,9 +269,10 @@ export function getUrlRoute(campaignsList?: Campaign[], transactionsList?: Trans
         ...INITIAL_CAMPAIGNS
       ];
 
-      const existing = allCampaigns.find(c => 
-        c.id.toLowerCase() === cleanId.toLowerCase() || 
-        (c.orgCode && c.orgCode.toLowerCase() === cleanId.toLowerCase())
+      const existing = allCampaigns.find(c =>
+        c.id.toLowerCase() === cleanId.toLowerCase() ||
+        (c.orgCode && c.orgCode.toLowerCase() === cleanId.toLowerCase()) ||
+        (!explicitCampaignParam && orgOnlyParam && c.orgName && c.orgName.toLowerCase() === cleanId.toLowerCase())
       );
       
       // Only explicit donation amount params (amt, amount, am, payAmt), NEVER target or total
@@ -279,13 +283,12 @@ export function getUrlRoute(campaignsList?: Campaign[], transactionsList?: Trans
       const vengParam = searchParams.get('veng') || searchParams.get('section') || searchParams.get('loc');
       const isAnon = donorParam === 'Anonymous' || searchParams.get('anon') === '1' || searchParams.get('anon') === 'true';
 
+      const isExplicitOrgWorkspace =
+        searchParams.get('mode') === 'org' ||
+        (Boolean(orgOnlyParam) && !explicitCampaignParam && screenParam !== 'checkout' && searchParams.get('pay') !== '1' && searchParams.get('pay') !== 'true');
+
       if (existing) {
-        // If arriving via direct organization link or Org QR without explicit checkout requested
-        const isOrgLink = searchParams.has('org') || 
-                          searchParams.get('mode') === 'org' || 
-                          (existing.category === 'kumtluang' && screenParam !== 'checkout' && searchParams.get('pay') !== '1' && searchParams.get('pay') !== 'true');
-        
-        if (isOrgLink) {
+        if (isExplicitOrgWorkspace) {
           try {
             localStorage.setItem('ronpay_home_workspace_mode', 'org_only');
             localStorage.setItem('ronpay_selected_org_campaign_id', existing.id);
@@ -319,7 +322,7 @@ export function getUrlRoute(campaignsList?: Campaign[], transactionsList?: Trans
       const title = searchParams.get('title');
       const upi = searchParams.get('upi') || searchParams.get('pa');
       const loc = searchParams.get('loc') || searchParams.get('location');
-      const org = searchParams.get('org') || searchParams.get('orgName');
+      const org = searchParams.get('orgName') || searchParams.get('org');
       const target = searchParams.get('target');
       const cause = searchParams.get('cause');
       const creator = searchParams.get('creator') || searchParams.get('creatorName') || searchParams.get('pn');
@@ -344,11 +347,12 @@ export function getUrlRoute(campaignsList?: Campaign[], transactionsList?: Trans
       const reconstructed: Campaign = {
         id: cleanId,
         category: deducedCategory,
-        title: title ? decodeURIComponent(title) : (mitthi ? `Ralna: ${decodeURIComponent(mitthi)}` : 'RonPay Bawm'),
+        title: title ? decodeURIComponent(title) : (mitthi ? `Ralna: ${decodeURIComponent(mitthi)}` : (org ? decodeURIComponent(org) : 'RonPay Bawm')),
         location: loc ? decodeURIComponent(loc) : 'Mizoram',
         gpsCoords: '23.7271, 92.7176',
         upiId: upi ? decodeURIComponent(upi) : (searchParams.get('pa') ? decodeURIComponent(searchParams.get('pa')!) : 'direct@upi'),
         orgName: org ? decodeURIComponent(org) : undefined,
+        orgCode: orgCodeParam ? decodeURIComponent(orgCodeParam) : undefined,
         targetAmount: target ? Number(target) : undefined,
         cause: cause ? decodeURIComponent(cause) : undefined,
         creatorName: creator ? decodeURIComponent(creator) : undefined,
@@ -366,6 +370,23 @@ export function getUrlRoute(campaignsList?: Campaign[], transactionsList?: Trans
         status: 'active',
         createdAt: new Date().toISOString()
       };
+
+      if (isExplicitOrgWorkspace) {
+        try {
+          localStorage.setItem('ronpay_home_workspace_mode', 'org_only');
+          localStorage.setItem('ronpay_selected_org_campaign_id', cleanId);
+        } catch {}
+        return {
+          screen: 'home',
+          campaignId: cleanId,
+          campaign: numUrlAmt ? { ...reconstructed, customAmount: numUrlAmt } : reconstructed,
+          category: deducedCategory,
+          view: parsedView || 'app',
+          donorName: donorParam ? decodeURIComponent(donorParam) : undefined,
+          donorVeng: vengParam ? decodeURIComponent(vengParam) : undefined,
+          isAnonymous: isAnon,
+        };
+      }
 
       return {
         screen: 'checkout',
@@ -596,7 +617,7 @@ export function updateBrowserView(view: 'website' | 'app', screen?: ScreenId) {
 
 
 export const PAYMENT_ROUTING_PARAMS = [
-  'campaign', 'cmp', 'c', 'id', 'bawm', 'post', 'p',
+  'campaign', 'cmp', 'c', 'id', 'bawm', 'post', 'p', 'org', 'orgName', 'orgCode',
   'screen', 'page', 'cat', 'category', 'title', 'upi', 'pa', 'loc', 'location',
   'receipt', 'receiptId', 'phonepe_txn_id', 'tx', 'txn', 'txnId', 'merchantTransactionId', 'orderId',
   'status', 'code', 'responseCode', 'state', 'failed', 'reason', 'msg', 'error',

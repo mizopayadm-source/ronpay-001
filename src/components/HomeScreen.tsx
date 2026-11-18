@@ -312,16 +312,66 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
   const [selectedOrgCampaignId, setSelectedOrgCampaignId] = useState<string>(() => {
     try {
-      const saved = localStorage.getItem('ronpay_selected_org_campaign_id');
-      if (saved) return saved;
       if (typeof window !== 'undefined') {
         const params = new URLSearchParams(window.location.search);
-        const orgParam = params.get('org') || params.get('c') || params.get('campaign') || params.get('bawm');
-        if (orgParam) return orgParam;
+        const urlOrgParam =
+          params.get('campaign') ||
+          params.get('cmp') ||
+          params.get('c') ||
+          params.get('bawm') ||
+          params.get('org') ||
+          params.get('orgCode');
+        if (urlOrgParam) return decodeURIComponent(urlOrgParam).trim();
       }
+      const saved = localStorage.getItem('ronpay_selected_org_campaign_id');
+      if (saved) return saved;
     } catch {}
     return '';
   });
+
+  useEffect(() => {
+    const syncSelectedOrg = () => {
+      try {
+        if (typeof window !== 'undefined') {
+          const params = new URLSearchParams(window.location.search);
+          const urlOrgParam =
+            params.get('campaign') ||
+            params.get('cmp') ||
+            params.get('c') ||
+            params.get('bawm') ||
+            params.get('org') ||
+            params.get('orgCode');
+          if (urlOrgParam) {
+            const decoded = decodeURIComponent(urlOrgParam).trim();
+            const matched = safeCampaigns.find(c =>
+              c &&
+              !c.isVoided &&
+              (c.id.toLowerCase() === decoded.toLowerCase() ||
+                (c.orgCode && c.orgCode.toLowerCase() === decoded.toLowerCase()) ||
+                (c.orgName && c.orgName.toLowerCase() === decoded.toLowerCase()))
+            );
+            const resolvedId = matched ? matched.id : decoded;
+            if (resolvedId && resolvedId !== selectedOrgCampaignId) {
+              setSelectedOrgCampaignId(resolvedId);
+            }
+            return;
+          }
+        }
+        const saved = localStorage.getItem('ronpay_selected_org_campaign_id');
+        if (saved && saved !== selectedOrgCampaignId) {
+          setSelectedOrgCampaignId(saved);
+        }
+      } catch {}
+    };
+
+    syncSelectedOrg();
+    window.addEventListener('popstate', syncSelectedOrg);
+    window.addEventListener('storage', syncSelectedOrg);
+    return () => {
+      window.removeEventListener('popstate', syncSelectedOrg);
+      window.removeEventListener('storage', syncSelectedOrg);
+    };
+  }, [safeCampaigns, selectedOrgCampaignId]);
 
   const handleSelectOrgCampaign = (id: string) => {
     setSelectedOrgCampaignId(id);
@@ -330,16 +380,33 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     } catch {}
   };
 
+  // Helper to match selectedOrgCampaignId against any non-voided campaign
+  const requestedOrgCampaign = useMemo(() => {
+    if (!selectedOrgCampaignId) return null;
+    const selLower = selectedOrgCampaignId.trim().toLowerCase();
+    return safeCampaigns.find(c =>
+      c &&
+      !c.isVoided &&
+      (c.id.toLowerCase() === selLower ||
+        (c.orgCode && c.orgCode.toLowerCase() === selLower) ||
+        (c.orgName && c.orgName.toLowerCase() === selLower))
+    ) || null;
+  }, [safeCampaigns, selectedOrgCampaignId]);
+
   // Organization Campaigns available for the Dedicated Organization Dashboard (Strict zero-leakage scope)
   const availableOrgCampaigns = useMemo(() => {
     const kumtluangList = safeCampaigns.filter(c => c && !c.isVoided && c.category === 'kumtluang');
 
-    // 1. Super Admin sees all kumtluang campaigns
+    // 1. Super Admin sees all kumtluang campaigns (plus requested campaign if non-kumtluang)
     if (isAuthorizedAdmin) {
-      return kumtluangList.length > 0 ? kumtluangList : safeCampaigns.filter(c => c && !c.isVoided);
+      const base = kumtluangList.length > 0 ? kumtluangList : safeCampaigns.filter(c => c && !c.isVoided);
+      if (requestedOrgCampaign && !base.some(c => c.id === requestedOrgCampaign.id)) {
+        return [requestedOrgCampaign, ...base];
+      }
+      return base;
     }
 
-    // 2. Authenticated Creator / Officer / Auditor: strictly limited to authorized campaigns
+    // 2. Authenticated Creator / Officer / Auditor: authorized campaigns (plus explicitly requested/scanned campaign in safe guest view)
     if (!isGuestUser && creatorProfile?.phone) {
       const phone = creatorProfile.phone;
       const grants = getActiveAuditorGrantsForUser(phone);
@@ -350,31 +417,34 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
              canManageCampaignExpenses(c, creatorProfile) || 
              grantCampIds.has(String(c.id).trim())
       );
-      if (authorized.length > 0) return authorized;
+      if (authorized.length > 0) {
+        if (requestedOrgCampaign && !authorized.some(c => c.id === requestedOrgCampaign.id)) {
+          return [requestedOrgCampaign, ...authorized];
+        }
+        return authorized;
+      }
     }
 
     // 3. Guest / General Member: Strictly isolate to the selected or requested organization only
-    if (selectedOrgCampaignId) {
-      const matched = kumtluangList.filter(c => c.id === selectedOrgCampaignId || c.orgCode?.toUpperCase() === selectedOrgCampaignId.toUpperCase());
-      if (matched.length > 0) return matched;
+    if (requestedOrgCampaign) {
+      return [requestedOrgCampaign];
     }
 
     // Default: strictly single active campaign (e.g. BCM Ebenezer or first available), never the full list of all orgs
     const defaultCamp = kumtluangList.find(c => c.id === 'cmp-kumtluang-1') || kumtluangList[0];
     return defaultCamp ? [defaultCamp] : [];
-  }, [safeCampaigns, isGuestUser, isAuthorizedAdmin, creatorProfile, selectedOrgCampaignId]);
+  }, [safeCampaigns, isGuestUser, isAuthorizedAdmin, creatorProfile, requestedOrgCampaign]);
 
   const activeOrgCampaign = useMemo(() => {
-    if (selectedOrgCampaignId) {
-      const found = availableOrgCampaigns.find(c => c.id === selectedOrgCampaignId || c.orgCode?.toUpperCase() === selectedOrgCampaignId.toUpperCase());
-      if (found) return found;
+    if (requestedOrgCampaign) {
+      return requestedOrgCampaign;
     }
     if (!isGuestUser && creatorProfile?.phone) {
       const owned = availableOrgCampaigns.find(c => isCampaignCreator(c, creatorProfile));
       if (owned) return owned;
     }
     return availableOrgCampaigns.find(c => c.id === 'cmp-kumtluang-1') || availableOrgCampaigns[0] || null;
-  }, [selectedOrgCampaignId, availableOrgCampaigns, isGuestUser, creatorProfile]);
+  }, [requestedOrgCampaign, availableOrgCampaigns, isGuestUser, creatorProfile]);
 
   // Authorization check for active organization financial reports & administrative controls
   const isAuthorizedForOrg = useMemo(() => {
