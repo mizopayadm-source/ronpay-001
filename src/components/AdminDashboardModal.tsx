@@ -139,7 +139,9 @@ import {
   getStoredAuditorGrants,
   revokeAuditorGrant,
   permanentlyDeleteAuditorGrant,
-  normalizeAuditorKey
+  normalizeAuditorKey,
+  getStoredExpenses,
+  getCampaignAuditStatusSummary
 } from '../utils/storage';
 import { 
   ROLE_DEFINITIONS, 
@@ -189,6 +191,7 @@ interface AdminDashboardModalProps {
   onViewReceipt?: (tx: any) => void;
   onUpdateTransaction?: (tx: Transaction) => void;
   onOpenBackupSync?: () => void;
+  onOpenAuditorPortal?: (campaign?: Campaign, initialTab?: 'cashbook' | 'overview' | 'reconcile' | 'transactions' | 'expenses' | 'lock_action' | 'certificate') => void;
 }
 
 export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
@@ -217,6 +220,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
   onRestoreDatabase,
   onResetData,
   onOpenBackupSync,
+  onOpenAuditorPortal,
 }) => {
   // Mandatory Login Gate: Check if current user profile has the `isAdmin: true` flag.
   // If not, redirect them or prompt for an admin password before allowing access.
@@ -3697,29 +3701,20 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                   {/* Campaign Audit Status Summary KPI Strip */}
                   {(() => {
                     const nowMs = Date.now();
+                    const allExpsForAuditSummary = getStoredExpenses();
                     const summaryRows = campaigns.map(camp => {
                       const meta = (camp as any).metadata || {};
-                      const campIdLow = String(camp.id || '').toLowerCase().trim();
-                      const campGrants = [
-                        ...(Array.isArray(camp.auditorGrants) ? camp.auditorGrants : []),
-                        ...(Array.isArray(meta.auditorGrants) ? meta.auditorGrants : []),
-                        ...allAuditorGrantsList.filter(g => String(g.campaignId || g.campaign_id || '').toLowerCase().trim() === campIdLow)
-                      ];
-                      const uniqueActiveMap = new Map<string, AuditorAccessGrant>();
-                      campGrants.forEach(g => {
-                        if (!g || g.status !== 'active') return;
-                        const expMs = new Date(g.expiresAt || g.expires_at || 0).getTime();
-                        if (expMs > 0 && expMs <= nowMs) return;
-                        const k = normalizeAuditorKey(g.auditorPhone || g.auditor_phone, g.auditorName || g.auditor_name);
-                        if (!uniqueActiveMap.has(k)) uniqueActiveMap.set(k, g);
+                      const ssot = getCampaignAuditStatusSummary(camp, {
+                        transactions,
+                        expenses: allExpsForAuditSummary,
+                        grants: allAuditorGrantsList,
+                        nowMs
                       });
-                      const activeAuditors = Array.from(uniqueActiveMap.values());
+                      const activeAuditors = ssot.activeAuditors;
                       const periodChangeAlert: AuditPeriodChangeAlert | null =
                         camp.auditPeriodChangeAlert || (meta.auditPeriodChangeAlert as AuditPeriodChangeAlert | undefined) || null;
                       const coAlert: CoAuditAlert | null = camp.coAuditAlert || (meta.coAuditAlert as CoAuditAlert | undefined) || null;
-                      const lockedPeriods: LockedAuditPeriod[] = Array.isArray(camp.lockedAuditPeriods)
-                        ? camp.lockedAuditPeriods
-                        : (Array.isArray(meta.lockedAuditPeriods) ? meta.lockedAuditPeriods : []);
+                      const lockedPeriods: LockedAuditPeriod[] = ssot.lockedPeriods;
 
                       const firstActive = activeAuditors[0];
                       const appointedFrom =
@@ -3734,13 +3729,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                         meta.appointedAuditToDate ||
                         (camp as any).appointedAuditToDate ||
                         '';
-                      const appointedPeriod =
-                        firstActive?.auditPeriod ||
-                        firstActive?.audit_period ||
-                        meta.appointedAuditPeriod ||
-                        (camp as any).appointedAuditPeriod ||
-                        camp.lastAuditPeriod ||
-                        '';
+                      const appointedPeriod = ssot.periodDisplay || '';
 
                       const periodDisplay =
                         appointedFrom && appointedTo
@@ -3759,31 +3748,10 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                           ? activeAuditors.filter(g => !ackKeys.has(normalizeAuditorKey(g.auditorPhone || g.auditor_phone, g.auditorName || g.auditor_name))).length
                           : ackKeys.size === 0 ? 1 : 0
                         : 0;
-                      const isPendingReapproval = hasRelevantPeriodAlert && unackedAuditorsCount > 0;
-
-                      const isLatestSealed = Boolean(
-                        camp.lastAuditedAt &&
-                        (!appointedPeriod ||
-                          lockedPeriods.some(p =>
-                            (!appointedPeriod || p.periodLabel === appointedPeriod) &&
-                            (!appointedFrom || !p.fromDate || p.fromDate === appointedFrom) &&
-                            (!appointedTo || !p.toDate || p.toDate === appointedTo)
-                          ))
-                      );
-
-                      let statusKey: 'pending_reapproval' | 'discrepancy' | 'auditing' | 'sealed' | 'unaudited' = 'unaudited';
-                      if (isPendingReapproval) {
-                        statusKey = 'pending_reapproval';
-                      } else if (coAlert?.status === 'discrepancy_alert') {
-                        statusKey = 'discrepancy';
-                      } else if (activeAuditors.length > 0 && !isLatestSealed) {
-                        statusKey = 'auditing';
-                      } else if (isLatestSealed || lockedPeriods.length > 0) {
-                        statusKey = 'sealed';
-                      }
 
                       return {
                         camp,
+                        ssot,
                         activeAuditors,
                         periodChangeAlert: hasRelevantPeriodAlert ? periodChangeAlert : null,
                         unackedAuditorsCount,
@@ -3791,7 +3759,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                         lockedPeriods,
                         periodDisplay,
                         appointedPeriod,
-                        statusKey
+                        statusKey: ssot.statusKey
                       };
                     });
 
@@ -3989,7 +3957,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                               </div>
                             ) : (
                               <div className="space-y-2">
-                                {filteredRows.map(({ camp, activeAuditors, periodChangeAlert, unackedAuditorsCount, coAlert, lockedPeriods, periodDisplay, statusKey }) => {
+                                {filteredRows.map(({ camp, ssot, activeAuditors, periodChangeAlert, unackedAuditorsCount, coAlert, lockedPeriods, periodDisplay, statusKey }) => {
                                   const badgeStyle =
                                     statusKey === 'pending_reapproval'
                                       ? 'bg-amber-100 text-amber-900 border-amber-300'
@@ -4000,7 +3968,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                                       : statusKey === 'sealed'
                                       ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
                                       : 'bg-slate-100 text-slate-600 border-slate-200';
-                                  const statusLabel =
+                                  const statusLabel = ssot.badgeLabel || (
                                     statusKey === 'pending_reapproval'
                                       ? `🔔 Pending Re-Approval (${unackedAuditorsCount})`
                                       : statusKey === 'discrepancy'
@@ -4009,7 +3977,8 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                                       ? (coAlert?.status === 'awaiting_co_auditor' ? '⏳ 1/2 Submitted — Nghah Mek' : '⏳ Auditing In Progress')
                                       : statusKey === 'sealed'
                                       ? `🔒 Sealed & Audited (${lockedPeriods.length})`
-                                      : '— La Audit Loh';
+                                      : '— La Audit Loh'
+                                  );
 
                                   return (
                                     <div
@@ -4048,6 +4017,11 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                                               </strong>
                                             </span>
                                           )}
+                                          {activeAuditors.length === 0 && (ssot.verifiedTxCount + ssot.verifiedExpCount > 0) && (
+                                            <span className="text-[10.5px] font-bold text-indigo-700">
+                                              ✓ Verified: Lut {ssot.verifiedTxCount}, Senso {ssot.verifiedExpCount}
+                                            </span>
+                                          )}
                                         </div>
                                         {statusKey === 'pending_reapproval' && periodChangeAlert && (
                                           <div className="text-[10.5px] text-amber-800 font-semibold bg-amber-100/70 border border-amber-200 rounded-lg px-2 py-1 inline-block">
@@ -4067,14 +4041,39 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                                         )}
                                       </div>
 
-                                      <div className="text-[10.5px] text-right shrink-0 space-y-0.5 text-slate-500">
-                                        {camp.lastAuditedAt ? (
-                                          <>
-                                            <div className="font-bold text-emerald-700">Last Lock: {formatDateDDMMYYYY(camp.lastAuditedAt)}</div>
-                                            {camp.lastAuditedBy && <div>By: {camp.lastAuditedBy}</div>}
-                                          </>
+                                      <div className="text-[10.5px] sm:text-right shrink-0 space-y-1.5 text-slate-500">
+                                        {ssot.lastAuditedAt ? (
+                                          <div className="space-y-0.5">
+                                            <div className="font-bold text-emerald-700">Last Lock: {formatDateDDMMYYYY(ssot.lastAuditedAt)}</div>
+                                            {ssot.lastAuditedBy && <div>By: {ssot.lastAuditedBy}</div>}
+                                          </div>
+                                        ) : ssot.signOffCount > 0 ? (
+                                          <div className="space-y-0.5">
+                                            <div className="font-bold text-amber-700">Signed ({ssot.signOffCount}) — Lock La Nghah</div>
+                                            {ssot.lastAuditedBy && <div>By: {ssot.lastAuditedBy}</div>}
+                                          </div>
                                         ) : (
                                           <div className="italic">No final lock yet</div>
+                                        )}
+                                        {onOpenAuditorPortal && (
+                                          <div className="flex items-center sm:justify-end gap-1.5 pt-0.5">
+                                            <button
+                                              type="button"
+                                              onClick={() => onOpenAuditorPortal(camp, 'certificate')}
+                                              className="px-2.5 py-1 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-[10px] font-black transition cursor-pointer shadow-2xs"
+                                              title="Audit Certificate en leh print-na"
+                                            >
+                                              Audit Certificate
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={() => onOpenAuditorPortal(camp, 'cashbook')}
+                                              className="px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 text-[10px] font-bold transition cursor-pointer"
+                                              title="Audited Cash Book / Audit Portal hawnna"
+                                            >
+                                              Portal
+                                            </button>
+                                          </div>
                                         )}
                                       </div>
                                     </div>

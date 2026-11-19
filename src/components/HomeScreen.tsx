@@ -67,7 +67,7 @@ import { calculateHaversineKm, getCampaignCoordinates, formatDistance } from '..
 import { BILL_SERVICES, BCM_EBENEZER_DEFAULT_LOGO, BMP_SHILLONG_DEFAULT_LOGO } from '../data/initialData';
 import { formatDateDDMMYYYY, getCreatorExpiryStatus, isCampaignExpired } from '../utils/date';
 import { Language, TRANSLATIONS, translateDynamicText, getCampaignListTitle } from '../utils/translations';
-import { isCampaignCreator, isConfirmedTransaction, isTransactionForCampaign, getDeletedTransactionIds, DEFAULT_ANNOUNCEMENT_ITEMS, getActiveAuditorGrantsForUser, getMembers, getStoredExpenses } from '../utils/storage';
+import { isCampaignCreator, isConfirmedTransaction, isTransactionForCampaign, getDeletedTransactionIds, DEFAULT_ANNOUNCEMENT_ITEMS, getActiveAuditorGrantsForUser, getMembers, getStoredExpenses, getCampaignAuditStatusSummary } from '../utils/storage';
 import { fetchTableData } from '../services/SupabaseSync';
 import { canManageCampaignExpenses } from '../utils/rbac';
 import { Megaphone, X as CloseIcon, PieChart, BarChart3, CheckSquare, ArrowUpRight, ArrowDownRight, FileSpreadsheet } from 'lucide-react';
@@ -1292,20 +1292,26 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                     <FileSpreadsheet className="w-3.5 h-3.5 text-amber-300 shrink-0" />
                     <span>Statements</span>
                   </button>
-                  {onOpenAuditorPortal && (
-                    <button
-                      type="button"
-                      onClick={() => onOpenAuditorPortal(activeOrgCampaign, 'certificate')}
-                      className="w-full @xl:w-auto justify-center px-3 py-2 @xl:py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-[11px] font-black shadow-2xs transition cursor-pointer flex items-center gap-1 active:scale-95 whitespace-nowrap"
-                      title="Auditor Report & Official Audit Certificate enna / print-na"
-                    >
-                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                      <span>Audit Report</span>
-                      {(activeOrgCampaign.lastAuditedAt || (activeOrgCampaign.lockedAuditPeriods && activeOrgCampaign.lockedAuditPeriods.length > 0)) && (
-                        <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
-                      )}
-                    </button>
-                  )}
+                  {onOpenAuditorPortal && (() => {
+                    const orgAuditSsot = getCampaignAuditStatusSummary(activeOrgCampaign, { transactions });
+                    return (
+                      <button
+                        type="button"
+                        onClick={() => onOpenAuditorPortal(activeOrgCampaign, 'certificate')}
+                        className="w-full @xl:w-auto justify-center px-3 py-2 @xl:py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-[11px] font-black shadow-2xs transition cursor-pointer flex items-center gap-1 active:scale-95 whitespace-nowrap"
+                        title={`Auditor Report & Official Audit Certificate (${orgAuditSsot.badgeLabel})`}
+                      >
+                        <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                        <span>Audit Report</span>
+                        {orgAuditSsot.isSealed && (
+                          <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+                        )}
+                        {!orgAuditSsot.isSealed && orgAuditSsot.isInProgressOrPartial && (
+                          <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
+                        )}
+                      </button>
+                    );
+                  })()}
                   {onShareCampaign && (
                     <button
                       type="button"

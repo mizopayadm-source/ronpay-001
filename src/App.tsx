@@ -2513,6 +2513,7 @@ export default function App() {
           onUpdatePricingConfig={handleUpdatePricingConfig}
           onUpdateCampaign={handleUpdateCampaign}
           onDeleteCampaign={handleDeleteCampaign}
+          onOpenAuditorPortal={handleOpenAuditorPortal}
           onApproveCampaign={handleApproveCampaign}
           onRejectCampaign={handleRejectCampaign}
           onUpdateCreator={handleUpdateCreator}

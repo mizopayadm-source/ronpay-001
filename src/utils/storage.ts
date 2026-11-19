@@ -810,6 +810,9 @@ export const saveStoredCampaigns = (campaigns: Campaign[], skipServerPush: boole
       const effectiveSignOffs = usePrevAuditState
         ? (prevCamp.auditSignOffs ?? prevCamp.metadata?.auditSignOffs)
         : (c.auditSignOffs ?? (c as any).metadata?.auditSignOffs);
+      const effectiveLockedAuditPeriods = usePrevAuditState
+        ? (prevCamp.lockedAuditPeriods ?? prevCamp.metadata?.lockedAuditPeriods)
+        : (c.lockedAuditPeriods ?? (c as any).metadata?.lockedAuditPeriods);
       const effectiveLastAuditedAt = usePrevAuditState ? prevCamp.lastAuditedAt : c.lastAuditedAt;
       const effectiveLastAuditedBy = usePrevAuditState ? prevCamp.lastAuditedBy : c.lastAuditedBy;
       const effectiveCoAuditAlert = usePrevAuditState
@@ -822,16 +825,18 @@ export const saveStoredCampaigns = (campaigns: Campaign[], skipServerPush: boole
         orgCode: code,
         ...(effectiveUpdatedAt !== undefined ? { updatedAt: effectiveUpdatedAt } : {}),
         ...(effectiveSignOffs !== undefined ? { auditSignOffs: effectiveSignOffs } : {}),
+        ...(effectiveLockedAuditPeriods !== undefined ? { lockedAuditPeriods: effectiveLockedAuditPeriods } : {}),
         ...(effectiveCoAuditAlert !== undefined ? { coAuditAlert: effectiveCoAuditAlert } : {}),
         lastAuditedAt: effectiveLastAuditedAt,
         lastAuditedBy: effectiveLastAuditedBy,
         ...(cleanGrants !== undefined ? { auditorGrants: cleanGrants } : {}),
         ...(effectiveExpenseHeads !== undefined ? { expenseHeads: effectiveExpenseHeads } : {}),
-        ...(c.metadata || cleanGrants !== undefined || effectiveExpenseHeads !== undefined || effectiveSignOffs !== undefined || effectiveCoAuditAlert !== undefined
+        ...(c.metadata || cleanGrants !== undefined || effectiveExpenseHeads !== undefined || effectiveSignOffs !== undefined || effectiveLockedAuditPeriods !== undefined || effectiveCoAuditAlert !== undefined
           ? {
               metadata: {
                 ...(c.metadata || {}),
                 ...(effectiveSignOffs !== undefined ? { auditSignOffs: effectiveSignOffs } : {}),
+                ...(effectiveLockedAuditPeriods !== undefined ? { lockedAuditPeriods: effectiveLockedAuditPeriods } : {}),
                 ...(effectiveCoAuditAlert !== undefined ? { coAuditAlert: effectiveCoAuditAlert } : {}),
                 lastAuditedAt: effectiveLastAuditedAt || null,
                 lastAuditedBy: effectiveLastAuditedBy || null,
@@ -7566,10 +7571,13 @@ export const lockCampaignAuditPeriod = (
         expCount: lockedExpsToSync.length
       };
       const periodKey = `${newLockedPeriod.fromDate || ''}|${newLockedPeriod.toDate || ''}|${newLockedPeriod.periodLabel}`;
-      const mergedLockedPeriods = [
-        ...existingLockedPeriods.filter(p => `${p.fromDate || ''}|${p.toDate || ''}|${p.periodLabel}` !== periodKey),
-        newLockedPeriod
-      ];
+      const hasLockedAnyRecords = lockedTxsToSync.length + lockedExpsToSync.length > 0;
+      const mergedLockedPeriods = hasLockedAnyRecords
+        ? [
+            ...existingLockedPeriods.filter(p => `${p.fromDate || ''}|${p.toDate || ''}|${p.periodLabel}` !== periodKey),
+            newLockedPeriod
+          ]
+        : existingLockedPeriods;
 
       const updatedCamp: Campaign = {
         ...targetCamp,
@@ -7577,10 +7585,14 @@ export const lockCampaignAuditPeriod = (
         coAuditAlert: finalizedAlert,
         auditPeriodChangeAlert: null,
         lockedAuditPeriods: mergedLockedPeriods,
-        lastAuditedAt: nowIso,
-        lastAuditedBy: finalLockedByLabel,
-        lastAuditPeriod: periodLabel,
-        lastAuditNotes: notes || targetCamp.lastAuditNotes,
+        ...(hasLockedAnyRecords
+          ? {
+              lastAuditedAt: nowIso,
+              lastAuditedBy: finalLockedByLabel,
+              lastAuditPeriod: periodLabel,
+              lastAuditNotes: notes || targetCamp.lastAuditNotes
+            }
+          : {}),
         updatedAt: nowIso,
         metadata: {
           ...(targetCamp.metadata || {}),
@@ -7588,10 +7600,14 @@ export const lockCampaignAuditPeriod = (
           coAuditAlert: finalizedAlert,
           auditPeriodChangeAlert: null,
           lockedAuditPeriods: mergedLockedPeriods,
-          lastAuditedAt: nowIso,
-          lastAuditedBy: finalLockedByLabel,
-          lastAuditPeriod: periodLabel,
-          lastAuditNotes: notes || targetCamp.lastAuditNotes
+          ...(hasLockedAnyRecords
+            ? {
+                lastAuditedAt: nowIso,
+                lastAuditedBy: finalLockedByLabel,
+                lastAuditPeriod: periodLabel,
+                lastAuditNotes: notes || targetCamp.lastAuditNotes
+              }
+            : {})
         }
       };
       saveCampaign(updatedCamp);
@@ -7733,3 +7749,244 @@ export const unlockSingleRecord = (
     return false;
   }
 };
+
+export interface CampaignAuditStatusSummary {
+  statusKey: 'pending_reapproval' | 'discrepancy' | 'auditing' | 'sealed' | 'unaudited';
+  /** Compact Mizo badge label for pickers, cards, and tables */
+  badgeLabel: string;
+  /** True only when real records or periods are finalized & sealed (never stale zero-record lastAuditedAt) */
+  isSealed: boolean;
+  /** True when audit work is underway or partially verified/signed off (awaiting final lock) */
+  isInProgressOrPartial: boolean;
+  lockedTxCount: number;
+  lockedExpCount: number;
+  verifiedTxCount: number;
+  verifiedExpCount: number;
+  flaggedCount: number;
+  signOffCount: number;
+  activeAuditors: AuditorAccessGrant[];
+  lockedPeriods: LockedAuditPeriod[];
+  periodDisplay: string;
+  lastAuditedAt?: string;
+  lastAuditedBy?: string;
+  hasRealAuditHistory: boolean;
+}
+
+/**
+ * Single Source of Truth (SSOT) for a Campaign's real Audit Status across
+ * AdminDashboard, SearchableBawmPicker, ReportsScreen, and HomeScreen.
+ * Prevents false "Audited" badges from stale zero-record timestamps AND
+ * prevents partially verified/signed campaigns from being mislabeled "Unaudited".
+ */
+export const getCampaignAuditStatusSummary = (
+  camp: Campaign,
+  opts?: {
+    transactions?: Transaction[];
+    expenses?: KumtluangExpense[];
+    grants?: AuditorAccessGrant[];
+    nowMs?: number;
+  }
+): CampaignAuditStatusSummary => {
+  const cid = String(camp?.id || '').toLowerCase().trim();
+  const nowMs = opts?.nowMs ?? Date.now();
+  const meta: any = (camp as any)?.metadata || {};
+
+  const allTxs = opts?.transactions ?? getStoredTransactions();
+  const allExps = opts?.expenses ?? getStoredExpenses();
+  const allGrants = opts?.grants ?? getStoredAuditorGrants();
+
+  let lockedTxCount = 0;
+  let verifiedTxCount = 0;
+  let flaggedCount = 0;
+
+  for (const t of allTxs) {
+    if (!t || String(t.campaignId || '').toLowerCase().trim() !== cid) continue;
+    const tMeta: any = (t as any).metadata || {};
+    if (Boolean(t.is_locked || tMeta.is_locked)) lockedTxCount++;
+    const mark = t.audit_mark || tMeta.audit_mark;
+    const verMap = { ...(tMeta.auditor_verifications || {}), ...(t.auditor_verifications || {}) };
+    const entries = Object.values(verMap) as any[];
+    const hasFlag = mark === 'flagged' || entries.some(v => v && v.mark === 'flagged');
+    const hasVer = mark === 'verified' || entries.some(v => v && v.mark === 'verified');
+    if (hasFlag) flaggedCount++;
+    else if (hasVer) verifiedTxCount++;
+  }
+
+  let lockedExpCount = 0;
+  let verifiedExpCount = 0;
+
+  for (const e of allExps) {
+    if (!e || String(e.campaignId || '').toLowerCase().trim() !== cid) continue;
+    const eMeta: any = (e as any).metadata || {};
+    if (Boolean(e.is_locked || eMeta.is_locked)) lockedExpCount++;
+    const mark = e.audit_mark || eMeta.audit_mark;
+    const verMap = { ...(eMeta.auditor_verifications || {}), ...(e.auditor_verifications || {}) };
+    const entries = Object.values(verMap) as any[];
+    const hasFlag = mark === 'flagged' || entries.some(v => v && v.mark === 'flagged');
+    const hasVer = mark === 'verified' || entries.some(v => v && v.mark === 'verified');
+    if (hasFlag) flaggedCount++;
+    else if (hasVer) verifiedExpCount++;
+  }
+
+  const lockedRecordCount = lockedTxCount + lockedExpCount;
+  const verifiedRecordCount = verifiedTxCount + verifiedExpCount;
+
+  // Active non-expired appointed auditors for this campaign
+  const campGrantsRaw = [
+    ...allGrants.filter(g => g && String(g.campaignId || g.campaign_id || '').toLowerCase().trim() === cid),
+    ...(Array.isArray(camp.auditorGrants) ? camp.auditorGrants : []),
+    ...(Array.isArray(meta.auditorGrants) ? meta.auditorGrants : [])
+  ];
+  const uniqueActiveMap = new Map<string, AuditorAccessGrant>();
+  campGrantsRaw.forEach(g => {
+    if (!g || g.status !== 'active') return;
+    const expStr = g.expiresAt || g.expires_at || '';
+    if (expStr && new Date(expStr).getTime() <= nowMs) return;
+    const k = normalizeAuditorKey(g.auditorPhone || g.auditor_phone, g.auditorName || g.auditor_name);
+    if (!uniqueActiveMap.has(k)) uniqueActiveMap.set(k, g);
+  });
+  const activeAuditors = Array.from(uniqueActiveMap.values());
+
+  const rawLockedPeriods: LockedAuditPeriod[] = Array.isArray(camp.lockedAuditPeriods)
+    ? camp.lockedAuditPeriods
+    : Array.isArray(meta.lockedAuditPeriods)
+    ? meta.lockedAuditPeriods
+    : [];
+  // Filter out phantom 0-record locked periods unless real records are locked
+  const lockedPeriods = rawLockedPeriods.filter(
+    p => p && ((Number(p.txCount) || 0) + (Number(p.expCount) || 0) > 0 || lockedRecordCount > 0)
+  );
+
+  const rawSignOffs: any[] = Array.isArray(camp.auditSignOffs)
+    ? camp.auditSignOffs
+    : Array.isArray(meta.auditSignOffs)
+    ? meta.auditSignOffs
+    : [];
+  const validSignOffs = rawSignOffs.filter(s => s && (s.auditorKey || s.auditorName || s.auditorPhone));
+
+  const coAlert = camp.coAuditAlert || meta.coAuditAlert || null;
+  const periodChangeAlert = camp.auditPeriodChangeAlert || meta.auditPeriodChangeAlert || null;
+
+  const firstActive = activeAuditors[0];
+  const appointedFrom =
+    firstActive?.auditFromDate ||
+    firstActive?.audit_from_date ||
+    meta.appointedAuditFromDate ||
+    (camp as any).appointedAuditFromDate ||
+    '';
+  const appointedTo =
+    firstActive?.auditToDate ||
+    firstActive?.audit_to_date ||
+    meta.appointedAuditToDate ||
+    (camp as any).appointedAuditToDate ||
+    '';
+  const appointedPeriod =
+    firstActive?.auditPeriod ||
+    firstActive?.audit_period ||
+    meta.appointedAuditPeriod ||
+    (camp as any).appointedAuditPeriod ||
+    validSignOffs[0]?.auditPeriod ||
+    validSignOffs[0]?.periodLabel ||
+    (lockedPeriods.length > 0 ? lockedPeriods[lockedPeriods.length - 1].periodLabel : '') ||
+    (lockedRecordCount > 0 || verifiedRecordCount > 0 ? camp.lastAuditPeriod || '' : '');
+
+  const ackKeys = new Set(periodChangeAlert?.acknowledgedByKeys || []);
+  const hasRelevantPeriodAlert = Boolean(
+    periodChangeAlert &&
+      (!periodChangeAlert.newPeriodLabel || !appointedPeriod || periodChangeAlert.newPeriodLabel === appointedPeriod) &&
+      (!periodChangeAlert.newFromDate || !appointedFrom || periodChangeAlert.newFromDate === appointedFrom) &&
+      (!periodChangeAlert.newToDate || !appointedTo || periodChangeAlert.newToDate === appointedTo)
+  );
+  const unackedAuditorsCount = hasRelevantPeriodAlert
+    ? activeAuditors.length > 0
+      ? activeAuditors.filter(
+          g => !ackKeys.has(normalizeAuditorKey(g.auditorPhone || g.auditor_phone, g.auditorName || g.auditor_name))
+        ).length
+      : ackKeys.size === 0
+      ? 1
+      : 0
+    : 0;
+  const isPendingReapproval = hasRelevantPeriodAlert && unackedAuditorsCount > 0;
+
+  // REAL Sealed check: requires actual locked records OR non-empty lockedAuditPeriods
+  // OR (valid lastAuditedAt backed by real verified records + signOffs)
+  const hasRealSealedLock = Boolean(
+    lockedRecordCount > 0 ||
+      lockedPeriods.length > 0 ||
+      (Boolean(camp.lastAuditedAt || meta.lastAuditedAt) && verifiedRecordCount > 0 && validSignOffs.length > 0)
+  );
+
+  // If a brand new active period is appointed and NOT yet locked in lockedPeriods, treat as auditing
+  const isActiveCycleAlreadySealed = Boolean(
+    hasRealSealedLock &&
+      (activeAuditors.length === 0 ||
+        !appointedPeriod ||
+        lockedPeriods.some(
+          p =>
+            (!appointedPeriod || p.periodLabel === appointedPeriod) &&
+            (!appointedFrom || !p.fromDate || p.fromDate === appointedFrom) &&
+            (!appointedTo || !p.toDate || p.toDate === appointedTo)
+        ))
+  );
+
+  const hasPartialAuditWork =
+    !hasRealSealedLock && (validSignOffs.length > 0 || verifiedRecordCount > 0 || coAlert?.status === 'awaiting_co_auditor');
+
+  let statusKey: CampaignAuditStatusSummary['statusKey'] = 'unaudited';
+  let badgeLabel = 'La Audit Loh';
+
+  if (isPendingReapproval) {
+    statusKey = 'pending_reapproval';
+    badgeLabel = `🔔 Pending Re-Approval (${unackedAuditorsCount})`;
+  } else if (coAlert?.status === 'discrepancy_alert' || flaggedCount > 0) {
+    statusKey = 'discrepancy';
+    badgeLabel = '⚠️ Co-Auditor Discrepancy';
+  } else if (activeAuditors.length > 0 && !isActiveCycleAlreadySealed) {
+    statusKey = 'auditing';
+    badgeLabel =
+      coAlert?.status === 'awaiting_co_auditor'
+        ? '⏳ 1/2 Submitted — Nghah Mek'
+        : '⏳ Auditing In Progress';
+  } else if (hasRealSealedLock) {
+    statusKey = 'sealed';
+    badgeLabel =
+      lockedPeriods.length > 0
+        ? `🔒 Sealed & Audited (${lockedPeriods.length})`
+        : `🔒 Sealed & Audited (${lockedRecordCount} records)`;
+  } else if (hasPartialAuditWork) {
+    statusKey = 'auditing';
+    badgeLabel =
+      validSignOffs.length > 0
+        ? `⏳ Partial Audited (${validSignOffs.length} Signed • ${verifiedRecordCount} Verified, Lock La Nghah)`
+        : `⏳ Partial Audited (${verifiedRecordCount} Verified, Lock La Ni Lo)`;
+  }
+
+  const effectiveLastAuditedAt = hasRealSealedLock
+    ? camp.lastAuditedAt || meta.lastAuditedAt || lockedPeriods[lockedPeriods.length - 1]?.lockedAt
+    : undefined;
+  const effectiveLastAuditedBy = hasRealSealedLock
+    ? camp.lastAuditedBy || meta.lastAuditedBy || lockedPeriods[lockedPeriods.length - 1]?.lockedBy
+    : validSignOffs.length > 0
+    ? validSignOffs.map(s => s.auditorName).filter(Boolean).join(', ')
+    : undefined;
+
+  return {
+    statusKey,
+    badgeLabel,
+    isSealed: statusKey === 'sealed',
+    isInProgressOrPartial: statusKey === 'auditing' || statusKey === 'discrepancy' || statusKey === 'pending_reapproval',
+    lockedTxCount,
+    lockedExpCount,
+    verifiedTxCount,
+    verifiedExpCount,
+    flaggedCount,
+    signOffCount: validSignOffs.length,
+    activeAuditors,
+    lockedPeriods,
+    periodDisplay: appointedPeriod || (hasRealSealedLock ? camp.lastAuditPeriod || '' : ''),
+    lastAuditedAt: effectiveLastAuditedAt,
+    lastAuditedBy: effectiveLastAuditedBy,
+    hasRealAuditHistory: hasRealSealedLock || hasPartialAuditWork
+  };
+};
+

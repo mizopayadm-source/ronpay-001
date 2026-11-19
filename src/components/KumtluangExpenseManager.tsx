@@ -846,8 +846,13 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
   const getItemAuditCategory = (item: CashBookItem): 'audited' | 'unaudited' | 'flagged' => {
     const raw = item.rawObject as any;
     if (!raw) return 'unaudited';
-    if (raw.audit_mark === 'flagged') return 'flagged';
-    if (raw.audit_mark === 'verified' || Boolean(raw.is_locked)) return 'audited';
+    const meta = raw.metadata || {};
+    const mark = raw.audit_mark || meta.audit_mark;
+    const isLocked = Boolean(raw.is_locked || meta.is_locked);
+    const verMap = { ...(meta.auditor_verifications || {}), ...(raw.auditor_verifications || {}) };
+    const entries = Object.values(verMap) as any[];
+    if (mark === 'flagged' || entries.some(v => v && v.mark === 'flagged')) return 'flagged';
+    if (mark === 'verified' || isLocked || entries.some(v => v && v.mark === 'verified')) return 'audited';
     return 'unaudited';
   };
 

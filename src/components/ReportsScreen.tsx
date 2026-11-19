@@ -47,6 +47,7 @@ import {
 } from 'lucide-react';
 import { Transaction, Campaign, BawmCategory, CreatorProfile, MemberRecord } from '../types';
 import { DonorPaymentsEditorModal } from './DonorPaymentsEditorModal';
+import { SearchableBawmPicker } from './SearchableBawmPicker';
 import { 
   exportTransactionsToCSV, 
   exportFormattedExcel,
@@ -85,7 +86,8 @@ import {
   saveStoredTransactions,
   reconcileWithAuthoritativeTransactions,
   isRecordAuditLockedForWrite,
-  checkDateAgainstLockedAuditPeriod
+  checkDateAgainstLockedAuditPeriod,
+  getCampaignAuditStatusSummary
 } from '../utils/storage';
 import { getUserRole } from '../utils/rbac';
 import { INITIAL_TRANSACTIONS } from '../data/initialData';
@@ -1559,20 +1561,12 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
                   ? availableCampaigns.find(c => c.id === selectedCampaignId)
                   : null) || availableCampaigns[0];
               if (!targetAuditCamp) return null;
-              const hasSealedAudit = Boolean(
-                targetAuditCamp.lastAuditedAt ||
-                (Array.isArray(targetAuditCamp.lockedAuditPeriods) && targetAuditCamp.lockedAuditPeriods.length > 0) ||
-                (Array.isArray((targetAuditCamp as any)?.metadata?.lockedAuditPeriods) && (targetAuditCamp as any).metadata.lockedAuditPeriods.length > 0)
-              );
-              const lastPeriodText =
-                targetAuditCamp.lastAuditPeriod ||
-                (targetAuditCamp as any)?.metadata?.lastAuditPeriod ||
-                targetAuditCamp.lockedAuditPeriods?.[targetAuditCamp.lockedAuditPeriods.length - 1]?.periodLabel ||
-                '';
-              const lastAuditorText =
-                targetAuditCamp.lastAuditedBy ||
-                (targetAuditCamp as any)?.metadata?.lastAuditedBy ||
-                '';
+              const auditSsot = getCampaignAuditStatusSummary(targetAuditCamp, { transactions });
+              const hasSealedAudit = auditSsot.isSealed;
+              const isPartialOrActive = auditSsot.isInProgressOrPartial;
+              const lastPeriodText = auditSsot.periodDisplay;
+              const lastAuditorText = auditSsot.lastAuditedBy || '';
+              const verifiedTotal = auditSsot.verifiedTxCount + auditSsot.verifiedExpCount;
 
               return (
                 <div className="bg-emerald-50/90 border border-emerald-200/90 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 animate-fadeIn">
@@ -1590,10 +1584,17 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
                             ✓ Audited{lastPeriodText ? ` • ${lastPeriodText}` : ''}
                           </span>
                         )}
+                        {!hasSealedAudit && isPartialOrActive && (
+                          <span className="text-[9.5px] font-black px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300 shrink-0">
+                            ⏳ {verifiedTotal > 0 ? `Partial Audited (${verifiedTotal} Verified • Lock La Nghah)` : 'Auditing In Progress'}
+                          </span>
+                        )}
                       </div>
                       <span className="text-[11px] text-emerald-800/90 block truncate mt-0.5">
                         {hasSealedAudit
                           ? `Audited by ${lastAuditorText || 'Auditor'} — Certificate, Signatures & Audited Cash Book engtik hunah pawh print/download theih.`
+                          : isPartialOrActive
+                          ? `${lastPeriodText ? `${lastPeriodText}: ` : ''}Lut ${auditSsot.verifiedTxCount}, Senso ${auditSsot.verifiedExpCount} endik tawh (${auditSsot.signOffCount} Signed) — Final Lock zawhah Certificate a famkim ang.`
                           : 'Audit Certificate (Signatures nen), Audited Cash Book, leh Co-Auditor Report en leh print-na.'}
                       </span>
                     </div>
@@ -1646,24 +1647,22 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
                 <label className="text-[10.5px] font-bold text-slate-700 block mb-1">
                   My Specific Campaign / QR
                 </label>
-                <select
-                  value={selectedCampaignId}
-                  onChange={(e) => setSelectedCampaignId(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600 transition text-xs"
-                >
-                  {availableCampaigns.length === 0 ? (
-                    <option value="none" disabled>No {selectedFilter.toUpperCase()} campaigns created</option>
-                  ) : (
-                    <>
-                      <option value="all">All My Campaigns in this Bawm ({availableCampaigns.length})</option>
-                      {availableCampaigns.map(c => (
-                        <option key={c.id} value={c.id}>
-                          {c.title} {c.targetAmount && c.targetAmount > 0 ? `(🎯 Target: ₹${c.targetAmount.toLocaleString('en-IN')}${c.targetPeriod === 'monthly' ? '/thla' : c.targetPeriod === 'yearly' ? '/kum' : ''})` : ''}
-                        </option>
-                      ))}
-                    </>
-                  )}
-                </select>
+                {availableCampaigns.length === 0 ? (
+                  <div className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-400">
+                    No {selectedFilter.toUpperCase()} campaigns created
+                  </div>
+                ) : (
+                  <SearchableBawmPicker
+                    campaigns={availableCampaigns}
+                    selectedCampaignId={selectedCampaignId}
+                    onSelect={(campId) => setSelectedCampaignId(campId)}
+                    theme="light"
+                    allowAllOption
+                    allOptionLabel={`All My Campaigns in this Bawm (${availableCampaigns.length})`}
+                    showAuditStatusFilter
+                    showCategoryFilter={selectedFilter === 'all'}
+                  />
+                )}
               </div>
             </div>
 

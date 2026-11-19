@@ -63,6 +63,7 @@ import { fetchExpensesFromFirestore } from '../services/firestoreSync';
 import { ensureCoAuditRealtimeChannel } from '../services/coAuditRealtime';
 import { formatDateDDMMYYYY } from '../utils/date';
 import { printHtmlSafely, getTransactionHead, getTransactionMonthYear, getHeadSortPriority } from '../utils/export';
+import { SearchableBawmPicker } from './SearchableBawmPicker';
 
 interface AuditorPortalModalProps {
   isOpen: boolean;
@@ -2860,23 +2861,16 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
               </div>
               <div className="flex items-center gap-1.5 sm:gap-2 mt-0.5 flex-wrap">
                 {accessibleCampaigns.length > 1 && onSelectCampaign ? (
-                  <div className="flex items-center gap-1 bg-white/10 border border-white/15 rounded-xl px-2 py-0.5">
-                    <FolderKanban className="w-3 h-3 text-indigo-300 shrink-0" />
-                    <select
-                      value={campaign.id}
-                      onChange={e => {
-                        const found = accessibleCampaigns.find(c => c.id === e.target.value);
-                        if (found) onSelectCampaign(found);
-                      }}
-                      className="bg-transparent text-[11px] font-bold text-white focus:outline-none cursor-pointer pr-1"
-                    >
-                      {accessibleCampaigns.map(c => (
-                        <option key={c.id} value={c.id} className="text-slate-900 font-bold">
-                          {c.title} ({c.category.toUpperCase()})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                  <SearchableBawmPicker
+                    campaigns={accessibleCampaigns}
+                    selectedCampaignId={campaign.id}
+                    onSelect={(_id, found) => {
+                      if (found) onSelectCampaign(found);
+                    }}
+                    theme="dark"
+                    showAuditStatusFilter
+                    showCategoryFilter
+                  />
                 ) : (
                   <p className="text-[11px] sm:text-xs text-indigo-200/80 font-medium truncate">
                     {campaign.title} • {campaign.category.toUpperCase()}
