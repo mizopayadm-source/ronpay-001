@@ -519,14 +519,24 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     const netBalance = totalCollections - totalExpenses;
 
     // Category Breakdown (for Collection Progress Donut Chart)
-    const enabledCats = Array.isArray(activeOrgCampaign.enabledCategories) && activeOrgCampaign.enabledCategories.length > 0
+    // Use ONLY the campaign's own configured categories — never invent generic church categories
+    const enabledCats: string[] = Array.isArray(activeOrgCampaign.enabledCategories) && activeOrgCampaign.enabledCategories.length > 0
       ? activeOrgCampaign.enabledCategories
       : (Array.isArray(activeOrgCampaign.subCategories) && activeOrgCampaign.subCategories.length > 0
           ? activeOrgCampaign.subCategories
-          : ['Pathian Ram', 'Ramthar', 'Tualchhung', 'Building', 'Thawhlawm']);
+          : []);
 
     const catTotalsMap: Record<string, number> = {};
     enabledCats.forEach(c => { catTotalsMap[c] = 0; });
+
+    const defaultBucketLabel =
+      activeOrgCampaign.category === 'ralna'
+        ? 'Ralna'
+        : activeOrgCampaign.category === 'khawlsak'
+        ? 'Khawlsak'
+        : activeOrgCampaign.category === 'rikrum'
+        ? 'Rikrum'
+        : 'General Collection';
 
     validTxns.forEach(tx => {
       const allocs = tx.subCategoryBreakdown;
@@ -538,7 +548,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           }
         });
       } else {
-        const sub = tx.subCategory || enabledCats[0] || 'General Collection';
+        const sub = tx.subCategory || defaultBucketLabel;
         catTotalsMap[sub] = (catTotalsMap[sub] || 0) + (Number(tx.amount) || 0);
       }
     });
@@ -1190,21 +1200,35 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               </div>
             </div>
 
-            {/* Enabled Categories Pill Strip & Quick Action Bar */}
+            {/* Bawm Configured Categories (only if explicitly set on this Bawm) / Compact Bawm Meta + Quick Action Bar */}
             <div className="pt-2.5 border-t border-slate-100 flex flex-col @xl:flex-row @xl:items-center justify-between gap-2.5">
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="text-[10px] font-black uppercase text-slate-400 mr-1 flex items-center gap-1">
-                  <CheckSquare className="w-3 h-3 text-indigo-600" /> Active Categories:
-                </span>
-                {orgDashboardStats.enabledCats.map((cat) => (
-                  <span
-                    key={cat}
-                    className="text-[10px] font-extrabold bg-indigo-50/90 text-indigo-800 border border-indigo-200/80 px-2 py-0.5 rounded-lg"
-                  >
-                    ✓ {cat}
+              {orgDashboardStats.enabledCats.length > 0 ? (
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-[10px] font-black uppercase text-slate-400 mr-1 flex items-center gap-1">
+                    <CheckSquare className="w-3 h-3 text-indigo-600" /> Bawm Categories:
                   </span>
-                ))}
-              </div>
+                  {orgDashboardStats.enabledCats.map((cat) => (
+                    <span
+                      key={cat}
+                      className="text-[10px] font-extrabold bg-indigo-50/90 text-indigo-800 border border-indigo-200/80 px-2 py-0.5 rounded-lg"
+                    >
+                      ✓ {cat}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex items-center gap-1.5 flex-wrap text-[10.5px]">
+                  <span className="font-extrabold bg-slate-100 text-slate-700 border border-slate-200 px-2 py-0.5 rounded-lg uppercase">
+                    {activeOrgCampaign.category} Bawm
+                  </span>
+                  {activeOrgCampaign.location && (
+                    <span className="font-bold text-slate-500 flex items-center gap-1">
+                      <MapPin className="w-3 h-3 text-rose-500 shrink-0" />
+                      {activeOrgCampaign.location}
+                    </span>
+                  )}
+                </div>
+              )}
 
               {onOpenMemberRoll && (
                 <div className="grid grid-cols-2 @xl:flex items-center gap-2 w-full @xl:w-auto">
