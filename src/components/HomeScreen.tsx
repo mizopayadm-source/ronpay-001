@@ -100,7 +100,7 @@ interface HomeScreenProps {
   onOpenWebsite?: () => void;
   onPreviewImage?: (url: string, title?: string) => void;
   publicPoolStats?: PublicPoolStats;
-  onOpenAuditorPortal?: (campaign?: Campaign) => void;
+  onOpenAuditorPortal?: (campaign?: Campaign, initialTab?: 'cashbook' | 'overview' | 'reconcile' | 'transactions' | 'expenses' | 'lock_action' | 'certificate') => void;
 }
 
 export const HomeScreen: React.FC<HomeScreenProps> = ({
@@ -1142,32 +1142,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           );
         }
 
-        // Already logged-in Auditor whose time-bound permit has expired or been revoked
-        if (creatorProfile?.role === 'AUDITOR') {
-          return (
-            <div className="p-3 rounded-2xl border border-rose-300 bg-rose-50 text-rose-950 flex items-center justify-between gap-3 shadow-xs animate-fadeIn">
-              <div className="flex items-center gap-3 min-w-0">
-                <div className="w-9 h-9 rounded-xl bg-rose-600 text-white flex items-center justify-center shrink-0 shadow-inner">
-                  <Lock className="w-4.5 h-4.5" />
-                </div>
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-black text-xs sm:text-sm text-rose-900">
-                      🔒 Audit Hun Bi a Tawp Ta (Auditor Portal Locked)
-                    </span>
-                    <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-rose-200 text-rose-900 border border-rose-300">
-                      PERMIT EXPIRED
-                    </span>
-                  </div>
-                  <p className="text-[10.5px] font-medium text-rose-800/90 mt-0.5 leading-snug">
-                    I Auditor Permit hun bi a tawp tawh (emaw tihtawp a ni) avangin Auditor Portal luh theih a ni tawh lo. Audit chhunzawm i la duh chuan Bawm Neitu / Treasurer hnenah hun bi pawtsei turin ngen rawh.
-                  </p>
-                </div>
-              </div>
-            </div>
-          );
-        }
-
+        // Once an Auditor's permit expires/is revoked, keep HomeScreen clean and uncluttered
+        // (Their past audited organizations summary log is preserved read-only inside ProfileModal)
         return null;
       })()}
 
@@ -1316,6 +1292,20 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                     <FileSpreadsheet className="w-3.5 h-3.5 text-amber-300 shrink-0" />
                     <span>Statements</span>
                   </button>
+                  {onOpenAuditorPortal && (
+                    <button
+                      type="button"
+                      onClick={() => onOpenAuditorPortal(activeOrgCampaign, 'certificate')}
+                      className="w-full @xl:w-auto justify-center px-3 py-2 @xl:py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-[11px] font-black shadow-2xs transition cursor-pointer flex items-center gap-1 active:scale-95 whitespace-nowrap"
+                      title="Auditor Report & Official Audit Certificate enna / print-na"
+                    >
+                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                      <span>Audit Report</span>
+                      {(activeOrgCampaign.lastAuditedAt || (activeOrgCampaign.lockedAuditPeriods && activeOrgCampaign.lockedAuditPeriods.length > 0)) && (
+                        <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+                      )}
+                    </button>
+                  )}
                   {onShareCampaign && (
                     <button
                       type="button"

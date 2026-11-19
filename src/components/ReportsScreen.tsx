@@ -120,6 +120,7 @@ interface ReportsScreenProps {
   userPaidIds?: string[];
   onOpenSulhnu?: () => void;
   onOpenAuthorizedPersons?: (campaign: Campaign) => void;
+  onOpenAuditorPortal?: (campaign?: Campaign, initialTab?: 'cashbook' | 'overview' | 'reconcile' | 'transactions' | 'expenses' | 'lock_action' | 'certificate') => void;
 }
 
 const MONTH_NAMES_LIST = [
@@ -177,6 +178,7 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
   userPaidIds = [],
   onOpenSulhnu,
   onOpenAuthorizedPersons,
+  onOpenAuditorPortal,
 }) => {
 
   // Default to 'all' so every donation across all categories is visible immediately
@@ -1549,6 +1551,74 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
                 </button>
               </div>
             )}
+
+            {/* Direct Auditor Report & Audit Certificate Access Card for Creators / Treasurers / Officers */}
+            {onOpenAuditorPortal && availableCampaigns.length > 0 && (() => {
+              const targetAuditCamp =
+                (selectedCampaignId !== 'all'
+                  ? availableCampaigns.find(c => c.id === selectedCampaignId)
+                  : null) || availableCampaigns[0];
+              if (!targetAuditCamp) return null;
+              const hasSealedAudit = Boolean(
+                targetAuditCamp.lastAuditedAt ||
+                (Array.isArray(targetAuditCamp.lockedAuditPeriods) && targetAuditCamp.lockedAuditPeriods.length > 0) ||
+                (Array.isArray((targetAuditCamp as any)?.metadata?.lockedAuditPeriods) && (targetAuditCamp as any).metadata.lockedAuditPeriods.length > 0)
+              );
+              const lastPeriodText =
+                targetAuditCamp.lastAuditPeriod ||
+                (targetAuditCamp as any)?.metadata?.lastAuditPeriod ||
+                targetAuditCamp.lockedAuditPeriods?.[targetAuditCamp.lockedAuditPeriods.length - 1]?.periodLabel ||
+                '';
+              const lastAuditorText =
+                targetAuditCamp.lastAuditedBy ||
+                (targetAuditCamp as any)?.metadata?.lastAuditedBy ||
+                '';
+
+              return (
+                <div className="bg-emerald-50/90 border border-emerald-200/90 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 animate-fadeIn">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-8 h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                      <ShieldCheck className="w-4 h-4" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="font-black text-emerald-950 text-xs truncate">
+                          ⚖️ Auditor Report &amp; Official Certificate ({targetAuditCamp.title})
+                        </span>
+                        {hasSealedAudit && (
+                          <span className="text-[9.5px] font-black px-2 py-0.5 rounded-full bg-emerald-600 text-white uppercase shrink-0">
+                            ✓ Audited{lastPeriodText ? ` • ${lastPeriodText}` : ''}
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-[11px] text-emerald-800/90 block truncate mt-0.5">
+                        {hasSealedAudit
+                          ? `Audited by ${lastAuditorText || 'Auditor'} — Certificate, Signatures & Audited Cash Book engtik hunah pawh print/download theih.`
+                          : 'Audit Certificate (Signatures nen), Audited Cash Book, leh Co-Auditor Report en leh print-na.'}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => onOpenAuditorPortal(targetAuditCamp, 'certificate')}
+                      className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white font-black rounded-xl text-[11px] shadow-xs transition flex items-center gap-1.5 cursor-pointer active:scale-95"
+                    >
+                      <FileCheck className="w-3.5 h-3.5" />
+                      <span>Audit Certificate</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onOpenAuditorPortal(targetAuditCamp, 'cashbook')}
+                      className="px-3 py-1.5 bg-white hover:bg-emerald-100 text-emerald-900 border border-emerald-300 font-bold rounded-xl text-[11px] shadow-2xs transition flex items-center gap-1.5 cursor-pointer active:scale-95"
+                    >
+                      <Printer className="w-3.5 h-3.5 text-emerald-700" />
+                      <span>Audited Cash Book</span>
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Main Category Filter */}
             <div className="grid grid-cols-2 gap-2">

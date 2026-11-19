@@ -72,6 +72,7 @@ interface AuditorPortalModalProps {
   creatorProfile?: CreatorProfile | null;
   onClose: () => void;
   onRecordsUpdated?: () => void;
+  initialTab?: 'cashbook' | 'overview' | 'reconcile' | 'transactions' | 'expenses' | 'lock_action' | 'certificate';
 }
 
 const DEFAULT_CHECKLIST: Record<string, boolean> = {
@@ -89,9 +90,16 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
   onSelectCampaign,
   creatorProfile,
   onClose,
-  onRecordsUpdated
+  onRecordsUpdated,
+  initialTab
 }) => {
-  const [activeTab, setActiveTab] = useState<'cashbook' | 'overview' | 'reconcile' | 'transactions' | 'expenses' | 'lock_action' | 'certificate'>('cashbook');
+  const [activeTab, setActiveTab] = useState<'cashbook' | 'overview' | 'reconcile' | 'transactions' | 'expenses' | 'lock_action' | 'certificate'>(initialTab || 'cashbook');
+
+  useEffect(() => {
+    if (isOpen) {
+      setActiveTab(initialTab || 'cashbook');
+    }
+  }, [isOpen, initialTab]);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [filterLockStatus, setFilterLockStatus] = useState<'all' | 'locked' | 'unlocked' | 'verified' | 'flagged' | 'unchecked'>('all');
 

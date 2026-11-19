@@ -32,11 +32,22 @@ import {
   Activity,
   HardDrive,
   Layers,
-  ArrowRight
+  ArrowRight,
+  Clock,
+  Award
 } from 'lucide-react';
 import { CreatorProfile, BawmCategory, Campaign } from '../types';
 import { BAWM_CONFIG } from '../data/initialData';
-import { saveStoredCreatorProfile, wipeAllClientStorage, isGuestUser } from '../utils/storage';
+import {
+  saveStoredCreatorProfile,
+  wipeAllClientStorage,
+  isGuestUser,
+  getStoredAuditorGrants,
+  getActiveAuditorGrantsForUser,
+  getStoredCampaigns,
+  normalizeAuditorKey
+} from '../utils/storage';
+import { formatDateDDMMYYYY } from '../utils/date';
 import { MyMembershipsModal } from './MyMembershipsModal';
 import { getUserGroupMemberships, getActiveCampaignContext } from '../services/groupMembershipService';
 
@@ -427,15 +438,26 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
 
           <div className="flex justify-between items-center">
             <span className="text-slate-600 font-medium flex items-center gap-1.5"><ShieldCheck className="w-3.5 h-3.5 text-emerald-600" /> Account Status:</span>
-            <span className="font-extrabold text-emerald-700 bg-emerald-100 border border-emerald-200 px-2.5 py-0.5 rounded text-[10px]">
-              {creatorProfile.isApproved
-                ? 'APPROVED CREATOR'
-                : creatorProfile.role === 'AUDITOR'
-                ? 'APPOINTED AUDITOR'
-                : creatorProfile.role === 'MEMBER'
-                ? 'VERIFIED MEMBER'
-                : 'STANDARD USER'}
-            </span>
+            {(() => {
+              const cleanPhone = (creatorProfile.phone || (creatorProfile as any)?.phoneNumber || '').replace(/\D/g, '').slice(-10);
+              const hasActiveAuditorPermit = cleanPhone.length >= 10 && getActiveAuditorGrantsForUser(cleanPhone).length > 0;
+              const isExpiredAuditorOnly = creatorProfile.role === 'AUDITOR' && !hasActiveAuditorPermit && !creatorProfile.isApproved;
+              return (
+                <span className={`font-extrabold px-2.5 py-0.5 rounded text-[10px] border ${
+                  isExpiredAuditorOnly
+                    ? 'text-slate-700 bg-slate-200/80 border-slate-300'
+                    : 'text-emerald-700 bg-emerald-100 border-emerald-200'
+                }`}>
+                  {creatorProfile.isApproved
+                    ? 'APPROVED CREATOR'
+                    : creatorProfile.role === 'AUDITOR'
+                    ? (hasActiveAuditorPermit ? 'APPOINTED AUDITOR' : 'PAST AUDITOR (PERMIT EXPIRED)')
+                    : creatorProfile.role === 'MEMBER'
+                    ? 'VERIFIED MEMBER'
+                    : 'STANDARD USER'}
+                </span>
+              );
+            })()}
           </div>
 
           <div className="border-t border-slate-200 pt-2.5">
@@ -455,6 +477,151 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
             </div>
           </div>
         </div>
+
+        {/* Summary-Only Past Audit Log (Clutter-free record of organizations audited — no financial details exposed) */}
+        {(() => {
+          const cleanPhone = (creatorProfile.phone || (creatorProfile as any)?.phoneNumber || '').replace(/\D/g, '').slice(-10);
+          if (!cleanPhone || cleanPhone === '9999999999') return null;
+
+          const allCampsMap = new Map<string, Campaign>();
+          getStoredCampaigns().forEach(c => {
+            if (c?.id) allCampsMap.set(String(c.id).toLowerCase().trim(), c);
+          });
+          (campaigns || []).forEach(c => {
+            if (c?.id) allCampsMap.set(String(c.id).toLowerCase().trim(), c);
+          });
+
+          const myKey = normalizeAuditorKey(cleanPhone, creatorProfile.name);
+          const nowMs = Date.now();
+          const summaryMap = new Map<string, {
+            id: string;
+            orgTitle: string;
+            auditPeriod: string;
+            dateStr: string;
+            status: 'active' | 'completed' | 'expired';
+            sortMs: number;
+          }>();
+
+          // 1. Collect from campaign auditSignOffs (completed/signed audits)
+          allCampsMap.forEach((camp, campKey) => {
+            const signOffs = Array.isArray(camp.auditSignOffs)
+              ? camp.auditSignOffs
+              : Array.isArray((camp as any)?.metadata?.auditSignOffs)
+              ? (camp as any).metadata.auditSignOffs
+              : [];
+            signOffs.forEach((s: any, idx: number) => {
+              if (!s) return;
+              const sPhone = String(s.auditorPhone || '').replace(/\D/g, '').slice(-10);
+              const sKey = String(s.auditorKey || '');
+              if (sPhone !== cleanPhone && sKey !== myKey) return;
+              const periodLbl = s.auditPeriod || camp.lastAuditPeriod || 'Financial Audit';
+              const entryKey = `${campKey}::${periodLbl}`;
+              const signedMs = new Date(s.signedAt || camp.lastAuditedAt || 0).getTime() || 0;
+              summaryMap.set(entryKey, {
+                id: `${entryKey}_${idx}`,
+                orgTitle: camp.title || 'RonPay Bawm',
+                auditPeriod: periodLbl,
+                dateStr: s.signedAt ? formatDateDDMMYYYY(s.signedAt) : (camp.lastAuditedAt ? formatDateDDMMYYYY(camp.lastAuditedAt) : ''),
+                status: 'completed',
+                sortMs: signedMs
+              });
+            });
+          });
+
+          // 2. Collect from stored auditor grants (active, expired, or revoked)
+          getStoredAuditorGrants().forEach(g => {
+            if (!g) return;
+            const gPhone = String(g.auditorPhone || g.auditor_phone || '').replace(/\D/g, '').slice(-10);
+            if (gPhone !== cleanPhone) return;
+            const campKey = String(g.campaignId || g.campaign_id || '').toLowerCase().trim();
+            const camp = allCampsMap.get(campKey);
+            const orgTitle = camp?.title || g.campaignTitle || g.campaign_title || 'RonPay Bawm';
+            const fromD = g.auditFromDate || g.audit_from_date || '';
+            const toD = g.auditToDate || g.audit_to_date || '';
+            const periodLbl =
+              g.auditPeriod ||
+              g.audit_period ||
+              (fromD && toD ? `${formatDateDDMMYYYY(fromD)} – ${formatDateDDMMYYYY(toD)}` : 'Financial Audit');
+            const entryKey = `${campKey}::${periodLbl}`;
+            const expStr = g.expiresAt || g.expires_at || '';
+            const expMs = new Date(expStr || 0).getTime() || 0;
+            const isActive = g.status === 'active' && expMs > nowMs;
+            const existing = summaryMap.get(entryKey);
+
+            if (existing && existing.status === 'completed') {
+              // Keep completed sign-off status, unless currently still active
+              if (isActive) {
+                summaryMap.set(entryKey, { ...existing, status: 'active' });
+              }
+              return;
+            }
+
+            summaryMap.set(entryKey, {
+              id: g.id,
+              orgTitle,
+              auditPeriod: periodLbl,
+              dateStr: expStr ? formatDateDDMMYYYY(expStr) : '',
+              status: isActive ? 'active' : 'expired',
+              sortMs: expMs || new Date(g.createdAt || g.created_at || 0).getTime() || 0
+            });
+          });
+
+          const auditLogs = Array.from(summaryMap.values()).sort((a, b) => b.sortMs - a.sortMs);
+          if (auditLogs.length === 0) return null;
+
+          return (
+            <div className="bg-amber-50/60 p-3.5 rounded-2xl border border-amber-200/80 space-y-2.5 text-xs">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5">
+                  <Award className="w-4 h-4 text-amber-700 shrink-0" />
+                  <span className="font-black text-slate-900">Ka Audit Tawh Sulhnu (Audit Log)</span>
+                </div>
+                <span className="text-[9.5px] font-black px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-200">
+                  {auditLogs.length} {auditLogs.length === 1 ? 'Bawm' : 'Bawms'}
+                </span>
+              </div>
+              <div className="space-y-1.5 max-h-44 overflow-y-auto pr-0.5">
+                {auditLogs.map(item => (
+                  <div
+                    key={item.id}
+                    className="bg-white/95 rounded-xl border border-amber-200/70 px-3 py-2 flex items-center justify-between gap-2"
+                  >
+                    <div className="min-w-0">
+                      <div className="font-extrabold text-slate-900 text-[11.5px] truncate">
+                        {item.orgTitle}
+                      </div>
+                      <div className="text-[10px] text-slate-500 font-medium truncate">
+                        {item.auditPeriod}{item.dateStr ? ` • ${item.dateStr}` : ''}
+                      </div>
+                    </div>
+                    <span
+                      className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full border shrink-0 flex items-center gap-1 ${
+                        item.status === 'active'
+                          ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                          : item.status === 'completed'
+                          ? 'bg-indigo-50 text-indigo-800 border-indigo-200'
+                          : 'bg-slate-100 text-slate-600 border-slate-200'
+                      }`}
+                    >
+                      {item.status === 'active' ? (
+                        <>● Active</>
+                      ) : item.status === 'completed' ? (
+                        <>✓ Audit Zo Fel</>
+                      ) : (
+                        <>
+                          <Clock className="w-2.5 h-2.5" /> Hun Bi Tawp
+                        </>
+                      )}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <p className="text-[9.5px] text-amber-900/75 font-medium leading-snug">
+                🔒 Chhinchhiahna tawi (Summary Log) chauh a ni — financial details leh record chhung chu security him nan a inhawng let thei lo.
+              </p>
+            </div>
+          );
+        })()}
 
         {/* Biometric Security Control Box */}
         <div className="bg-indigo-50/60 p-3.5 rounded-2xl border border-indigo-100 space-y-2 text-xs">

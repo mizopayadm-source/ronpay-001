@@ -316,8 +316,13 @@ export default function App() {
   const [externalUPICampaign, setExternalUPICampaign] = useState<Campaign | null>(null);
   const [isAuditorPortalOpen, setIsAuditorPortalOpen] = useState<boolean>(false);
   const [auditorPortalCampaign, setAuditorPortalCampaign] = useState<Campaign | null>(null);
+  const [auditorPortalInitialTab, setAuditorPortalInitialTab] = useState<'cashbook' | 'overview' | 'reconcile' | 'transactions' | 'expenses' | 'lock_action' | 'certificate'>('cashbook');
 
-  const handleOpenAuditorPortal = useCallback((targetCampaign?: Campaign | null) => {
+  const handleOpenAuditorPortal = useCallback((
+    targetCampaign?: Campaign | null,
+    initialTab?: 'cashbook' | 'overview' | 'reconcile' | 'transactions' | 'expenses' | 'lock_action' | 'certificate'
+  ) => {
+    setAuditorPortalInitialTab(initialTab || 'cashbook');
     if (targetCampaign) {
       setAuditorPortalCampaign(targetCampaign);
       setIsAuditorPortalOpen(true);
@@ -2181,6 +2186,7 @@ export default function App() {
                 setSelectedAuthorizedCampaign(camp);
                 setIsAuthorizedPersonsOpen(true);
               }}
+              onOpenAuditorPortal={handleOpenAuditorPortal}
               onRefreshCloud={handleRefreshCloudData}
             />
           )}
@@ -2821,6 +2827,7 @@ export default function App() {
           campaigns={campaigns}
           onSelectCampaign={(camp) => setAuditorPortalCampaign(camp)}
           creatorProfile={creatorProfile}
+          initialTab={auditorPortalInitialTab}
           onClose={() => setIsAuditorPortalOpen(false)}
           onRecordsUpdated={reloadLocalData}
         />
