@@ -9444,25 +9444,36 @@ async function startServer() {
     next();
   });
 
-  // Vite middleware for development only
+  // Vite middleware for development only (initialized asynchronously so port 3000 binds immediately)
   if (!isProduction) {
-    try {
-      const { createServer: createViteServer } = await import('vite');
-      const vite = await createViteServer({
-        server: { middlewareMode: true },
-        appType: 'spa',
-      });
-      app.use(vite.middlewares);
-    } catch (viteErr) {
-      console.warn('Vite dev middleware failed to load, falling back to static server:', viteErr);
-      app.use(express.static(distPath, {
-        setHeaders: (res, filePath) => {
-          if (filePath.endsWith('.html') || filePath.endsWith('sw.js')) {
-            res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
-          }
+    const staticFallback = express.static(distPath, {
+      setHeaders: (res, filePath) => {
+        if (filePath.endsWith('.html') || filePath.endsWith('sw.js')) {
+          res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
         }
-      }));
-    }
+      }
+    });
+
+    const viteMiddlewarePromise: Promise<(req: any, res: any, next: any) => void> = (async () => {
+      try {
+        const { createServer: createViteServer } = await import('vite');
+        const vite = await createViteServer({
+          server: { middlewareMode: true },
+          appType: 'spa',
+        });
+        console.log('Vite dev middleware ready.');
+        return vite.middlewares;
+      } catch (viteErr) {
+        console.warn('Vite dev middleware failed to load, falling back to static server:', viteErr);
+        return staticFallback;
+      }
+    })();
+
+    app.use((req: Request, res: Response, next: any) => {
+      viteMiddlewarePromise
+        .then((mw) => mw(req, res, next))
+        .catch((err) => next(err));
+    });
   } else {
     app.use(express.static(distPath, {
       setHeaders: (res, filePath) => {

@@ -874,6 +874,12 @@ export default function App() {
     if (route.campaign) {
       setSelectedCampaign(route.campaign);
       setSelectedCategory(route.category || route.campaign.category);
+      try {
+        localStorage.setItem('ronpay_selected_org_campaign_id', route.campaign.id);
+        if (!creatorProfile.phone || creatorProfile.role === 'GUEST' || creatorProfile.phone === '9999999999') {
+          localStorage.setItem('ronpay_home_workspace_mode', 'org_only');
+        }
+      } catch {}
       recordGuestCampaignVisit(route.campaign);
       if (!creatorProfile.phone || creatorProfile.role === 'GUEST' || creatorProfile.phone === '9999999999') {
         setPushPromptOptions({
@@ -1409,6 +1415,11 @@ export default function App() {
   const handleSelectCampaign = (campaign: Campaign, forceAutoOpenPayment: boolean = false) => {
     setSelectedCampaign(campaign);
     setSelectedCategory(campaign.category);
+    try {
+      if (campaign?.id) {
+        localStorage.setItem('ronpay_selected_org_campaign_id', campaign.id);
+      }
+    } catch {}
     recordGuestCampaignVisit(campaign);
     if (!creatorProfile.phone || creatorProfile.role === 'GUEST' || creatorProfile.phone === '9999999999') {
       setPushPromptOptions({
@@ -2014,6 +2025,11 @@ export default function App() {
               pricingConfig={pricingConfig}
               onUpdateCampaign={handleUpdateCampaign}
               onBack={() => {
+                if (selectedCampaign?.id) {
+                  try {
+                    localStorage.setItem('ronpay_selected_org_campaign_id', selectedCampaign.id);
+                  } catch {}
+                }
                 setAutoOpenPhonePeCheckout(false);
                 setSelectedCampaign(null);
                 cleanPaymentUrlParams();

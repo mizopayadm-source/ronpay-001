@@ -53,7 +53,8 @@ import {
   Check,
   Navigation,
   RefreshCw,
-  Compass
+  Compass,
+  Calendar
 } from 'lucide-react';
 import { BawmCategory, Campaign, Transaction, BillService, CreatorProfile, AnnouncementBanner, AnnouncementItem, PublicPoolStats } from '../types';
 import { AnnouncementBannerCard } from './AnnouncementBannerCard';
@@ -1715,22 +1716,129 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               </div>
             )}
 
-            {/* Enabled Categories Pill Strip */}
-            <div className="pt-2 border-t border-slate-100 flex flex-col @xl:flex-row @xl:items-center justify-between gap-2">
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="text-[10.5px] font-black uppercase text-slate-400 mr-1 flex items-center gap-1">
-                  <CheckSquare className="w-3 h-3 text-indigo-600" /> Thawhlawm / Giving Categories:
-                </span>
-                {orgDashboardStats.enabledCats.map((cat) => (
-                  <span
-                    key={cat}
-                    className="text-[11px] font-extrabold bg-indigo-50 text-indigo-800 border border-indigo-200/80 px-2.5 py-1 rounded-xl"
-                  >
-                    ✓ {cat}
-                  </span>
-                ))}
-              </div>
-            </div>
+            {/* Bawm Chanchin Tawi (Safe Public Bawm Details — no private ledger/financial leak) */}
+            {(() => {
+              const catLabels: Record<string, string> = {
+                kumtluang: 'Kumtluang Bawm (Pawl / Kohhran)',
+                ralna: 'Ralna Bawm (Chhiatni)',
+                khawlsak: 'Khawlsak Bawm (Ṭanpuina)',
+                rikrum: 'Rikrum Bawm (Emergency)',
+                others: 'Bawm Dang (General)',
+              };
+              const catLabel = catLabels[activeOrgCampaign.category] || activeOrgCampaign.category;
+              const organizerName =
+                activeOrgCampaign.orgName ||
+                activeOrgCampaign.creatorName ||
+                activeOrgCampaign.contactPerson ||
+                '';
+              const locationLine = [
+                activeOrgCampaign.location,
+                activeOrgCampaign.section,
+                activeOrgCampaign.kohhran,
+              ]
+                .filter(Boolean)
+                .join(' • ');
+              const isExpiredCamp = isCampaignExpired(
+                activeOrgCampaign.validityDate,
+                activeOrgCampaign.status,
+                activeOrgCampaign.category,
+                activeOrgCampaign.createdAt
+              );
+              const validityText =
+                activeOrgCampaign.category === 'kumtluang'
+                  ? 'Kumtluang (Permanent)'
+                  : activeOrgCampaign.validityDate
+                  ? formatDateDDMMYYYY(activeOrgCampaign.validityDate)
+                  : 'Active';
+              const showCause =
+                Boolean(activeOrgCampaign.cause) &&
+                activeOrgCampaign.cause?.trim() !== activeOrgCampaign.description?.trim();
+
+              return (
+                <div className="pt-3 border-t border-slate-100 space-y-2.5">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <span className="text-[10.5px] font-black uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                      <Info className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                      <span>Bawm Chanchin Tawi</span>
+                    </span>
+                    <span
+                      className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-md border flex items-center gap-1 ${
+                        isExpiredCamp
+                          ? 'bg-rose-50 text-rose-700 border-rose-200'
+                          : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                      }`}
+                    >
+                      <CheckCircle2 className="w-3 h-3 shrink-0" />
+                      {isExpiredCamp ? 'Hun Liam Tawh' : 'Active & Verified'}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 @lg:grid-cols-2 gap-2 text-xs">
+                    <div className="bg-slate-50 border border-slate-200/80 rounded-xl px-3 py-2 flex items-start gap-2">
+                      <Layers className="w-3.5 h-3.5 text-indigo-600 shrink-0 mt-0.5" />
+                      <div className="min-w-0">
+                        <div className="text-[10px] font-bold text-slate-400 uppercase">Bawm Chi</div>
+                        <div className="font-extrabold text-slate-800 truncate">{catLabel}</div>
+                      </div>
+                    </div>
+
+                    {locationLine && (
+                      <div className="bg-slate-50 border border-slate-200/80 rounded-xl px-3 py-2 flex items-start gap-2">
+                        <MapPin className="w-3.5 h-3.5 text-rose-500 shrink-0 mt-0.5" />
+                        <div className="min-w-0">
+                          <div className="text-[10px] font-bold text-slate-400 uppercase">Hmun / Veng</div>
+                          <div className="font-extrabold text-slate-800 truncate">{locationLine}</div>
+                        </div>
+                      </div>
+                    )}
+
+                    {organizerName && (
+                      <div className="bg-slate-50 border border-slate-200/80 rounded-xl px-3 py-2 flex items-start gap-2">
+                        <UserCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
+                        <div className="min-w-0">
+                          <div className="text-[10px] font-bold text-slate-400 uppercase">Bawm Neitu / Hruaitu</div>
+                          <div className="font-extrabold text-slate-800 truncate">{organizerName}</div>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="bg-slate-50 border border-slate-200/80 rounded-xl px-3 py-2 flex items-start gap-2">
+                      <Calendar className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
+                      <div className="min-w-0">
+                        <div className="text-[10px] font-bold text-slate-400 uppercase">Hman Theih Hun</div>
+                        <div className="font-extrabold text-slate-800 truncate">{validityText}</div>
+                      </div>
+                    </div>
+
+                    {activeOrgCampaign.category === 'ralna' && (activeOrgCampaign.mitthiHming || activeOrgCampaign.vuiHun) && (
+                      <div className="@lg:col-span-2 bg-rose-50/60 border border-rose-200/70 rounded-xl px-3 py-2 flex flex-wrap items-center justify-between gap-2">
+                        {activeOrgCampaign.mitthiHming && (
+                          <div>
+                            <span className="text-[10px] font-bold text-rose-500 uppercase block">Mitthi Hming</span>
+                            <span className="font-black text-slate-900">{activeOrgCampaign.mitthiHming}</span>
+                          </div>
+                        )}
+                        {activeOrgCampaign.vuiHun && (
+                          <div>
+                            <span className="text-[10px] font-bold text-rose-500 uppercase block">Vui Hun</span>
+                            <span className="font-extrabold text-slate-800">{activeOrgCampaign.vuiHun}</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {showCause && (
+                      <div className="@lg:col-span-2 bg-indigo-50/50 border border-indigo-100 rounded-xl px-3 py-2">
+                        <div className="text-[10px] font-bold text-indigo-500 uppercase">Thil Tum / Pual</div>
+                        <p className="text-xs font-semibold text-slate-700 mt-0.5 leading-relaxed">
+                          {activeOrgCampaign.cause}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
           </div>
 
           {/* TWO PRIMARY ACTION BUTTONS (Lian leh Fiah tak) */}
@@ -1760,30 +1868,56 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               <ArrowRight className="w-5 h-5 text-emerald-200 group-hover:translate-x-1 transition-transform shrink-0" />
             </button>
 
-            {/* Button 2: Quick Entry / Passbook (Digit 4) */}
-            <button
-              type="button"
-              onClick={() => onOpenMemberRoll && onOpenMemberRoll('quick_entry', activeOrgCampaign.id)}
-              className="group relative bg-gradient-to-br from-indigo-900 via-indigo-950 to-slate-900 hover:from-indigo-800 hover:to-slate-800 text-white p-5 rounded-2xl shadow-md hover:shadow-lg transition cursor-pointer flex items-center justify-between gap-3 text-left border border-indigo-400/30 active:scale-[0.98]"
-            >
-              <div className="flex items-center gap-3.5 min-w-0">
-                <div className="w-12 h-12 rounded-xl bg-indigo-500/20 backdrop-blur-xs flex items-center justify-center shrink-0 border border-indigo-400/30 group-hover:scale-110 transition-transform">
-                  <Receipt className="w-6 h-6 text-indigo-300" />
-                </div>
-                <div className="min-w-0">
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-black text-base @xl:text-lg text-white">📖 Quick Entry (Digit 4)</span>
-                    <span className="text-[9px] font-black uppercase bg-indigo-500 text-white px-1.5 py-0.2 rounded-md font-mono">
-                      PASSBOOK
-                    </span>
+            {/* Button 2: Quick Entry / Passbook (Kumtluang) OR Share QR (Other Bawm types) */}
+            {activeOrgCampaign.category === 'kumtluang' ? (
+              <button
+                type="button"
+                onClick={() => onOpenMemberRoll && onOpenMemberRoll('quick_entry', activeOrgCampaign.id)}
+                className="group relative bg-gradient-to-br from-indigo-900 via-indigo-950 to-slate-900 hover:from-indigo-800 hover:to-slate-800 text-white p-5 rounded-2xl shadow-md hover:shadow-lg transition cursor-pointer flex items-center justify-between gap-3 text-left border border-indigo-400/30 active:scale-[0.98]"
+              >
+                <div className="flex items-center gap-3.5 min-w-0">
+                  <div className="w-12 h-12 rounded-xl bg-indigo-500/20 backdrop-blur-xs flex items-center justify-center shrink-0 border border-indigo-400/30 group-hover:scale-110 transition-transform">
+                    <Receipt className="w-6 h-6 text-indigo-300" />
                   </div>
-                  <p className="text-xs text-indigo-200 font-medium mt-0.5 truncate">
-                    Digit 4 chauh chhu lutin i mimal slip leh record en rawh
-                  </p>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-black text-base @xl:text-lg text-white">📖 Quick Entry (Digit 4)</span>
+                      <span className="text-[9px] font-black uppercase bg-indigo-500 text-white px-1.5 py-0.2 rounded-md font-mono">
+                        PASSBOOK
+                      </span>
+                    </div>
+                    <p className="text-xs text-indigo-200 font-medium mt-0.5 truncate">
+                      Digit 4 chauh chhu lutin i mimal slip leh record en rawh
+                    </p>
+                  </div>
                 </div>
-              </div>
-              <ArrowRight className="w-5 h-5 text-indigo-300 group-hover:translate-x-1 transition-transform shrink-0" />
-            </button>
+                <ArrowRight className="w-5 h-5 text-indigo-300 group-hover:translate-x-1 transition-transform shrink-0" />
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => onShareCampaign && onShareCampaign(activeOrgCampaign)}
+                className="group relative bg-gradient-to-br from-indigo-900 via-indigo-950 to-slate-900 hover:from-indigo-800 hover:to-slate-800 text-white p-5 rounded-2xl shadow-md hover:shadow-lg transition cursor-pointer flex items-center justify-between gap-3 text-left border border-indigo-400/30 active:scale-[0.98]"
+              >
+                <div className="flex items-center gap-3.5 min-w-0">
+                  <div className="w-12 h-12 rounded-xl bg-indigo-500/20 backdrop-blur-xs flex items-center justify-center shrink-0 border border-indigo-400/30 group-hover:scale-110 transition-transform">
+                    <Share2 className="w-6 h-6 text-indigo-300" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-black text-base @xl:text-lg text-white">📲 QR Code & Share</span>
+                      <span className="text-[9px] font-black uppercase bg-indigo-500 text-white px-1.5 py-0.2 rounded-md font-mono">
+                        BAWM LINK
+                      </span>
+                    </div>
+                    <p className="text-xs text-indigo-200 font-medium mt-0.5 truncate">
+                      He Bawm QR Code leh link hi midangte hnenah thawn rawh
+                    </p>
+                  </div>
+                </div>
+                <ArrowRight className="w-5 h-5 text-indigo-300 group-hover:translate-x-1 transition-transform shrink-0" />
+              </button>
+            )}
           </div>
 
           {/* Security & Confidentiality Notice + Officer Login Portal */}
