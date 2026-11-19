@@ -1244,6 +1244,16 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                     <FileSpreadsheet className="w-3.5 h-3.5 text-amber-300 shrink-0" />
                     <span>Statements</span>
                   </button>
+                  {onShareCampaign && (
+                    <button
+                      type="button"
+                      onClick={() => onShareCampaign(activeOrgCampaign)}
+                      className="w-full @xl:w-auto justify-center px-3 py-2 @xl:py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200 text-[11px] font-black shadow-2xs transition cursor-pointer flex items-center gap-1 active:scale-95 whitespace-nowrap"
+                    >
+                      <Share2 className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                      <span>QR & Share</span>
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -1868,56 +1878,30 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               <ArrowRight className="w-5 h-5 text-emerald-200 group-hover:translate-x-1 transition-transform shrink-0" />
             </button>
 
-            {/* Button 2: Quick Entry / Passbook (Kumtluang) OR Share QR (Other Bawm types) */}
-            {activeOrgCampaign.category === 'kumtluang' ? (
-              <button
-                type="button"
-                onClick={() => onOpenMemberRoll && onOpenMemberRoll('quick_entry', activeOrgCampaign.id)}
-                className="group relative bg-gradient-to-br from-indigo-900 via-indigo-950 to-slate-900 hover:from-indigo-800 hover:to-slate-800 text-white p-5 rounded-2xl shadow-md hover:shadow-lg transition cursor-pointer flex items-center justify-between gap-3 text-left border border-indigo-400/30 active:scale-[0.98]"
-              >
-                <div className="flex items-center gap-3.5 min-w-0">
-                  <div className="w-12 h-12 rounded-xl bg-indigo-500/20 backdrop-blur-xs flex items-center justify-center shrink-0 border border-indigo-400/30 group-hover:scale-110 transition-transform">
-                    <Receipt className="w-6 h-6 text-indigo-300" />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <span className="font-black text-base @xl:text-lg text-white">📖 Quick Entry (Digit 4)</span>
-                      <span className="text-[9px] font-black uppercase bg-indigo-500 text-white px-1.5 py-0.2 rounded-md font-mono">
-                        PASSBOOK
-                      </span>
-                    </div>
-                    <p className="text-xs text-indigo-200 font-medium mt-0.5 truncate">
-                      Digit 4 chauh chhu lutin i mimal slip leh record en rawh
-                    </p>
-                  </div>
+            {/* Button 2: QR Code & Share (Available for ALL Bawm types including Kumtluang) */}
+            <button
+              type="button"
+              onClick={() => onShareCampaign && onShareCampaign(activeOrgCampaign)}
+              className="group relative bg-gradient-to-br from-indigo-900 via-indigo-950 to-slate-900 hover:from-indigo-800 hover:to-slate-800 text-white p-5 rounded-2xl shadow-md hover:shadow-lg transition cursor-pointer flex items-center justify-between gap-3 text-left border border-indigo-400/30 active:scale-[0.98]"
+            >
+              <div className="flex items-center gap-3.5 min-w-0">
+                <div className="w-12 h-12 rounded-xl bg-indigo-500/20 backdrop-blur-xs flex items-center justify-center shrink-0 border border-indigo-400/30 group-hover:scale-110 transition-transform">
+                  <Share2 className="w-6 h-6 text-indigo-300" />
                 </div>
-                <ArrowRight className="w-5 h-5 text-indigo-300 group-hover:translate-x-1 transition-transform shrink-0" />
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() => onShareCampaign && onShareCampaign(activeOrgCampaign)}
-                className="group relative bg-gradient-to-br from-indigo-900 via-indigo-950 to-slate-900 hover:from-indigo-800 hover:to-slate-800 text-white p-5 rounded-2xl shadow-md hover:shadow-lg transition cursor-pointer flex items-center justify-between gap-3 text-left border border-indigo-400/30 active:scale-[0.98]"
-              >
-                <div className="flex items-center gap-3.5 min-w-0">
-                  <div className="w-12 h-12 rounded-xl bg-indigo-500/20 backdrop-blur-xs flex items-center justify-center shrink-0 border border-indigo-400/30 group-hover:scale-110 transition-transform">
-                    <Share2 className="w-6 h-6 text-indigo-300" />
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-black text-base @xl:text-lg text-white">📲 QR Code & Share</span>
+                    <span className="text-[9px] font-black uppercase bg-indigo-500 text-white px-1.5 py-0.2 rounded-md font-mono">
+                      BAWM LINK
+                    </span>
                   </div>
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <span className="font-black text-base @xl:text-lg text-white">📲 QR Code & Share</span>
-                      <span className="text-[9px] font-black uppercase bg-indigo-500 text-white px-1.5 py-0.2 rounded-md font-mono">
-                        BAWM LINK
-                      </span>
-                    </div>
-                    <p className="text-xs text-indigo-200 font-medium mt-0.5 truncate">
-                      He Bawm QR Code leh link hi midangte hnenah thawn rawh
-                    </p>
-                  </div>
+                  <p className="text-xs text-indigo-200 font-medium mt-0.5 truncate">
+                    He Bawm QR Code leh link hi midangte hnenah thawn rawh
+                  </p>
                 </div>
-                <ArrowRight className="w-5 h-5 text-indigo-300 group-hover:translate-x-1 transition-transform shrink-0" />
-              </button>
-            )}
+              </div>
+              <ArrowRight className="w-5 h-5 text-indigo-300 group-hover:translate-x-1 transition-transform shrink-0" />
+            </button>
           </div>
 
           {/* Security & Confidentiality Notice + Officer Login Portal */}
