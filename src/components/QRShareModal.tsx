@@ -207,11 +207,20 @@ export const QRShareModal: React.FC<QRShareModalProps> = ({ isOpen, onClose, cam
         <div className="bg-white rounded-2xl overflow-hidden shadow-xl border border-slate-200 text-slate-900">
           {/* Card Color-Coded Header */}
           <div
-            className="px-4 py-3.5 text-white flex items-center gap-3"
+            className="relative overflow-hidden px-4 py-3.5 text-white flex items-center gap-3"
             style={{
               background: `linear-gradient(135deg, ${cardMeta.theme.headerBg}, ${cardMeta.theme.headerBgEnd})`,
             }}
           >
+            {campaign.category === 'ralna' && (
+              <div className="absolute top-0 right-0 overflow-hidden rounded-bl-xl shadow-xs border-l border-b border-white/40 z-10">
+                <div className="flex h-3.5 w-16">
+                  <div className="flex-1 bg-black" title="YMA Flag - Dum (Black)" />
+                  <div className="flex-1 bg-white" title="YMA Flag - Var (White)" />
+                  <div className="flex-1 bg-red-600" title="YMA Flag - Sen (Vibrant Red)" />
+                </div>
+              </div>
+            )}
             {showPhoto && campaign.imageUrl && (
               <img
                 src={campaign.imageUrl}

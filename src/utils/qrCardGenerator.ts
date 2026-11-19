@@ -374,6 +374,44 @@ export const renderBrandedQRCardPng = async (
   ctx.beginPath();
   ctx.arc(W - 80, 30, 150, 0, Math.PI * 2);
   ctx.fill();
+
+  // YMA Flag Tri-Color Mini Ribbon (Black / White / Vibrant Red) on top-right corner for Ralna Bawm
+  if (campaign.category === 'ralna') {
+    const ribbonW = 144;
+    const ribbonH = 32;
+    const ribbonX = W - 2 - ribbonW;
+    const ribbonY = 2;
+    const stripeW = ribbonW / 3;
+
+    ctx.save();
+    // Rounded bottom-left corner matching CheckoutScreen / HomeScreen Ralna card
+    ctx.beginPath();
+    ctx.moveTo(ribbonX, ribbonY);
+    ctx.lineTo(ribbonX + ribbonW, ribbonY);
+    ctx.lineTo(ribbonX + ribbonW, ribbonY + ribbonH);
+    ctx.lineTo(ribbonX + 18, ribbonY + ribbonH);
+    ctx.quadraticCurveTo(ribbonX, ribbonY + ribbonH, ribbonX, ribbonY + ribbonH - 18);
+    ctx.closePath();
+    ctx.clip();
+
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(ribbonX, ribbonY, stripeW, ribbonH);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(ribbonX + stripeW, ribbonY, stripeW, ribbonH);
+    ctx.fillStyle = '#dc2626';
+    ctx.fillRect(ribbonX + stripeW * 2, ribbonY, stripeW + 2, ribbonH);
+    ctx.restore();
+
+    // Subtle crisp left & bottom border around corner ribbon
+    ctx.strokeStyle = 'rgba(255,255,255,0.45)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(ribbonX, ribbonY);
+    ctx.lineTo(ribbonX, ribbonY + ribbonH - 18);
+    ctx.quadraticCurveTo(ribbonX, ribbonY + ribbonH, ribbonX + 18, ribbonY + ribbonH);
+    ctx.lineTo(ribbonX + ribbonW, ribbonY + ribbonH);
+    ctx.stroke();
+  }
   ctx.restore();
 
   // Flatten bottom corners of header banner cleanly
@@ -756,6 +794,8 @@ export const buildStandeePrintHtml = (params: {
             box-shadow: 0 12px 30px -8px rgba(15, 23, 42, 0.14);
           }
           .header {
+            position: relative;
+            overflow: hidden;
             background: linear-gradient(135deg, ${meta.theme.headerBg}, ${meta.theme.headerBgEnd});
             color: #ffffff;
             padding: 18px 20px;
@@ -764,6 +804,20 @@ export const buildStandeePrintHtml = (params: {
             gap: 14px;
             text-align: left;
           }
+          .yma-ribbon {
+            position: absolute;
+            top: 0;
+            right: 0;
+            display: flex;
+            width: 68px;
+            height: 15px;
+            border-bottom-left-radius: 10px;
+            overflow: hidden;
+            border-left: 1px solid rgba(255,255,255,0.45);
+            border-bottom: 1px solid rgba(255,255,255,0.45);
+            box-shadow: 0 2px 6px rgba(0,0,0,0.18);
+          }
+          .yma-ribbon span { flex: 1; display: block; }
           .photo {
             width: 60px;
             height: 60px;
@@ -937,6 +991,7 @@ export const buildStandeePrintHtml = (params: {
         </div>
         <div class="card">
           <div class="header">
+            ${campaign.category === 'ralna' ? `<div class="yma-ribbon" title="YMA Flag Tri-Color"><span style="background:#000000;"></span><span style="background:#ffffff;"></span><span style="background:#dc2626;"></span></div>` : ''}
             ${showPhoto ? `<img class="photo" src="${esc(campaign.imageUrl || '')}" alt="${esc(meta.title)}" />` : ''}
             <div style="min-width:0;flex:1;">
               <div class="badges">
