@@ -889,7 +889,7 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
 
   const canUserAuditCashBook = useMemo(() => {
     const role = String(creatorProfile?.role || '').toUpperCase().trim();
-    if (role === 'SUPER_ADMIN' || role === 'ADMIN' || role === 'CREATOR' || role === 'AUDITOR' || creatorProfile?.isAdmin) {
+    if (role === 'SUPER_ADMIN' || role === 'ADMIN' || role === 'CREATOR' || creatorProfile?.isAdmin) {
       return true;
     }
     const phone = creatorProfile?.phone || (creatorProfile as any)?.phoneNumber || '';

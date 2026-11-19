@@ -333,11 +333,15 @@ export default function App() {
       assignedCamp = campaignsRef.current.find(c => c.id === targetId) ||
                      campaignsRef.current.find(c => activeGrants.some(g => (g.campaignId || g.campaign_id) === c.id)) ||
                      null;
+    } else if (currentProf?.role === 'AUDITOR' && !currentProf?.isAdmin) {
+      // Pure Auditor with expired/revoked permit: never fall back to unrelated campaigns
+      return;
     } else if (currentProf?.activeCampaignId) {
       assignedCamp = campaignsRef.current.find(c => c.id === currentProf.activeCampaignId) || null;
     }
 
     const camp = assignedCamp || selectedCampaign || campaignsRef.current[0] || null;
+    if (!camp) return;
     setAuditorPortalCampaign(camp);
     setIsAuditorPortalOpen(true);
   }, [selectedCampaign]);
@@ -2769,7 +2773,7 @@ export default function App() {
             setIsLoginModalOpen(false);
             const activeGrants = getActiveAuditorGrantsForUser(newProfile.phone || newProfile.phoneNumber || '');
             const targetCampId = newProfile.activeCampaignId || activeGrants[0]?.campaignId || activeGrants[0]?.campaign_id;
-            if (newProfile.role === 'AUDITOR' || activeGrants.length > 0) {
+            if (activeGrants.length > 0) {
               const targetCamp = campaignsRef.current.find(
                 c => String(c.id).toLowerCase() === String(targetCampId || '').toLowerCase()
               );

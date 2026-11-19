@@ -170,7 +170,25 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenAuditorPortal,
 }) => {
 
-  const hasActiveAuditorGrant = creatorProfile?.role === 'AUDITOR' || (creatorProfile?.phone && getActiveAuditorGrantsForUser(creatorProfile.phone).length > 0);
+  const [auditorGrantTick, setAuditorGrantTick] = useState<number>(0);
+
+  useEffect(() => {
+    const refreshGrants = () => setAuditorGrantTick(t => t + 1);
+    const timer = window.setInterval(refreshGrants, 30000);
+    window.addEventListener('ronpay_auditor_grants_updated', refreshGrants);
+    window.addEventListener('storage', refreshGrants);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener('ronpay_auditor_grants_updated', refreshGrants);
+      window.removeEventListener('storage', refreshGrants);
+    };
+  }, []);
+
+  const hasActiveAuditorGrant = (() => {
+    void auditorGrantTick;
+    const phone = creatorProfile?.phone || (creatorProfile as any)?.phoneNumber || '';
+    return Boolean(phone && getActiveAuditorGrantsForUser(phone).length > 0);
+  })();
 
   const [userLocation, setUserLocation] = useState<string>(() => {
     const saved = localStorage.getItem('kut_app_user_location');

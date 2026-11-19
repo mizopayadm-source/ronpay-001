@@ -157,6 +157,7 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
         setTick(t => t + 1);
       }
     };
+    const expiryCheckTimer = window.setInterval(() => setTick(t => t + 1), 30000);
     window.addEventListener(RONPAY_SYNC_EVENT, onSyncEvent);
     window.addEventListener('ronpay_transactions_updated', onSyncEvent);
     window.addEventListener('ronpay_expenses_updated', onSyncEvent);
@@ -165,6 +166,7 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
     window.addEventListener('ronpay_auditor_grants_updated', onSyncEvent);
     window.addEventListener('storage', onStorageEvent);
     return () => {
+      window.clearInterval(expiryCheckTimer);
       window.removeEventListener(RONPAY_SYNC_EVENT, onSyncEvent);
       window.removeEventListener('ronpay_transactions_updated', onSyncEvent);
       window.removeEventListener('ronpay_expenses_updated', onSyncEvent);
@@ -197,10 +199,12 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
   const canConfigureAuditScope = isAdmin || isCreator || isManagerOrOfficer;
 
   const canAudit = useMemo(() => {
-    const phone = creatorProfile?.phone || creatorProfile?.phoneNumber || '';
-    const hasAnyActiveGrant = phone ? getActiveAuditorGrantsForUser(phone).length > 0 : false;
-    return isAdmin || isCreator || Boolean(accessInfo?.hasAccess) || creatorProfile?.role === 'AUDITOR' || hasAnyActiveGrant;
-  }, [isAdmin, isCreator, accessInfo, creatorProfile]);
+    return isAdmin || isCreator || Boolean(accessInfo?.hasAccess);
+  }, [isAdmin, isCreator, accessInfo]);
+
+  const isExpiredPureAuditor = useMemo(() => {
+    return !isAdmin && !isCreator && !isManagerOrOfficer && !accessInfo?.hasAccess;
+  }, [isAdmin, isCreator, isManagerOrOfficer, accessInfo]);
 
   // Accessible campaigns for Multi-Bawm Switcher (merges prop campaigns + stored campaigns so no Bawm is missing)
   const accessibleCampaigns = useMemo(() => {
@@ -332,8 +336,25 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
   }, [activeGrant, campaign, freshCampObj, tick]);
 
   const isDualAuditMode = useMemo(() => {
-    return appointedAuditors.length >= 2 || Boolean(freshCampObj?.requireDualAuditorConsensus);
-  }, [appointedAuditors, freshCampObj]);
+    if (appointedAuditors.length >= 2 || Boolean(freshCampObj?.requireDualAuditorConsensus)) {
+      return true;
+    }
+    // Preserve Joint Audit Certificate mode even after both auditors' time-bound permits expire
+    if (appointedAuditors.length === 0) {
+      const rawSigns = Array.isArray(freshCampObj?.auditSignOffs)
+        ? freshCampObj!.auditSignOffs!
+        : Array.isArray(freshCampMeta?.auditSignOffs)
+        ? freshCampMeta.auditSignOffs
+        : [];
+      const uniqueSignedKeys = new Set(
+        rawSigns
+          .filter((s: any) => s && s.auditorKey)
+          .map((s: any) => String(s.auditorKey))
+      );
+      if (uniqueSignedKeys.size >= 2) return true;
+    }
+    return false;
+  }, [appointedAuditors, freshCampObj, freshCampMeta]);
 
   const latestSealedPeriod = useMemo(() => {
     const list = Array.isArray(freshCampObj?.lockedAuditPeriods)
@@ -1624,17 +1645,45 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
       ? (freshCamp as any).metadata.auditSignOffs
       : [];
     // Filter sign-offs strictly to the current audit cycle (period & date range) so prior cycle sign-offs never pollute a new audit cycle
-    const signOffs = rawSignOffs.filter((s: any) => {
+    const periodMatchedSignOffs = rawSignOffs.filter((s: any) => {
       if (!s || !s.auditorKey) return false;
       const samePeriod = !s.auditPeriod || !certificateCoverageInfo.periodTitle || String(s.auditPeriod).trim() === String(certificateCoverageInfo.periodTitle).trim();
       const sameFrom = !s.fromDate || !certificateCoverageInfo.fromIso || String(s.fromDate).slice(0, 10) === certificateCoverageInfo.fromIso;
       const sameTo = !s.toDate || !certificateCoverageInfo.toIso || String(s.toDate).slice(0, 10) === certificateCoverageInfo.toIso;
       return samePeriod && sameFrom && sameTo;
     });
+    // If all active permits have already expired after signing off, fall back to recorded rawSignOffs so Certificate signatures are never lost
+    const signOffs =
+      periodMatchedSignOffs.length > 0
+        ? periodMatchedSignOffs
+        : appointedAuditors.length === 0
+        ? rawSignOffs.filter((s: any) => s && s.auditorKey)
+        : [];
     const signOffMap = new Map<string, any>();
     signOffs.forEach((s: any) => {
       if (s && s.auditorKey) signOffMap.set(String(s.auditorKey), s);
     });
+
+    // Combine active appointed auditors + historical signed auditors (for this period) so Joint Certificate signatures stay intact after permit expiry
+    const effectiveAuditorsMap = new Map<string, { grantId?: string; auditorKey: string; auditorName: string; auditorPhone: string }>();
+    appointedAuditors.forEach(a => {
+      effectiveAuditorsMap.set(a.auditorKey, {
+        grantId: a.grantId,
+        auditorKey: a.auditorKey,
+        auditorName: a.auditorName,
+        auditorPhone: a.auditorPhone
+      });
+    });
+    signOffs.forEach((s: any) => {
+      const sKey = String(s.auditorKey || normalizeAuditorKey(s.auditorPhone, s.auditorName));
+      if (!sKey || effectiveAuditorsMap.has(sKey)) return;
+      effectiveAuditorsMap.set(sKey, {
+        auditorKey: sKey,
+        auditorName: s.auditorName || 'Auditor',
+        auditorPhone: s.auditorPhone || 'N/A'
+      });
+    });
+    const effectiveAuditors = Array.from(effectiveAuditorsMap.values());
 
     const auditorStatsMap = new Map<string, {
       grantId?: string;
@@ -1651,9 +1700,9 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
       signedAt?: string;
     }>();
 
-    const activeAppointedKeySet = new Set(appointedAuditors.map(a => a.auditorKey));
+    const effectiveKeySet = new Set(effectiveAuditors.map(a => a.auditorKey));
 
-    appointedAuditors.forEach(a => {
+    effectiveAuditors.forEach(a => {
       const s = signOffMap.get(a.auditorKey);
       auditorStatsMap.set(a.auditorKey, {
         grantId: a.grantId,
@@ -1692,17 +1741,17 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
       };
       const amt = Number(rec.amount) || 0;
       const allActiveEntries = Object.values(verMap).filter((v: any) => v && (v.mark === 'verified' || v.mark === 'flagged'));
-      // Filter verifications to active appointed auditors if any are appointed, so deleted/revoked auditors do not reappear
-      const activeEntries = activeAppointedKeySet.size > 0
+      // Filter verifications to active appointed or signed-off auditors so deleted/revoked non-signing auditors do not reappear
+      const activeEntries = effectiveKeySet.size > 0
         ? allActiveEntries.filter((v: any) => {
             const k = String(v.auditorKey || normalizeAuditorKey(v.auditorPhone, v.auditorName));
-            return activeAppointedKeySet.has(k);
+            return effectiveKeySet.has(k);
           })
         : allActiveEntries;
 
       activeEntries.forEach((v: any) => {
         const k = String(v.auditorKey || normalizeAuditorKey(v.auditorPhone, v.auditorName));
-        if (activeAppointedKeySet.size > 0 && !activeAppointedKeySet.has(k)) return;
+        if (effectiveKeySet.size > 0 && !effectiveKeySet.has(k)) return;
         const st = auditorStatsMap.get(k);
         if (st) {
           if (v.mark === 'verified') {
@@ -1723,7 +1772,7 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
       const verCnt = activeEntries.filter((v: any) => v.mark === 'verified').length;
       const flagCnt = activeEntries.filter((v: any) => v.mark === 'flagged').length;
 
-      const perAuditorStatusList = appointedAuditors.map(a => {
+      const perAuditorStatusList = effectiveAuditors.map(a => {
         const entry = verMap[a.auditorKey];
         const m = entry?.mark === 'verified' ? 'verified' : entry?.mark === 'flagged' ? 'flagged' : 'unchecked';
         return {
@@ -1767,7 +1816,7 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
       } else if (verCnt === 1) {
         partialVerifiedCount += 1;
         if (recordType === 'expense') partialExpCount += 1;
-        if (appointedAuditors.length >= 2) {
+        if (effectiveAuditors.length >= 2) {
           discrepancyItems.push({
             id: rec.id,
             recordType,
@@ -2713,6 +2762,56 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
     `;
     printHtmlSafely(reportHtml);
   };
+
+  if (isExpiredPureAuditor) {
+    return (
+      <div className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
+        <div
+          className="bg-white rounded-3xl shadow-2xl border border-rose-200 w-full max-w-md overflow-hidden"
+          onClick={e => e.stopPropagation()}
+        >
+          <div className="bg-gradient-to-r from-rose-700 via-rose-800 to-slate-900 text-white p-5 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-11 h-11 rounded-2xl bg-white/15 border border-white/25 flex items-center justify-center shrink-0">
+                <Lock className="w-6 h-6 text-amber-300" />
+              </div>
+              <div className="min-w-0">
+                <h3 className="font-black text-base tracking-tight">Auditor Portal Locked</h3>
+                <p className="text-[11px] text-rose-100/90 font-semibold truncate">{campaign.title}</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="p-1.5 rounded-full hover:bg-white/10 text-white/80 transition shrink-0 cursor-pointer"
+              aria-label="Close"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+          <div className="p-6 text-center space-y-4">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-100 border border-rose-200 text-rose-800 text-[11px] font-black uppercase">
+              <Clock className="w-3.5 h-3.5" />
+              <span>Audit Hun Bi a Tawp Ta (Permit Expired)</span>
+            </div>
+            <p className="text-sm text-slate-700 leading-relaxed font-medium">
+              <strong>{campaign.title}</strong> tana i Auditor Permit hun bi bituk chu a tawp tawh (emaw Bawm Neitu-in a tihtawp tawh) a ni. Security him nan financial records en leh audit/lock chhunzawm theih a ni tawh lo.
+            </p>
+            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3 text-xs text-slate-600 text-left">
+              Audit chhunzawm i la mamawh chuan Bawm Neitu / Treasurer hnenah <strong>Auditor Permit hun bi pawtsei (Renew)</strong> turin ngen rawh le.
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="w-full py-3 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-black text-sm transition cursor-pointer shadow-sm"
+            >
+              Khār Rawh (Close)
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-0 sm:p-2.5 overflow-y-auto animate-fade-in">
