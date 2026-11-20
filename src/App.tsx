@@ -84,7 +84,11 @@ import {
   fetchSupabaseFundPool, 
   loadSupabaseInitialState, 
   restoreCacheToSupabase, 
-  getSupabaseTableCount 
+  getSupabaseTableCount,
+  fetchSupabaseCampaigns,
+  fetchSupabaseTransactions,
+  invalidateSupabaseCampaignsCache,
+  invalidateSupabaseTransactionsCache
 } from './services/supabaseService';
 
 import {
@@ -819,12 +823,15 @@ export default function App() {
   const handleRefreshCloudData = useCallback(async () => {
     try {
       invalidateSupabaseTableCache();
+      invalidateSupabaseCampaignsCache();
+      invalidateSupabaseTransactionsCache();
       const [txs, camps, exps] = await Promise.all([
-        fetchTableData('transactions', { forceAll: true, bypassCache: true }).catch(() => []),
-        fetchTableData('campaigns', { forceAll: true, bypassCache: true }).catch(() => []),
-        fetchTableData<any>('expenses', { forceAll: true, bypassCache: true }).catch(() => []),
-        syncAuditorGrantsAcrossCloud().catch(() => [])
+        fetchSupabaseTransactions(undefined, true).catch(() => []),
+        fetchSupabaseCampaigns(true).catch(() => []),
+        fetchTableData<any>('expenses', { forceAll: true, bypassCache: true }).catch(() => [])
       ]);
+      // Reuses just-fetched campaigns (0 KB extra egress!) to merge backend auditor grants
+      syncAuditorGrantsAcrossCloud().catch(() => []);
       if (Array.isArray(txs) && txs.length > 0) {
         const reconciled = reconcileWithAuthoritativeTransactions(getStoredTransactions(), txs as Transaction[]);
         setTransactions(reconciled);

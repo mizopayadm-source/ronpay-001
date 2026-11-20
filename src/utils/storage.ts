@@ -6629,8 +6629,8 @@ export const syncAuditorGrantsAcrossCloud = async (): Promise<AuditorAccessGrant
     }
 
     const supaCamps = await import('../services/supabaseService')
-      .then(({ fetchSupabaseCampaigns }) => fetchSupabaseCampaigns())
-      .catch(() => [] as Campaign[]);
+      .then(({ fetchSupabaseCampaignAuditorGrants }) => fetchSupabaseCampaignAuditorGrants())
+      .catch(() => [] as Array<{ id: string; auditorGrants?: any[]; deletedAuditorGrantIds?: string[] }>);
 
     // 2. Also collect any deletedAuditorGrantIds embedded inside Supabase campaign metadata
     if (Array.isArray(supaCamps) && supaCamps.length > 0) {

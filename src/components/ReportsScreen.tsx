@@ -92,7 +92,7 @@ import {
 import { getUserRole } from '../utils/rbac';
 import { INITIAL_TRANSACTIONS } from '../data/initialData';
 import { fetchTableData, subscribeToTable, normalizeTransaction } from '../services/SupabaseSync';
-import { initSupabaseRealtimeSync } from '../services/supabaseService';
+import { initSupabaseRealtimeSync, fetchSupabaseTransactions } from '../services/supabaseService';
 
 import { 
   formatDateDDMMYYYY, 
@@ -239,25 +239,34 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
   useEffect(() => {
     let isMounted = true;
 
+    let realtimeFallbackTimer: any = null;
+
     const fetchLiveTxs = async () => {
       try {
-        // 1. Resilient fast fetch from backend server (always reachable, syncs with Supabase)
-        try {
-          const res = await fetch('/api/data/state');
-          if (res.ok) {
-            const json = await res.json();
-            if (json?.data?.transactions && Array.isArray(json.data.transactions) && json.data.transactions.length > 0) {
-              if (isMounted) {
-                setServerTransactions(json.data.transactions.map(normalizeTransaction));
-              }
-            }
-          }
-        } catch {}
+        // 1. Seed immediately from authoritative local store (0 KB egress, 0ms latency)
+        const localNow = getStoredTransactions();
+        if (isMounted && Array.isArray(localNow) && localNow.length > 0) {
+          setServerTransactions(localNow);
+        }
 
-        // 2. Direct Supabase fetch
-        const liveTxs = await fetchTableData<Transaction>('transactions', { forceAll: true });
+        // 2. Egress-Safe 120-byte Delta Probe via fetchSupabaseTransactions()
+        // Downloads full rows ONLY if count or updated_at actually changed on Supabase!
+        const liveTxs = await fetchSupabaseTransactions();
         if (isMounted && Array.isArray(liveTxs) && liveTxs.length > 0) {
           setServerTransactions(liveTxs);
+        } else if (isMounted && (!localNow || localNow.length === 0)) {
+          // Only fall back to /api/data/state when both local store AND Supabase returned 0 txns
+          try {
+            const res = await fetch('/api/data/state');
+            if (res.ok) {
+              const json = await res.json();
+              if (json?.data?.transactions && Array.isArray(json.data.transactions) && json.data.transactions.length > 0) {
+                if (isMounted) {
+                  setServerTransactions(json.data.transactions.map(normalizeTransaction));
+                }
+              }
+            }
+          } catch {}
         }
       } catch (err) {
         console.warn('[ReportsScreen] Supabase live fetch notice:', err);
@@ -300,19 +309,47 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
     window.addEventListener('ronpay_members_updated', handleLocalTxOrMemberUpdate);
     window.addEventListener('ronpay-members-updated', handleLocalTxOrMemberUpdate);
 
-    // Event-driven real-time update (replaces heavy 5-second polling to eliminate egress quota waste)
-    const unsub = subscribeToTable('transactions', async () => {
+    // Event-driven real-time update: patch single-row postgres_changes payload directly (0 KB REST egress, instant UI update!)
+    const unsub = subscribeToTable('transactions', (payload: any) => {
       if (!isMounted) return;
-      try {
-        const freshTxs = await fetchTableData<Transaction>('transactions', { forceAll: true });
-        if (isMounted && Array.isArray(freshTxs) && freshTxs.length > 0) {
-          setServerTransactions(freshTxs);
+      const isDel = payload?.eventType === 'DELETE' || (payload?.new && String(payload.new.status || '').toLowerCase().trim() === 'deleted');
+      if (isDel) {
+        const delId = String(payload?.old?.id || payload?.new?.id || '').toLowerCase().trim();
+        if (delId) {
+          setServerTransactions(prev => prev.filter(t => String(t?.id || '').toLowerCase().trim() !== delId));
+          return;
         }
-      } catch (e) {}
+      }
+      if (payload?.new && payload.new.id) {
+        const norm = normalizeTransaction(payload.new);
+        const k = String(norm.id).toLowerCase().trim();
+        setServerTransactions(prev => {
+          const idx = prev.findIndex(t => String(t?.id || '').toLowerCase().trim() === k);
+          if (idx >= 0) {
+            const copy = [...prev];
+            copy[idx] = { ...copy[idx], ...norm };
+            return copy;
+          }
+          return [norm, ...prev];
+        });
+        return;
+      }
+      // Fallback only if payload had no row body
+      if (realtimeFallbackTimer) clearTimeout(realtimeFallbackTimer);
+      realtimeFallbackTimer = setTimeout(async () => {
+        if (!isMounted) return;
+        try {
+          const freshTxs = await fetchSupabaseTransactions();
+          if (isMounted && Array.isArray(freshTxs) && freshTxs.length > 0) {
+            setServerTransactions(freshTxs);
+          }
+        } catch {}
+      }, 1500);
     });
 
     return () => {
       isMounted = false;
+      if (realtimeFallbackTimer) clearTimeout(realtimeFallbackTimer);
       window.removeEventListener('ronpay_transactions_updated', handleLocalTxOrMemberUpdate);
       window.removeEventListener('ronpay_members_updated', handleLocalTxOrMemberUpdate);
       window.removeEventListener('ronpay-members-updated', handleLocalTxOrMemberUpdate);

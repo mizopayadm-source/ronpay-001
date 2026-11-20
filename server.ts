@@ -5276,6 +5276,9 @@ let lastKnownSupaExpCount = -1;
 let lastKnownSupaExpLatestUpdatedAt = '';
 let lastKnownSupaCampCount = -1;
 let lastKnownSupaCampLatestUpdatedAt = '';
+let lastKnownSupaMemCount = -1;
+let lastKnownSupaMemLatestUpdatedAt = '';
+const SERVER_HEAVY_SAFETY_RESYNC_MS = 6 * 60 * 60 * 1000; // 6 hours (real changes sync immediately via 120-byte delta probe!)
 
 async function syncFromSupabase(db: DatabaseSchema, force: boolean = false): Promise<boolean> {
   try {
@@ -5285,6 +5288,7 @@ async function syncFromSupabase(db: DatabaseSchema, force: boolean = false): Pro
     const hasTransactions = Array.isArray(db.transactions) && db.transactions.length > 0;
     const hasExpenses = Array.isArray(db.expenses) && db.expenses.length > 0;
     const hasCampaigns = Array.isArray(db.campaigns) && db.campaigns.length > 0;
+    const hasMembers = Array.isArray(db.members) && db.members.length > 0;
     if (!force && hasTransactions && hasExpenses && hasCampaigns && (now - lastServerSupabaseSync < 2 * 1000)) {
       return false;
     }
@@ -5293,16 +5297,18 @@ async function syncFromSupabase(db: DatabaseSchema, force: boolean = false): Pro
     const sbKey = sbConfig.anonKey || process.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable__zS5fiKvBI5u6HYgour64g_g_tJj5WL';
     if (!sbUrl || !sbKey) return false;
 
-    // 1. Ultra-lightweight 120-byte Delta Probe on transactions, expenses, & campaigns (exact count & latest updated_at)
+    // 1. Ultra-lightweight ~120-byte Delta Probe on transactions, expenses, campaigns & members (exact count & latest updated_at)
     let txChanged = !hasTransactions || force || lastKnownSupaTxCount < 0;
     let expChanged = !hasExpenses || force || lastKnownSupaExpCount < 0;
     let campChanged = !hasCampaigns || force || lastKnownSupaCampCount < 0;
+    let memChanged = !hasMembers || force || lastKnownSupaMemCount < 0;
     let remoteTxCount = -1;
     let remoteExpCount = -1;
     let remoteCampCount = -1;
-    if (!txChanged || !expChanged || !campChanged) {
+    let remoteMemCount = -1;
+    if (!txChanged || !expChanged || !campChanged || !memChanged) {
       try {
-        const [probeRes, expProbeRes, campProbeRes] = await Promise.all([
+        const [probeRes, expProbeRes, campProbeRes, memProbeRes] = await Promise.all([
           !txChanged
             ? fetch(
                 `${sbUrl}/rest/v1/transactions?select=id,updated_at&status=neq.deleted&order=updated_at.desc&limit=1`,
@@ -5332,6 +5338,19 @@ async function syncFromSupabase(db: DatabaseSchema, force: boolean = false): Pro
           !campChanged
             ? fetch(
                 `${sbUrl}/rest/v1/campaigns?select=id,updated_at&order=updated_at.desc&limit=1`,
+                {
+                  headers: {
+                    'apikey': sbKey,
+                    'Authorization': `Bearer ${sbKey}`,
+                    'Prefer': 'count=exact'
+                  },
+                  signal: AbortSignal.timeout(6000)
+                }
+              )
+            : Promise.resolve(null),
+          !memChanged
+            ? fetch(
+                `${sbUrl}/rest/v1/members?select=id,updated_at&order=updated_at.desc&limit=1`,
                 {
                   headers: {
                     'apikey': sbKey,
@@ -5373,10 +5392,20 @@ async function syncFromSupabase(db: DatabaseSchema, force: boolean = false): Pro
             campChanged = true;
           }
         }
+        if (memProbeRes && memProbeRes.ok) {
+          const contentRange = memProbeRes.headers.get('content-range') || '';
+          const totalMatch = contentRange.match(/\/(\d+)$/);
+          remoteMemCount = totalMatch ? parseInt(totalMatch[1], 10) : -1;
+          const memProbeRows: any[] = await memProbeRes.json();
+          const remoteMemLatestUpd = Array.isArray(memProbeRows) && memProbeRows.length > 0 ? String(memProbeRows[0].updated_at || '') : '';
+          if (remoteMemCount !== lastKnownSupaMemCount || remoteMemLatestUpd !== lastKnownSupaMemLatestUpdatedAt) {
+            memChanged = true;
+          }
+        }
       } catch {}
     }
 
-    if (!txChanged && !expChanged && !campChanged && !force && (now - lastServerFullTablesSync < 10 * 60 * 1000)) {
+    if (!txChanged && !expChanged && !campChanged && !memChanged && !force && (now - lastServerFullTablesSync < SERVER_HEAVY_SAFETY_RESYNC_MS)) {
       lastServerSupabaseSync = now;
       return false;
     }
@@ -5491,10 +5520,10 @@ async function syncFromSupabase(db: DatabaseSchema, force: boolean = false): Pro
       }
     }
 
-    // 2. Fetch expenses incrementally whenever expChanged or forced
-    if (expChanged || force || lastServerFullTablesSync === 0 || (now - lastServerFullTablesSync >= 10 * 60 * 1000)) {
+    // 2. Fetch expenses incrementally whenever expChanged or forced (6h safety resync instead of 10min blind fetch)
+    if (expChanged || force || lastServerFullTablesSync === 0 || (now - lastServerFullTablesSync >= SERVER_HEAVY_SAFETY_RESYNC_MS)) {
       try {
-        const canDeltaExp = !force && !((now - lastServerFullTablesSync >= 10 * 60 * 1000)) && hasExpenses && lastKnownSupaExpLatestUpdatedAt && remoteExpCount >= lastKnownSupaExpCount && lastKnownSupaExpCount >= 0;
+        const canDeltaExp = !force && !(now - lastServerFullTablesSync >= SERVER_HEAVY_SAFETY_RESYNC_MS) && hasExpenses && lastKnownSupaExpLatestUpdatedAt && remoteExpCount >= lastKnownSupaExpCount && lastKnownSupaExpCount >= 0;
         const sinceExpIso = canDeltaExp
           ? new Date(Math.max(0, new Date(lastKnownSupaExpLatestUpdatedAt).getTime() - 5000)).toISOString()
           : '';
@@ -5579,10 +5608,10 @@ async function syncFromSupabase(db: DatabaseSchema, force: boolean = false): Pro
       } catch {}
     }
 
-    // 3. Fetch campaigns & members from Supabase incrementally whenever campChanged, forced, or > 10 minutes since last full sync
-    const shouldSyncHeavyTables = force || lastServerFullTablesSync === 0 || (now - lastServerFullTablesSync >= 10 * 60 * 1000);
+    // 3. Fetch campaigns & members from Supabase incrementally whenever campChanged/memChanged, forced, or > 6h safety resync
+    const shouldSyncHeavyTables = force || lastServerFullTablesSync === 0 || (now - lastServerFullTablesSync >= SERVER_HEAVY_SAFETY_RESYNC_MS);
+    if (shouldSyncHeavyTables) lastServerFullTablesSync = now;
     if (shouldSyncHeavyTables || campChanged) {
-      if (shouldSyncHeavyTables) lastServerFullTablesSync = now;
     try {
       const canDeltaCamp = !shouldSyncHeavyTables && hasCampaigns && lastKnownSupaCampLatestUpdatedAt && remoteCampCount >= lastKnownSupaCampCount && lastKnownSupaCampCount >= 0;
       const sinceCampIso = canDeltaCamp
@@ -5715,9 +5744,10 @@ async function syncFromSupabase(db: DatabaseSchema, force: boolean = false): Pro
         }
       }
     } catch {}
+    } // end campaigns sync block
 
-    // 4. Fetch members from Supabase with Section / Bial synchronization
-    if (shouldSyncHeavyTables) {
+    // 4. Fetch members from Supabase ONLY when memChanged or 6h safety resync (avoids 52KB re-download on unchanged members)
+    if (shouldSyncHeavyTables || memChanged) {
     try {
       const memRes = await fetch(`${sbUrl}/rest/v1/members?select=*&order=created_at.desc`, {
         headers: {
@@ -5758,11 +5788,17 @@ async function syncFromSupabase(db: DatabaseSchema, force: boolean = false): Pro
           });
           // Supabase is the authoritative Single Source of Truth for members & sections
           db.members = normalizedMems;
+          lastKnownSupaMemCount = remoteMemCount >= 0 ? remoteMemCount : memRows.length;
+          let maxMemUpd = lastKnownSupaMemLatestUpdatedAt || '';
+          for (const r of memRows) {
+            const u = String(r.updated_at || '');
+            if (u > maxMemUpd) maxMemUpd = u;
+          }
+          lastKnownSupaMemLatestUpdatedAt = maxMemUpd;
         }
       }
     } catch {}
-    } // end shouldSyncHeavyTables for members
-    } // end campaigns/members sync block
+    } // end members sync block
 
     lastServerSupabaseSync = Date.now();
     saveDatabase(db);

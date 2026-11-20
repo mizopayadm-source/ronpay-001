@@ -155,8 +155,16 @@ export function usePublicPoolStats(): {
       }
     };
 
-    // Attempt live fetch
-    fetchLiveStatsFromSupabase();
+    // Egress-Safe Boot: App.tsx already loads & live-syncs transactions via loadSupabaseInitialState + Realtime
+    // and dispatches ronpay_transactions_updated / ronpay_stats_updated. Only query Supabase directly if we have
+    // ZERO local transactions & ZERO cached stats (cold empty browser fallback).
+    const existingLocalTxs = getStoredTransactions();
+    const existingFallback = getFallbackPoolStats();
+    if ((!existingLocalTxs || existingLocalTxs.length === 0) && existingFallback.totalCount === 0) {
+      fetchLiveStatsFromSupabase();
+    } else {
+      refreshFromLocal();
+    }
 
     // Listen for local and cross-tab sync events
     const handleSync = () => {

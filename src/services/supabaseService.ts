@@ -811,26 +811,121 @@ export async function recalibrateSupabaseFundPool(poolId: string = 'public_pool'
 // 5. CAMPAIGNS (PostgREST SDK)
 // ---------------------------------------------------------------------------
 
-export async function fetchSupabaseCampaigns(): Promise<Campaign[]> {
+// Egress-Safe Campaign Delta Cache (avoids re-downloading ~336KB+ of Base64 campaign images when nothing changed)
+let _cachedSupaCampaigns: Campaign[] | null = null;
+let _cachedSupaCampCount = -1;
+let _cachedSupaCampLatestUpdatedAt = '';
+let _lastSupaCampFetchMs = 0;
+let _inFlightCampFetch: Promise<Campaign[]> | null = null;
+
+export function invalidateSupabaseCampaignsCache(): void {
+  _cachedSupaCampCount = -1;
+  _cachedSupaCampLatestUpdatedAt = '';
+  _lastSupaCampFetchMs = 0;
+}
+
+/**
+ * Lightweight Auditor Grants fetcher (~2KB instead of ~336KB+ of campaign Base64 images).
+ * Reuses fresh cached campaigns if fetched within 6s, else selects ONLY id + auditorGrants/deletedAuditorGrantIds JSON slices.
+ */
+export async function fetchSupabaseCampaignAuditorGrants(): Promise<Array<{ id: string; auditorGrants?: any[]; deletedAuditorGrantIds?: string[] }>> {
+  if (isSupabaseQuotaBlocked()) {
+    return getStoredCampaigns().map(c => ({
+      id: c.id,
+      auditorGrants: c.auditorGrants || (c as any)?.metadata?.auditorGrants,
+      deletedAuditorGrantIds: (c as any)?.deletedAuditorGrantIds || (c as any)?.metadata?.deletedAuditorGrantIds
+    }));
+  }
+  const now = Date.now();
+  if (_cachedSupaCampaigns && _cachedSupaCampaigns.length > 0 && now - _lastSupaCampFetchMs < 6000) {
+    return _cachedSupaCampaigns.map(c => ({
+      id: c.id,
+      auditorGrants: c.auditorGrants || (c as any)?.metadata?.auditorGrants,
+      deletedAuditorGrantIds: (c as any)?.deletedAuditorGrantIds || (c as any)?.metadata?.deletedAuditorGrantIds
+    }));
+  }
+  const supabase = getSupabase();
+  if (!supabase) return [];
+  try {
+    const { data, error } = await supabase
+      .from('campaigns')
+      .select('id,auditorGrants:metadata->auditorGrants,deletedAuditorGrantIds:metadata->deletedAuditorGrantIds')
+      .range(0, 9999);
+    if (!error && Array.isArray(data)) {
+      return data.map((r: any) => ({
+        id: String(r.id || ''),
+        auditorGrants: Array.isArray(r.auditorGrants) ? r.auditorGrants : [],
+        deletedAuditorGrantIds: Array.isArray(r.deletedAuditorGrantIds) ? r.deletedAuditorGrantIds : []
+      }));
+    }
+  } catch {}
+  // Safe fallback to delta-cached full campaign fetch if PostgREST JSON alias is unsupported
+  const camps = await fetchSupabaseCampaigns();
+  return camps.map(c => ({
+    id: c.id,
+    auditorGrants: c.auditorGrants || (c as any)?.metadata?.auditorGrants,
+    deletedAuditorGrantIds: (c as any)?.deletedAuditorGrantIds || (c as any)?.metadata?.deletedAuditorGrantIds
+  }));
+}
+
+export async function fetchSupabaseCampaigns(forceFull: boolean = false): Promise<Campaign[]> {
   if (isSupabaseQuotaBlocked()) return getStoredCampaigns();
   const supabase = getSupabase();
   if (!supabase) return getStoredCampaigns();
 
-  const { data, error } = await supabase
-    .from('campaigns')
-    .select('*')
-    .range(0, 9999)
-    .order('created_at', { ascending: false });
+  const now = Date.now();
 
-  if (error) {
-    if (error.message?.includes('exceed_egress_quota') || (error as any).status === 402 || error.message?.includes('restricted')) {
-      markSupabaseQuotaBlocked(error.message);
-    }
-    console.warn('[Supabase] Failed to fetch campaigns:', error.message);
-    return getStoredCampaigns();
+  // 1. Short 5-second deduplication window for simultaneous boot/modal calls
+  if (!forceFull && _cachedSupaCampaigns && _cachedSupaCampaigns.length > 0 && now - _lastSupaCampFetchMs < 5000) {
+    return _cachedSupaCampaigns;
   }
 
-  return (data || []).map((row: any) => {
+  // 2. Share in-flight request if multiple callers ask at the same instant
+  if (!forceFull && _inFlightCampFetch) {
+    return _inFlightCampFetch;
+  }
+
+  const execFetch = async (): Promise<Campaign[]> => {
+    // 3. Ultra-lightweight ~140-byte Delta Probe before downloading ~336KB+ of campaign rows/images
+    if (!forceFull && _cachedSupaCampaigns && _cachedSupaCampaigns.length > 0 && _cachedSupaCampCount >= 0) {
+      try {
+        const { data: probe, count, error: probeErr } = await supabase
+          .from('campaigns')
+          .select('id,updated_at', { count: 'exact' })
+          .order('updated_at', { ascending: false })
+          .limit(1);
+
+        if (!probeErr && typeof count === 'number') {
+          const latestUpd = Array.isArray(probe) && probe.length > 0 ? String(probe[0].updated_at || '') : '';
+          if (count === _cachedSupaCampCount && latestUpd === _cachedSupaCampLatestUpdatedAt) {
+            _lastSupaCampFetchMs = Date.now();
+            return _cachedSupaCampaigns;
+          }
+        }
+      } catch {}
+    }
+
+    const { data, error } = await supabase
+      .from('campaigns')
+      .select('*')
+      .range(0, 9999)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      if (error.message?.includes('exceed_egress_quota') || (error as any).status === 402 || error.message?.includes('restricted')) {
+        markSupabaseQuotaBlocked(error.message);
+      }
+      console.warn('[Supabase] Failed to fetch campaigns:', error.message);
+      return getStoredCampaigns();
+    }
+
+    let maxUpd = '';
+    for (const r of (data || [])) {
+      const u = String((r as any)?.updated_at || '');
+      if (u > maxUpd) maxUpd = u;
+    }
+
+    const mapped: Campaign[] = (data || []).map((row: any) => {
     const meta = row.metadata || {};
     if (Array.isArray(meta.deletedAuditorGrantIds) && meta.deletedAuditorGrantIds.length > 0) {
       try {
@@ -910,7 +1005,20 @@ export async function fetchSupabaseCampaigns(): Promise<Campaign[]> {
       hideReason: meta.hideReason ?? row.hide_reason ?? row.hideReason,
       metadata: meta
     };
+    });
+
+    _cachedSupaCampaigns = mapped;
+    _cachedSupaCampCount = Array.isArray(data) ? data.length : mapped.length;
+    _cachedSupaCampLatestUpdatedAt = maxUpd;
+    _lastSupaCampFetchMs = Date.now();
+    return mapped;
+  };
+
+  const promise = execFetch().finally(() => {
+    if (_inFlightCampFetch === promise) _inFlightCampFetch = null;
   });
+  _inFlightCampFetch = promise;
+  return promise;
 }
 
 export async function upsertSupabaseCampaign(camp: Campaign): Promise<boolean> {
@@ -1008,6 +1116,7 @@ export async function upsertSupabaseCampaign(camp: Campaign): Promise<boolean> {
     logSupabaseError('upsert campaign', error);
     return false;
   }
+  invalidateSupabaseCampaignsCache();
   return true;
 }
 
@@ -1774,14 +1883,45 @@ export async function loadSupabaseInitialState(): Promise<{
   }
 
   try {
-    const [txns, camps, mems, users, pool, exps] = await Promise.all([
+    const [txns, camps, mems, users, exps] = await Promise.all([
       fetchSupabaseTransactions(),
       fetchSupabaseCampaigns(),
       fetchSupabaseMembers(),
       fetchSupabaseUsers(),
-      fetchSupabaseFundPool(),
-      import('./SupabaseSync').then(({ fetchTableData }) => fetchTableData<any>('expenses', { forceAll: true, bypassCache: true })).catch(() => [])
+      import('./SupabaseSync').then(({ fetchTableData }) => fetchTableData<any>('expenses', { forceAll: true })).catch(() => [])
     ]);
+
+    // Compute PublicPoolStats directly from already-fetched txns (0 extra Supabase egress!)
+    // Only fall back to fetchSupabaseFundPool() if txns is empty
+    let pool: PublicPoolStats | null = null;
+    if (Array.isArray(txns) && txns.length > 0) {
+      let totalAmount = 0;
+      let totalCount = 0;
+      let todayCount = 0;
+      const todayStr = new Date().toISOString().slice(0, 10);
+      for (const t of txns) {
+        if (!t || !t.id) continue;
+        const rawId = String(t.id).trim();
+        if (rawId.startsWith('VCH-') || rawId.startsWith('EXP-')) continue;
+        const st = String(t.status || '').toLowerCase().trim();
+        const isOk = st === '' || st === 'completed' || st === 'paid' || st === 'verified' || st === 'success' || st === 'payment_success';
+        const amt = Number(t.amount) || 0;
+        if (isOk && amt > 0) {
+          totalAmount += amt;
+          totalCount += 1;
+          const d = String(t.timestamp || t.createdAt || '').slice(0, 10);
+          if (d === todayStr) todayCount += 1;
+        }
+      }
+      pool = {
+        totalAmount: Math.round(totalAmount * 100) / 100,
+        totalCount,
+        todayCount,
+        lastUpdated: new Date().toISOString(),
+      };
+    } else {
+      pool = await fetchSupabaseFundPool().catch(() => null);
+    }
 
     if (Array.isArray(exps) && exps.length > 0) {
       saveStoredExpenses(exps, true);
@@ -2081,6 +2221,7 @@ export function initSupabaseRealtimeSync(callbacks: SupabaseRealtimeCallbacks): 
     })
     .on('postgres_changes', { event: '*', schema: 'public', table: 'campaigns' }, (payload) => {
       console.info('[Supabase Realtime] Campaigns event:', payload.eventType);
+      invalidateSupabaseCampaignsCache();
       refreshCamps();
     })
     .on('postgres_changes', { event: '*', schema: 'public', table: 'members' }, (payload) => {

@@ -751,6 +751,27 @@ export const fetchTableData = async <T>(table: string, options?: FetchDataFilter
       return [] as unknown as T[];
     }
 
+    // Handle members specifically BEFORE generic select('*') so we never execute 2x duplicate queries!
+    if (table === 'members') {
+      let memQuery = supabase.from('members').select('*').range(0, 9999);
+      if (options?.campaignId && options.campaignId !== 'all') {
+        memQuery = memQuery.eq('campaign_id', options.campaignId);
+      }
+      const { data: memData, error: memErr } = await memQuery;
+      if (!memErr && Array.isArray(memData)) {
+        const mapped = memData.map(normalizeMember) as unknown as T[];
+        setTableCache(cacheKey, mapped as any);
+        return mapped;
+      }
+      if (memErr) {
+        if (memErr.message?.includes('exceed_egress_quota') || (memErr as any).status === 402 || memErr.message?.includes('restricted')) {
+          markSupabaseQuotaBlocked(memErr.message);
+        }
+        return getMembers() as unknown as T[];
+      }
+      return [] as unknown as T[];
+    }
+
     // Default for campaigns, expenses, wallet_transactions
     let query = supabase.from(table).select('*').range(0, 9999);
     const { data, error } = await query;
@@ -770,18 +791,6 @@ export const fetchTableData = async <T>(table: string, options?: FetchDataFilter
         const mapped = validRows.map(normalizeExpense) as unknown as T[];
         setTableCache(cacheKey, mapped as any);
         return mapped;
-      }
-      if (table === 'members') {
-        let query = supabase.from('members').select('*').range(0, 9999);
-        if (options?.campaignId && options.campaignId !== 'all') {
-          query = query.eq('campaign_id', options.campaignId);
-        }
-        const { data, error } = await query;
-        if (!error && Array.isArray(data) && data.length > 0) {
-          const mapped = data.map(normalizeMember) as unknown as T[];
-          setTableCache(cacheKey, mapped as any);
-          return mapped;
-        }
       }
       if (table === 'wallet_transactions') {
         const mapped = data.map(normalizeWalletTx) as unknown as T[];
